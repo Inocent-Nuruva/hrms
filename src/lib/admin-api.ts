@@ -17871,6 +17871,57 @@ export async function approvePayrollRun(
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
+export async function rejectPayrollRun(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/runs/${id}/reject`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function cancelPayrollRun(
+  token: string,
+  id: string | number,
+  data: { reason: string },
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/runs/${id}/cancel`,
+    { method: "POST", token, body: data },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function reversePayrollRun(
+  token: string,
+  id: string | number,
+  data: { reason: string; bank_file_withdrawn?: boolean },
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/runs/${id}/reverse`,
+    { method: "POST", token, body: data },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getPayrollRunEligibility(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/runs/${id}/eligibility`,
+    { token },
+  );
+  return asRecord(payload);
+}
+
 export async function lockPayrollRun(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(`/api/payroll/runs/${id}/lock`, {
     method: "POST",
@@ -17885,13 +17936,18 @@ export async function validatePayrollRun(token: string, id: string | number) {
   });
 }
 
-export async function markPayrollRunPaid(token: string, id: string | number) {
+export async function markPayrollRunPaid(
+  token: string,
+  id: string | number,
+  data: {
+    payment_reference: string;
+    payment_date: string;
+    confirmation_note: string;
+  },
+) {
   const payload = await adminRequest<unknown>(
     `/api/payroll/runs/${id}/mark-paid`,
-    {
-      method: "POST",
-      token,
-    },
+    { method: "POST", token, body: data },
   );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
@@ -23337,3 +23393,85 @@ export async function downloadLeaveRecalculationReport(token: string, id: number
   const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? `recalculation-${id}.csv`;
   return { blob: await response.blob(), filename };
 }
+
+// ---- Payroll lifecycle controls (recoveries, workflows, attendance
+// deduction policies, payment progress and retries) ----
+
+async function payrollPost(token: string, path: string, body?: unknown) {
+  const payload = await adminRequest<unknown>(path, {
+    method: "POST",
+    token,
+    ...(body === undefined ? {} : { body: body as AdminRecord }),
+  });
+  return normalizeSingle(payload) ?? asRecord(payload) ?? {};
+}
+
+async function payrollGetList(token: string, path: string) {
+  return normalizeList(await adminRequest<unknown>(path, { token }));
+}
+
+export const listPayrollRecoveries = (token: string) =>
+  payrollGetList(token, "/api/payroll/recoveries");
+export const createPayrollRecovery = (token: string, data: AdminRecord) =>
+  payrollPost(token, "/api/payroll/recoveries", data);
+export const decidePayrollRecovery = (
+  token: string,
+  id: string | number,
+  decision: "approve" | "reject",
+  note?: string,
+) => payrollPost(token, `/api/payroll/recoveries/${id}/${decision}`, { note });
+export const cancelPayrollRecovery = (
+  token: string,
+  id: string | number,
+  reason: string,
+) => payrollPost(token, `/api/payroll/recoveries/${id}/cancel`, { reason });
+export const recordPayrollRecoverySettlement = (
+  token: string,
+  id: string | number,
+  kind: "refunds" | "accounting-adjustments",
+  data: { amount: string; reference: string; evidence: string },
+) => payrollPost(token, `/api/payroll/recoveries/${id}/${kind}`, data);
+
+export const listPayrollApprovalWorkflows = (token: string) =>
+  payrollGetList(token, "/api/payroll/approval-workflows");
+export const savePayrollApprovalWorkflow = (token: string, data: AdminRecord) =>
+  payrollPost(token, "/api/payroll/approval-workflows", data);
+
+export const listPayrollAttendanceDeductionPolicies = (token: string) =>
+  payrollGetList(token, "/api/payroll/attendance-deduction-policies");
+export const createPayrollAttendanceDeductionPolicy = (
+  token: string,
+  data: AdminRecord,
+) => payrollPost(token, "/api/payroll/attendance-deduction-policies", data);
+export const activatePayrollAttendanceDeductionPolicy = (
+  token: string,
+  id: string | number,
+  legalReviewReference: string,
+) =>
+  payrollPost(token, `/api/payroll/attendance-deduction-policies/${id}/activate`, {
+    legal_review_reference: legalReviewReference,
+  });
+export const retirePayrollAttendanceDeductionPolicy = (
+  token: string,
+  id: string | number,
+) => payrollPost(token, `/api/payroll/attendance-deduction-policies/${id}/retire`);
+
+export async function getPayrollPaymentProgress(
+  token: string,
+  runId: string | number,
+) {
+  return asRecord(
+    await adminRequest<unknown>(
+      `/api/payroll/banking/runs/${runId}/payment-progress`,
+      { token },
+    ),
+  ) ?? {};
+}
+export const generatePayrollPaymentRetry = (
+  token: string,
+  runId: string | number,
+  reason: string,
+) =>
+  payrollPost(token, `/api/payroll/banking/runs/${runId}/batches/retry`, {
+    reason,
+  });

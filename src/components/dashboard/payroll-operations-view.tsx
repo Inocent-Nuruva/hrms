@@ -48,6 +48,10 @@ import {
 import {
   approvePayrollInput,
   approvePayrollRun,
+  rejectPayrollRun,
+  cancelPayrollRun,
+  reversePayrollRun,
+  getPayrollRunEligibility,
   approvePayrollStatutoryRule,
   approvePayrollSource,
   closePayrollRun,
@@ -151,6 +155,12 @@ import { FluentSelect } from "@/components/ui/fluent-select";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 import { PayrollEmployeeSalaryDialog } from "@/components/dashboard/payroll-employee-salary-dialog";
 import {
+  PayrollApprovalWorkflowsPanel,
+  PayrollAttendanceDeductionPoliciesPanel,
+  PayrollPaymentProgressDialog,
+  PayrollRecoveriesPanel,
+} from "@/components/dashboard/payroll-lifecycle-panels";
+import {
   PayrollContractWarningsDialog,
   contractWarningsCleared,
 } from "@/components/dashboard/contracts/payroll-contract-warnings-dialog";
@@ -165,6 +175,7 @@ type PayrollTab =
   | "profiles"
   | "periods"
   | "reports"
+  | "recoveries"
   | "configuration";
 
 type PayrollConfigTab =
@@ -178,7 +189,9 @@ type PayrollConfigTab =
   | "overtime"
   | "bonus"
   | "leaveRules"
-  | "security";
+  | "security"
+  | "approvalWorkflows"
+  | "attendanceDeductions";
 
 type CreateDialogMode =
   | "run"
@@ -208,6 +221,7 @@ const TABS: Array<{ id: PayrollTab; label: string }> = [
   { id: "profiles", label: "Profiles" },
   { id: "periods", label: "Periods" },
   { id: "reports", label: "Reports" },
+  { id: "recoveries", label: "Recoveries" },
   { id: "configuration", label: "Configuration" },
 ];
 
@@ -223,6 +237,8 @@ const CONFIG_TABS: Array<{ id: PayrollConfigTab; label: string }> = [
   { id: "bonus", label: "Bonus" },
   { id: "leaveRules", label: "Leave rules" },
   { id: "security", label: "Security & approvals" },
+  { id: "approvalWorkflows", label: "Approval workflows" },
+  { id: "attendanceDeductions", label: "Attendance deductions" },
 ];
 
 const RUN_TYPES = [
@@ -286,6 +302,20 @@ const PAYROLL_DRILLDOWN_SHORTCUTS = [
 ] as const;
 
 const APPROVAL_STAGES = ["HR", "FINANCE", "MANAGEMENT"] as const;
+// Mirrors PayrollRunService.cancel / reverseRun allowed source statuses.
+const CANCELLABLE_RUN_STATUSES = new Set([
+  "DRAFT",
+  "VALIDATION_FAILED",
+  "PENDING_HR_APPROVAL",
+  "PENDING_FINANCE_APPROVAL",
+  "PENDING_MANAGEMENT_APPROVAL",
+  "APPROVED",
+]);
+const REVERSIBLE_RUN_STATUSES = new Set([
+  "LOCKED",
+  "PAYMENT_FILE_GENERATED",
+  "PAID",
+]);
 const INPUT_STATUSES = [
   "DRAFT",
   "APPROVED",
@@ -775,6 +805,7 @@ function emptyInputForm() {
     rate: "",
     currency: "TZS",
     status: "DRAFT",
+    lateAdjustmentReason: "",
   };
 }
 
@@ -951,6 +982,7 @@ function emptyAdvancedPayrollForm() {
     reason: "",
     adjustmentType: "ADJUSTMENT",
     effectivePeriodCode: "",
+    correctionOfRunId: "",
     autoApprove: "true",
     reportCode: "",
     reportRunId: "",
@@ -1228,9 +1260,11 @@ function PayrollDetailsContent({
           </h3>
           <div className="mt-3 grid gap-2 md:grid-cols-3">
             {["HR", "FINANCE", "MANAGEMENT"].map((stage) => {
-              const approval = runApprovals.find(
-                (item) => readString(item, ["stage"]).toUpperCase() === stage,
-              );
+              const approval = [...runApprovals]
+                .reverse()
+                .find(
+                  (item) => readString(item, ["stage"]).toUpperCase() === stage,
+                );
               const current = Boolean(
                 approval &&
                 readString(approval, ["decision"]).toUpperCase() ===
@@ -1276,6 +1310,57 @@ function PayrollDetailsContent({
             Approvals apply only to the current calculation hash; all approvers
             must be different users and separate from the payroll creator.
           </p>
+          {runApprovals.length ? (
+            <div className="mt-3 space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Decision history
+              </h4>
+              {[...runApprovals].reverse().map((item, index) => {
+                const decision = readString(item, ["decision"]).toUpperCase();
+                const rejected = decision === "REJECTED";
+                const comments = readString(item, ["comments"]);
+                const when = readString(item, ["createdAt", "created_at"]);
+                return (
+                  <div
+                    key={`${rowId(item) || index}`}
+                    className={cn(
+                      "rounded-lg border p-2 text-xs",
+                      rejected
+                        ? "border-rose-300 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/40"
+                        : "border-border/70",
+                    )}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium">
+                        {prettify(readString(item, ["stage"]))} ·{" "}
+                        {rejected ? "Rejected" : "Approved"} by user #
+                        {readString(item, [
+                          "approvedByCompanyUserId",
+                          "approved_by_company_user_id",
+                        ])}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {when ? new Date(when).toLocaleString() : ""}
+                      </span>
+                    </div>
+                    {comments ? (
+                      <p
+                        className={cn(
+                          "mt-1",
+                          rejected
+                            ? "text-rose-700 dark:text-rose-300"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {rejected ? "Reason: " : ""}
+                        {comments}
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
 
         {payslips.length > 0 ? (
@@ -1992,6 +2077,26 @@ export function PayrollOperationsView() {
   const [ruleOpen, setRuleOpen] = React.useState(false);
   const [approveOpen, setApproveOpen] = React.useState(false);
   const [approveRunId, setApproveRunId] = React.useState("");
+  const [lifecycleAction, setLifecycleAction] = React.useState<{
+    kind: "cancel" | "reverse" | "paid";
+    row: AdminRecord;
+  } | null>(null);
+  const [lifecycleReason, setLifecycleReason] = React.useState("");
+  const [paymentProgressRunId, setPaymentProgressRunId] = React.useState<
+    string | null
+  >(null);
+  const [lifecyclePaymentReference, setLifecyclePaymentReference] =
+    React.useState("");
+  const [lifecyclePaymentDate, setLifecyclePaymentDate] = React.useState("");
+  const [lifecycleBankWithdrawn, setLifecycleBankWithdrawn] =
+    React.useState(false);
+  const [lifecycleError, setLifecycleError] = React.useState<string | null>(
+    null,
+  );
+  const [eligibilityReport, setEligibilityReport] = React.useState<{
+    loading: boolean;
+    data: AdminRecord | null;
+  } | null>(null);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
 
@@ -2669,6 +2774,30 @@ export function PayrollOperationsView() {
     ],
     mode: "any",
   });
+  const canManageRecoveries = canPerformPermission(actor.permissionLabels, {
+    permissions: ["payroll:recoveries:manage", "manage_payroll"],
+    mode: "any",
+  });
+  const canApproveRecoveries = canPerformPermission(actor.permissionLabels, {
+    permissions: ["payroll:recoveries:approve", "manage_payroll"],
+    mode: "any",
+  });
+  const canPostAccounting = canPerformPermission(actor.permissionLabels, {
+    permissions: ["payroll:accounting", "manage_payroll"],
+    mode: "any",
+  });
+  const canRetryPayments = canPerformPermission(actor.permissionLabels, {
+    permissions: ["payroll:banking", "manage_payroll"],
+    mode: "any",
+  });
+  const canCancelPayrollRun = canPerformPermission(actor.permissionLabels, {
+    permissions: ["payroll:runs:cancel", "manage_payroll"],
+    mode: "any",
+  });
+  const canReversePayrollRun = canPerformPermission(actor.permissionLabels, {
+    permissions: ["payroll:runs:reverse", "manage_payroll"],
+    mode: "any",
+  });
   const canStartSalaryRevision = canPerformPermission(actor.permissionLabels, {
     permissions: ["employee_movements:create", "manage_employee_movements"],
     mode: "any",
@@ -2680,6 +2809,7 @@ export function PayrollOperationsView() {
     canMutatePayroll &&
     tab !== "overview" &&
     tab !== "reports" &&
+    tab !== "recoveries" &&
     tab !== "overtimeApprovals" &&
     (tab !== "configuration" ||
       [
@@ -3083,6 +3213,56 @@ export function PayrollOperationsView() {
                     ) : (
                       "Close"
                     )}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void onOpenEligibility(row);
+                  }}
+                >
+                  Eligibility
+                </button>
+                {["LOCKED", "PAYMENT_FILE_GENERATED", "PAID", "CLOSED"].includes(
+                  status.toUpperCase(),
+                ) ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setPaymentProgressRunId(id);
+                    }}
+                  >
+                    Payments
+                  </button>
+                ) : null}
+                {canCancelPayrollRun &&
+                CANCELLABLE_RUN_STATUSES.has(status.toUpperCase()) ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openLifecycleAction("cancel", row);
+                    }}
+                  >
+                    Cancel run
+                  </button>
+                ) : null}
+                {canReversePayrollRun &&
+                REVERSIBLE_RUN_STATUSES.has(status.toUpperCase()) ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openLifecycleAction("reverse", row);
+                    }}
+                  >
+                    Reverse
                   </button>
                 ) : null}
               </div>
@@ -4274,14 +4454,23 @@ export function PayrollOperationsView() {
     }
   }
 
-  async function onMarkRunPaid(row: AdminRecord) {
+  function onMarkRunPaid(row: AdminRecord) {
+    openLifecycleAction("paid", row);
+  }
+
+  async function submitMarkRunPaid(row: AdminRecord) {
     const token = readStoredToken();
     const id = rowId(row);
     if (!token || !id) return;
     setPaidRunId(id);
     try {
-      await markPayrollRunPaid(token, id);
-      toast.success("Payroll run marked as paid.");
+      await markPayrollRunPaid(token, id, {
+        payment_reference: lifecyclePaymentReference.trim(),
+        payment_date: lifecyclePaymentDate,
+        confirmation_note: lifecycleReason.trim(),
+      });
+      setLifecycleAction(null);
+      toast.success("Payment confirmed. Loan repayments have been posted.");
       await loadRows({ refreshLookups: true });
     } catch (errorObject) {
       toast.error(
@@ -4327,6 +4516,84 @@ export function PayrollOperationsView() {
       );
     } finally {
       setSimulatingPaymentRunId("");
+    }
+  }
+
+  function openLifecycleAction(
+    kind: "cancel" | "reverse" | "paid",
+    row: AdminRecord,
+  ) {
+    setLifecycleAction({ kind, row });
+    setLifecycleReason("");
+    setLifecyclePaymentReference("");
+    setLifecyclePaymentDate(new Date().toISOString().slice(0, 10));
+    setLifecycleBankWithdrawn(false);
+    setLifecycleError(null);
+  }
+
+  async function onSubmitLifecycleAction() {
+    const token = readStoredToken();
+    const id = lifecycleAction ? rowId(lifecycleAction.row) : "";
+    if (!token || !id || !lifecycleAction) return;
+    const reason = lifecycleReason.trim();
+    if (!reason) {
+      setLifecycleError(
+        lifecycleAction.kind === "paid"
+          ? "A confirmation note is required."
+          : "A reason is required.",
+      );
+      return;
+    }
+    if (lifecycleAction.kind === "paid") {
+      if (!lifecyclePaymentReference.trim() || !lifecyclePaymentDate) {
+        setLifecycleError("Bank payment reference and date are required.");
+        return;
+      }
+      setLifecycleError(null);
+      await submitMarkRunPaid(lifecycleAction.row);
+      return;
+    }
+    setLifecycleError(null);
+    setSaving(true);
+    try {
+      if (lifecycleAction.kind === "cancel") {
+        await cancelPayrollRun(token, id, { reason });
+        toast.success("Payroll run cancelled. Loan reservations released.");
+      } else {
+        await reversePayrollRun(token, id, {
+          reason,
+          bank_file_withdrawn: lifecycleBankWithdrawn,
+        });
+        toast.success("Payroll run reversed and period reopened.");
+      }
+      setLifecycleAction(null);
+      await loadRows({ refreshLookups: true });
+    } catch (errorObject) {
+      setLifecycleError(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "The payroll run could not be updated.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onOpenEligibility(row: AdminRecord) {
+    const token = readStoredToken();
+    const id = rowId(row);
+    if (!token || !id) return;
+    setEligibilityReport({ loading: true, data: null });
+    try {
+      const data = await getPayrollRunEligibility(token, id);
+      setEligibilityReport({ loading: false, data });
+    } catch (errorObject) {
+      setEligibilityReport(null);
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not load the eligibility report.",
+      );
     }
   }
 
@@ -5191,6 +5458,8 @@ export function PayrollOperationsView() {
           rate: inputForm.rate.trim() || undefined,
           currency: inputForm.currency.trim() || undefined,
           status: inputForm.status,
+          late_adjustment_reason:
+            inputForm.lateAdjustmentReason.trim() || undefined,
         });
       } else if (createMode === "source") {
         if (
@@ -5600,6 +5869,9 @@ export function PayrollOperationsView() {
           adjustment_type: advancedForm.adjustmentType,
           effective_period_code:
             advancedForm.effectivePeriodCode.trim() || undefined,
+          correction_of_run_id: advancedForm.correctionOfRunId
+            ? Number(advancedForm.correctionOfRunId)
+            : undefined,
         });
       }
 
@@ -5818,6 +6090,41 @@ export function PayrollOperationsView() {
         errorObject instanceof Error
           ? errorObject.message
           : "Failed to approve run.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onRejectRun() {
+    const token = readStoredToken();
+    if (!token || !approveRunId) return;
+    const reason = approveForm.comments.trim();
+    if (!approveForm.calculationHash.trim()) {
+      setFormError("Calculation hash is required for rejection.");
+      return;
+    }
+    if (!reason) {
+      setFormError("Enter the rejection reason in Comments.");
+      return;
+    }
+    setFormError(null);
+    setSaving(true);
+    try {
+      await rejectPayrollRun(token, approveRunId, {
+        stage: approveForm.stage,
+        calculation_hash: approveForm.calculationHash.trim(),
+        reason,
+      });
+      toast.success("Payroll run returned to the preparer.");
+      setApproveOpen(false);
+      setApproveRunId("");
+      await loadRows({ refreshLookups: true });
+    } catch (errorObject) {
+      setFormError(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to reject run.",
       );
     } finally {
       setSaving(false);
@@ -6071,6 +6378,19 @@ export function PayrollOperationsView() {
                 }))
               }
               placeholder="Optional reference"
+            />
+          </Field>
+          <Field label="Late adjustment reason">
+            <input
+              className={inputClass}
+              value={inputForm.lateAdjustmentReason}
+              onChange={(event) =>
+                setInputForm((current) => ({
+                  ...current,
+                  lateAdjustmentReason: event.target.value,
+                }))
+              }
+              placeholder="Required only after the period cutoff"
             />
           </Field>
         </div>
@@ -6474,6 +6794,19 @@ export function PayrollOperationsView() {
                 }))
               }
               placeholder="Optional"
+            />
+          </FluentField>
+          <FluentField label="Corrects paid run ID">
+            <FluentInput
+              className="w-full"
+              value={advancedForm.correctionOfRunId}
+              onChange={(event) =>
+                setAdvancedForm((current) => ({
+                  ...current,
+                  correctionOfRunId: event.target.value,
+                }))
+              }
+              placeholder="Only for corrections of paid payroll"
             />
           </FluentField>
           <FluentField label="Reason" className="md:col-span-2">
@@ -10740,6 +11073,19 @@ export function PayrollOperationsView() {
             </div>
           ) : null}
         </div>
+      ) : tab === "recoveries" ? (
+        <PayrollRecoveriesPanel
+          canManage={canManageRecoveries}
+          canApprove={canApproveRecoveries}
+          canAccounting={canPostAccounting}
+        />
+      ) : tab === "configuration" && configTab === "approvalWorkflows" ? (
+        <PayrollApprovalWorkflowsPanel canManage={canMutatePayroll} />
+      ) : tab === "configuration" && configTab === "attendanceDeductions" ? (
+        <PayrollAttendanceDeductionPoliciesPanel
+          canManage={canMutatePayroll}
+          canActivate={canApproveStatutoryRule}
+        />
       ) : tab === "configuration" && configTab === "security" ? (
         <section className="space-y-5 rounded-xl border border-border bg-card p-4 shadow-sm">
           <div>
@@ -11792,7 +12138,8 @@ export function PayrollOperationsView() {
           <DialogHeader>
             <DialogTitle>Approve payroll run</DialogTitle>
             <DialogDescription>
-              Choose the approval stage and enter the calculation hash.
+              Choose the approval stage and enter the calculation hash. To
+              reject, enter the reason in Comments.
             </DialogDescription>
           </DialogHeader>
           {formError ? (
@@ -11851,6 +12198,14 @@ export function PayrollOperationsView() {
             </button>
             <button
               type="button"
+              className={secondaryButtonClass}
+              disabled={saving}
+              onClick={() => void onRejectRun()}
+            >
+              Reject to preparer
+            </button>
+            <button
+              type="button"
               className={primaryButtonClass}
               disabled={saving}
               onClick={() => void onApproveRun()}
@@ -11858,6 +12213,218 @@ export function PayrollOperationsView() {
               {saving ? "Saving…" : "Approve run"}
             </button>
           </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+      <Dialog
+        open={lifecycleAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setLifecycleAction(null);
+        }}
+      >
+        <DialogPopup className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {lifecycleAction?.kind === "reverse"
+                ? "Reverse payroll run"
+                : lifecycleAction?.kind === "paid"
+                  ? "Confirm salary payment"
+                  : "Cancel payroll run"}
+            </DialogTitle>
+            <DialogDescription>
+              {lifecycleAction?.kind === "reverse"
+                ? "Reversal is only allowed when no salary payment is confirmed. Reverse the payroll journal first if one was posted. Calculations and history are kept."
+                : lifecycleAction?.kind === "paid"
+                  ? "Use this only when the bank has confirmed the transfer and no statement will be imported. Confirming posts loan repayments and cannot be undone except by a correction run. Prefer importing the bank statement."
+                  : "Cancelling keeps the calculations and approval history, and releases loan deductions back to the next run. Locked or paid payroll must be reversed instead."}
+            </DialogDescription>
+          </DialogHeader>
+          {lifecycleError ? (
+            <p className="text-sm text-rose-600">{lifecycleError}</p>
+          ) : null}
+          <div className="grid gap-3">
+            {lifecycleAction?.kind === "paid" ? (
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Bank payment reference">
+                  <input
+                    className={inputClass}
+                    value={lifecyclePaymentReference}
+                    onChange={(event) =>
+                      setLifecyclePaymentReference(event.target.value)
+                    }
+                  />
+                </Field>
+                <Field label="Value date">
+                  <input
+                    type="date"
+                    className={inputClass}
+                    value={lifecyclePaymentDate}
+                    onChange={(event) =>
+                      setLifecyclePaymentDate(event.target.value)
+                    }
+                  />
+                </Field>
+              </div>
+            ) : null}
+            <Field
+              label={
+                lifecycleAction?.kind === "paid"
+                  ? "Confirmation note (who confirmed, how)"
+                  : "Reason"
+              }
+            >
+              <Textarea
+                className={textareaClass}
+                value={lifecycleReason}
+                onChange={(event) => setLifecycleReason(event.target.value)}
+              />
+            </Field>
+            {lifecycleAction?.kind === "reverse" ? (
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={lifecycleBankWithdrawn}
+                  onChange={(event) =>
+                    setLifecycleBankWithdrawn(event.target.checked)
+                  }
+                />
+                <span>
+                  If a bank payment file was generated, I confirm it was not
+                  submitted to the bank or has been withdrawn.
+                </span>
+              </label>
+            ) : null}
+          </div>
+          <DialogFooter className="mt-4">
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              onClick={() => setLifecycleAction(null)}
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              className={primaryButtonClass}
+              disabled={saving}
+              onClick={() => void onSubmitLifecycleAction()}
+            >
+              {saving
+                ? "Saving…"
+                : lifecycleAction?.kind === "reverse"
+                  ? "Reverse run"
+                  : lifecycleAction?.kind === "paid"
+                    ? "Confirm payment"
+                    : "Cancel run"}
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+      <PayrollPaymentProgressDialog
+        runId={paymentProgressRunId}
+        canRetry={canRetryPayments}
+        onClose={() => setPaymentProgressRunId(null)}
+        onChanged={() => void loadRows({ refreshLookups: true })}
+      />
+      <Dialog
+        open={eligibilityReport !== null}
+        onOpenChange={(open) => {
+          if (!open) setEligibilityReport(null);
+        }}
+      >
+        <DialogPopup className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Payroll eligibility</DialogTitle>
+            <DialogDescription>
+              Everyone employed during the period. Errors must be fixed before
+              the run can be processed; exclusions are deliberate.
+            </DialogDescription>
+          </DialogHeader>
+          {eligibilityReport?.loading ? (
+            <div className="flex justify-center py-6">
+              <FluentLoadingIndicator className="size-5 animate-spin" />
+            </div>
+          ) : eligibilityReport?.data ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-2 text-center text-sm">
+                {(
+                  [
+                    ["Eligible", "eligible_count", ""],
+                    ["Excluded", "excluded_count", ""],
+                    ["Errors", "error_count", "text-rose-600"],
+                  ] as const
+                ).map(([label, key, tone]) => (
+                  <div
+                    key={key}
+                    className="rounded-lg border border-border p-2"
+                  >
+                    <div className={cn("text-lg font-semibold", tone)}>
+                      {readNumber(eligibilityReport.data!, [key]) ?? 0}
+                    </div>
+                    <div className="text-xs text-muted-foreground">{label}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="max-h-[50vh] overflow-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="text-xs text-muted-foreground">
+                    <tr>
+                      <th className="py-1 pr-2">Employee</th>
+                      <th className="py-1 pr-2">Status</th>
+                      <th className="py-1">Reason / action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {asRecordArray(eligibilityReport.data.rows)
+                      .filter(
+                        (item) => readString(item, ["status"]) !== "ELIGIBLE",
+                      )
+                      .map((item) => (
+                        <tr
+                          key={readString(item, ["employee_id"])}
+                          className="border-t border-border/60 align-top"
+                        >
+                          <td className="py-1.5 pr-2">
+                            <div className="font-medium">
+                              {readString(item, ["employee_name"])}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {readString(item, ["employee_no"])}
+                            </div>
+                          </td>
+                          <td className="py-1.5 pr-2">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                readString(item, ["status"]) === "ERROR" &&
+                                  "border-rose-300 text-rose-700 dark:text-rose-300",
+                              )}
+                            >
+                              {prettify(readString(item, ["status"]))}
+                            </Badge>
+                          </td>
+                          <td className="py-1.5">
+                            <div>{readString(item, ["reason"])}</div>
+                            {readString(item, ["action"]) ? (
+                              <div className="text-xs text-muted-foreground">
+                                {readString(item, ["action"])}
+                              </div>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+                {asRecordArray(eligibilityReport.data.rows).every(
+                  (item) => readString(item, ["status"]) === "ELIGIBLE",
+                ) ? (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    Every employee in the period is eligible.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </DialogPopup>
       </Dialog>
     </div>

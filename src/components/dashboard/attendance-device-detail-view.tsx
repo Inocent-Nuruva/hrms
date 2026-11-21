@@ -95,6 +95,10 @@ import { showErrorAlert } from "@/lib/error-alert";
 import { showSuccessAlert } from "@/lib/success-alert";
 import { AUTH_STORAGE_KEYS } from "@/utils/constants";
 import { env } from "@/lib/env";
+import { formatDeviceSyncFailure, formatDeviceSyncJob } from "@/lib/device-sync-feedback";
+import { deviceAssignmentEmployeeId } from "@/lib/device-employee-link";
+import { getDeviceUserFingerprints, type DeviceUserFingerprints } from "@/lib/device-user-fingerprints-api";
+import { canCaptureFingerprint } from "@/lib/fingerprint-capture-form";
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken";
 
@@ -122,6 +126,7 @@ type DeviceSyncStatus = Record<
   {
     state: DeviceSyncStepState;
     message?: string;
+    jobId?: string;
   }
 >;
 
@@ -530,6 +535,8 @@ function employeeDisplayName(employee: AdminRecord) {
       "display_name",
       "name",
       "employee_name",
+      "device_user_name",
+      "deviceUserName",
     ]) ||
     "Unknown employee"
   );
@@ -741,8 +748,11 @@ function HandFingerprintSelector({
               <button
                 key={option.id}
                 type="button"
+                aria-label={option.label}
+                aria-pressed={isSelected}
+                disabled={isOccupied}
                 onClick={() => onChange(option.id)}
-                title={option.label}
+                title={isOccupied ? `${option.label} is already saved` : option.label}
                 className={cn(
                   "flex flex-col items-center justify-end rounded-2xl border px-1.5 pb-2 pt-3 transition-all sm:px-2",
                   isThumb
@@ -944,6 +954,13 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
 
   useFluentToastState(message, setMessage, "success");
   const [employeeSearch, setEmployeeSearch] = React.useState("");
+  const [employeeLinkFilter, setEmployeeLinkFilter] = React.useState<"all" | "linked" | "unlinked">("all");
+  const [deviceFingerprintsOpen, setDeviceFingerprintsOpen] = React.useState(false);
+  const [deviceFingerprintsLoading, setDeviceFingerprintsLoading] = React.useState(false);
+  const [deviceFingerprintsError, setDeviceFingerprintsError] = React.useState<string | null>(null);
+  const [deviceFingerprints, setDeviceFingerprints] = React.useState<DeviceUserFingerprints | null>(null);
+  const [deviceFingerprintsLabel, setDeviceFingerprintsLabel] = React.useState("");
+  const deviceFingerprintRequest = React.useRef(0);
 
   const [assignEmployeeOpen, setAssignEmployeeOpen] = React.useState(false);
   const [assignEmployeePickerOpen, setAssignEmployeePickerOpen] =
@@ -1021,6 +1038,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
   const [setupPreviewError, setSetupPreviewError] = React.useState<string | null>(null);
   const [setupPreviewLoading, setSetupPreviewLoading] = React.useState(false);
   const canPreviewSetup = actor.ready && ["attendance_devices:read", "access_groups:read", "data_scope:company"].every((permission) => canPerformPermission(actor.permissionLabels, permission));
+  const canViewDeviceFingerprints = actor.ready && ["employee_device_assignments:read", "data_scope:company"].every((permission) => canPerformPermission(actor.permissionLabels, permission));
   const [managingDevice, setManagingDevice] = React.useState(false);
   const [deviceAuditLogs, setDeviceAuditLogs] = React.useState<AdminRecord[]>(
     [],
@@ -1094,18 +1112,13 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
             employee_name:
               readStringFromRecord(employee, [
                 "employee_name",
+                "device_user_name",
+                "deviceUserName",
                 "name",
                 "full_name",
                 "display_name",
               ]) ?? employeeDisplayName(employee),
-            resolved_employee_id:
-              readNumberFromRecord(employee, [
-                "employee_id",
-                "employeeId",
-                "id",
-                "user_id",
-                "userId",
-              ]) ?? null,
+            resolved_employee_id: deviceAssignmentEmployeeId(employee),
             resolved_employee_no:
               readStringFromRecord(employee, [
                 "employee_no",
@@ -1182,14 +1195,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
     () =>
       new Set(
         assignedEmployees
-          .map((employee) =>
-            readNumberFromRecord(employee, [
-              "resolved_employee_id",
-              "id",
-              "employee_id",
-              "employeeId",
-            ]),
-          )
+          .map(deviceAssignmentEmployeeId)
           .filter((employeeId): employeeId is number => employeeId !== null),
       ),
     [assignedEmployees],
@@ -1534,12 +1540,12 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
 
   const filteredAssignedEmployees = React.useMemo(() => {
     const normalizedSearch = employeeSearch.trim().toLowerCase();
-    if (!normalizedSearch) {
-      return assignedEmployees;
-    }
-
-    return assignedEmployees.filter((employee) =>
-      [
+    return assignedEmployees.filter((employee) => {
+      const linked = deviceAssignmentEmployeeId(employee) !== null;
+      if (employeeLinkFilter === "linked" && !linked) return false;
+      if (employeeLinkFilter === "unlinked" && linked) return false;
+      if (!normalizedSearch) return true;
+      return [
         readStringFromRecord(employee, [
           "resolved_employee_no",
           "employee_no",
@@ -1555,19 +1561,25 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
         ]),
       ]
         .filter(Boolean)
-        .some((value) => value?.toLowerCase().includes(normalizedSearch)),
-    );
-  }, [assignedEmployees, employeeSearch]);
+        .some((value) => value?.toLowerCase().includes(normalizedSearch));
+    });
+  }, [assignedEmployees, employeeSearch, employeeLinkFilter]);
+
+  const linkedEmployeeCount = React.useMemo(
+    () => assignedEmployees.filter((employee) => deviceAssignmentEmployeeId(employee) !== null).length,
+    [assignedEmployees],
+  );
 
   const setSyncStepStatus = React.useCallback(
     (
       step: DeviceSyncStepKey,
       state: DeviceSyncStepState,
       nextMessage?: string,
+      jobId?: string,
     ) => {
       setDeviceSyncStatus((prev) => ({
         ...prev,
-        [step]: { state, ...(nextMessage ? { message: nextMessage } : {}) },
+        [step]: { state, ...(nextMessage ? { message: nextMessage } : {}), ...(jobId ? { jobId } : {}) },
       }));
     },
     [],
@@ -1593,7 +1605,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
         const result = asRecord(response);
         const status = String(result?.status ?? "").toUpperCase();
         if (result?.ok === false || status === "FAILED" || status === "PARTIAL" || Number(result?.failed ?? 0) > 0) {
-          throw new Error(`${options.pendingMessage} reported a failure or partial result. Review synchronization history.`);
+          throw new Error(formatDeviceSyncFailure(response, options.pendingMessage));
         }
         setSyncStepStatus(step, "success", options.successMessage);
       } catch (errorObject) {
@@ -1746,11 +1758,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
 
   const openEmployeeAuditLogs = async (employee: AdminRecord) => {
     const token = readStoredToken();
-    const employeeId = readNumberFromRecord(employee, [
-      "id",
-      "employee_id",
-      "employeeId",
-    ]);
+    const employeeId = deviceAssignmentEmployeeId(employee);
     if (!token || employeeId === null) return;
     setEmployeeLogsLabel(
       readDisplayField(employee, [
@@ -1778,6 +1786,29 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
       );
     } finally {
       setEmployeeLogsLoading(false);
+    }
+  };
+
+  const openDeviceFingerprints = async (employee: AdminRecord) => {
+    const token = readStoredToken();
+    const assignmentId = readNumberFromRecord(employee, ["id"]);
+    if (!token || assignmentId === null) {
+      showErrorAlert(!token ? "Authentication required. Please log in again." : "Device user assignment not found.");
+      return;
+    }
+    const requestId = ++deviceFingerprintRequest.current;
+    setDeviceFingerprintsLabel(employeeDisplayName(employee));
+    setDeviceFingerprints(null);
+    setDeviceFingerprintsError(null);
+    setDeviceFingerprintsOpen(true);
+    setDeviceFingerprintsLoading(true);
+    try {
+      const result = await getDeviceUserFingerprints(token, deviceId, assignmentId);
+      if (deviceFingerprintRequest.current === requestId) setDeviceFingerprints(result);
+    } catch (errorObject) {
+      if (deviceFingerprintRequest.current === requestId) setDeviceFingerprintsError(errorObject instanceof Error ? errorObject.message : "Could not load fingerprints.");
+    } finally {
+      if (deviceFingerprintRequest.current === requestId) setDeviceFingerprintsLoading(false);
     }
   };
 
@@ -1825,7 +1856,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
         const payload = await withTimeout(action(), env.NEXT_PUBLIC_DEVICE_BULK_ACTION_TIMEOUT_MS, `${label} import request timed out.`);
         const jobId = readJobId(payload);
         if (!jobId) throw new Error(`${label} import did not return a job ID.`);
-        setSyncStepStatus(resource, "queued", `Import queued (job ${jobId}); check synchronization history for the final result.`);
+        setSyncStepStatus(resource, "queued", `Import job ${jobId} was queued. Select Check status to see its result.`, jobId);
         setMessage(`${label} import queued. Completion has not yet been confirmed.`);
         setError(null);
         return;
@@ -1842,9 +1873,29 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
       await fetchDeviceData();
     } catch (errorObject) {
       setSyncStepStatus(resource, "error", errorObject instanceof Error ? errorObject.message : "Import failed.");
-      setError(
-        errorObject instanceof Error ? errorObject.message : "Sync failed.",
-      );
+      setError(null);
+    } finally {
+      setSyncingResourceKey("");
+    }
+  };
+
+  const onCheckResourceJob = async (resource: DeviceSyncStepKey, jobId: string) => {
+    const token = readStoredToken();
+    if (!token) {
+      setSyncStepStatus(resource, "error", "Authentication required. Please log in again.", jobId);
+      return;
+    }
+    setSyncingResourceKey(resource);
+    try {
+      const job = await getHikvisionSyncJob(token, jobId);
+      const feedback = formatDeviceSyncJob(job, jobId);
+      setSyncStepStatus(resource, feedback.state, feedback.message, jobId);
+      if (feedback.state === "success") {
+        void fetchDeviceData().catch(() => undefined);
+      }
+    } catch (errorObject) {
+      const reason = errorObject instanceof Error ? errorObject.message : "Unknown error";
+      setSyncStepStatus(resource, "queued", `Could not check job ${jobId}: ${reason}`, jobId);
     } finally {
       setSyncingResourceKey("");
     }
@@ -2102,6 +2153,11 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
       return;
     }
 
+    if (!assignCredentialModeReady) {
+      setAssignEmployeeError("Select a supported verify mode and save the assignment details before adding credentials.");
+      return;
+    }
+
     const employeeName = employeeDisplayName(assignedEmployeeForCredentialStep);
     let captureDialogState: FingerprintCaptureDialogState | null = null;
 
@@ -2316,6 +2372,11 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
     }
     if (!credentialEmployee) {
       setManageCredentialsError("Select an assigned employee first.");
+      return;
+    }
+
+    if (!manageCredentialModeReady) {
+      setManageCredentialsError("Set a supported verify mode on the employee's device assignment before adding credentials.");
       return;
     }
 
@@ -2992,12 +3053,19 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                   onChange={(event) => setEmployeeSearch(event.target.value)}
                 />
               </div>
+              <select
+                aria-label="Filter employees by HR link"
+                className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-700"
+                value={employeeLinkFilter}
+                onChange={(event) => setEmployeeLinkFilter(event.target.value as "all" | "linked" | "unlinked")}
+              >
+                <option value="all">All users</option>
+                <option value="linked">Linked to HR</option>
+                <option value="unlinked">Not linked to HR</option>
+              </select>
               <p className="text-xs text-slate-500 sm:ml-1">
-                {filteredAssignedEmployees.length}
-                {employeeSearch.trim()
-                  ? ` of ${assignedEmployees.length}`
-                  : ""}{" "}
-                linked
+                {linkedEmployeeCount} linked · {assignedEmployees.length - linkedEmployeeCount} not linked
+                {(employeeSearch.trim() || employeeLinkFilter !== "all") && ` · ${filteredAssignedEmployees.length} shown`}
               </p>
               <button
                 type="button"
@@ -3008,6 +3076,12 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                 Assign
               </button>
             </div>
+
+            {assignedEmployees.length > linkedEmployeeCount && (
+              <p className="text-xs text-slate-500">
+                Use Assign to link a device user to an HR employee. HR employee actions become available after linking.
+              </p>
+            )}
 
             {employeesError ? (
               <p className="text-sm text-red-600">{employeesError}</p>
@@ -3023,7 +3097,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                 <p className="mt-1 text-xs text-slate-500">
                   {assignedEmployees.length === 0
                     ? "Assign someone to start capturing credentials and access."
-                    : "Try a different name or employee number."}
+                    : "Try a different name, employee number, or HR link filter."}
                 </p>
                 {assignedEmployees.length === 0 ? (
                   <button
@@ -3043,6 +3117,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                     <tr className="border-b border-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-500">
                       <th className="py-2.5 pr-3 font-semibold">Employee</th>
                       <th className="px-3 py-2.5 font-semibold">No.</th>
+                      <th className="px-3 py-2.5 font-semibold">HR link</th>
                       <th className="px-3 py-2.5 font-semibold">Status</th>
                       <th className="px-3 py-2.5 font-semibold">Assigned</th>
                       <th className="py-2.5 pl-3 text-right font-semibold">
@@ -3052,13 +3127,9 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                   </thead>
                   <tbody>
                     {filteredAssignedEmployees.map((emp, index) => {
-                      const empId =
-                        readNumberFromRecord(emp, [
-                          "resolved_employee_id",
-                          "id",
-                          "employee_id",
-                          "employeeId",
-                        ]) ?? index;
+                      const empId = readNumberFromRecord(emp, ["id"]) ?? index;
+                      const linkedEmployeeId = deviceAssignmentEmployeeId(emp);
+                      const linked = linkedEmployeeId !== null;
                       const name = employeeDisplayName(emp);
                       const empNo =
                         readDisplayField(emp, [
@@ -3094,6 +3165,11 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                           </td>
                           <td className="px-3 py-3 text-slate-600">{empNo}</td>
                           <td className="px-3 py-3">
+                            <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", linked ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800")}>
+                              {linked ? "Linked" : "Not linked"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3">
                             <span
                               className={cn(
                                 "inline-flex items-center gap-1.5 text-xs font-semibold",
@@ -3114,11 +3190,23 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                           </td>
                           <td className="py-3 pl-3">
                             <div className="flex items-center justify-end gap-1.5">
+                              {canViewDeviceFingerprints && (
+                                <button
+                                  type="button"
+                                  className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-primary hover:bg-[color:rgb(var(--primary-rgb)/0.08)]"
+                                  onClick={() => void openDeviceFingerprints(emp)}
+                                  title="View imported fingerprints"
+                                >
+                                  <FingerprintIcon className="h-3.5 w-3.5" />
+                                  <span>Fingerprints</span>
+                                </button>
+                              )}
                               <button
                                 type="button"
-                                className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-primary hover:bg-[color:rgb(var(--primary-rgb)/0.08)]"
+                                className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-primary hover:bg-[color:rgb(var(--primary-rgb)/0.08)] disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={!linked}
                                 onClick={() => requestManageCredentials(emp)}
-                                title="Credentials"
+                                title={linked ? "Credentials" : "Link this device user to an HR employee first"}
                               >
                                 <FingerprintIcon className="h-3.5 w-3.5" />
                                 <span className="hidden sm:inline">
@@ -3127,14 +3215,11 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                               </button>
                               <button
                                 type="button"
-                                className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-primary hover:bg-[color:rgb(var(--primary-rgb)/0.08)]"
+                                className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-primary hover:bg-[color:rgb(var(--primary-rgb)/0.08)] disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={!linked}
                                 onClick={async () => {
                                   const token = readStoredToken();
-                                  const employeeId = readNumberFromRecord(emp, [
-                                    "id",
-                                    "employee_id",
-                                    "employeeId",
-                                  ]);
+                                  const employeeId = deviceAssignmentEmployeeId(emp);
                                   const cardNo =
                                     await fluentPrompt("Card number");
                                   if (!token || employeeId === null || !cardNo)
@@ -3159,24 +3244,26 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                                       ),
                                     );
                                 }}
-                                title="Add card"
+                                title={linked ? "Add card" : "Link this device user to an HR employee first"}
                               >
                                 <CreditCardIcon className="h-3.5 w-3.5" />
                                 <span className="hidden sm:inline">Card</span>
                               </button>
                               <button
                                 type="button"
-                                className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                                className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={!linked}
                                 onClick={() => void openEmployeeAuditLogs(emp)}
-                                title="Access history"
+                                title={linked ? "Access history" : "Link this device user to an HR employee first"}
                               >
                                 History
                               </button>
                               <button
                                 type="button"
-                                className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                                className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={!linked}
                                 onClick={() => requestRemoveEmployee(emp)}
-                                title="Remove"
+                                title={linked ? "Remove" : "Link this device user to an HR employee first"}
                               >
                                 <Trash2Icon className="h-3.5 w-3.5" />
                                 <span className="hidden sm:inline">Remove</span>
@@ -3253,6 +3340,27 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                     >
                       {syncingId.length > 0 ? "Syncing…" : "Sync device"}
                     </button>
+                  ) : status.jobId ? (
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                        disabled={syncingResourceKey === step}
+                        onClick={() => void onCheckResourceJob(step, status.jobId!)}
+                      >
+                        {syncingResourceKey === step ? "Checking…" : "Check status"}
+                      </button>
+                      {status.state !== "queued" && (
+                        <button
+                          type="button"
+                          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                          disabled={!readyForResourceSync || syncingResourceKey === step || syncingId.length > 0}
+                          onClick={() => void onSyncDeviceResource(step)}
+                        >
+                          Sync again
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <button
                       type="button"
@@ -3813,7 +3921,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                       <CredentialTypePicker
                         value={credentialForm.credential_type}
                         onChange={(nextType) =>
-                          setCredentialForm((current) => ({
+                          setCredentialForm((current) => current.credential_type === nextType ? current : ({
                             ...buildInitialCredentialForm(),
                             credential_type: nextType,
                             user_verify_mode: current.user_verify_mode,
@@ -3936,7 +4044,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
               }
               disabled={
                 assignedEmployeeForCredentialStep
-                  ? savingCredentials
+                  ? savingCredentials || (includeCredentialsOnAssign && (!assignCredentialModeReady || (isFingerprintCredential && !canCaptureFingerprint(assignCredentialModeReady, credentialForm.fingerprint_id, assignFingerprintSlots.map((slot) => slot.slotNo !== null ? String(slot.slotNo) : slot.id)))))
                   : assigningEmployee ||
                     !selectedEmployeeId ||
                     !selectedAccessGroupId
@@ -4062,17 +4170,18 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                 <CredentialTypePicker
                   value={credentialForm.credential_type}
                   onChange={(nextType) =>
-                    setCredentialForm((current) => ({
+                    setCredentialForm((current) => current.credential_type === nextType ? current : ({
                       ...buildInitialCredentialForm(),
                       credential_type: nextType,
                       user_verify_mode: current.user_verify_mode,
                     }))
                   }
                   allowedTypes={manageAllowedCredentialTypes}
-                  requireVerifyMode={Boolean(
-                    manageAllowedCredentialTypes?.size,
-                  )}
+                  requireVerifyMode
                 />
+                {!manageCredentialModeReady && (
+                  <p className="text-sm text-amber-800">Set a supported verify mode on the employee&apos;s device assignment before adding credentials.</p>
+                )}
               </div>
 
               {manageCredentialModeReady && isPasswordCredential ? (
@@ -4261,7 +4370,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
               type="button"
               className="w-full rounded-md bg-primary px-3 py-1.5 text-sm !text-white disabled:opacity-50 sm:w-auto"
               onClick={() => void onSaveCredentials()}
-              disabled={savingCredentials || !credentialEmployee}
+              disabled={savingCredentials || !credentialEmployee || !manageCredentialModeReady || (isFingerprintCredential && !canCaptureFingerprint(manageCredentialModeReady, credentialForm.fingerprint_id, manageFingerprintSlots.map((slot) => slot.slotNo !== null ? String(slot.slotNo) : slot.id)))}
             >
               {savingCredentials
                 ? "Saving..."
@@ -4366,6 +4475,43 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
           void fetchDeviceData();
         }}
       />
+
+      <Dialog open={deviceFingerprintsOpen} onOpenChange={(open) => { if (!open) deviceFingerprintRequest.current += 1; setDeviceFingerprintsOpen(open); }}>
+        <DialogPopup className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Imported fingerprints</DialogTitle>
+            <DialogDescription>
+              {deviceFingerprintsLabel}{deviceFingerprints ? ` · Device user ${deviceFingerprints.device_employee_no}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {deviceFingerprintsLoading ? (
+            <p className="text-sm text-slate-500">Loading fingerprints…</p>
+          ) : deviceFingerprintsError ? (
+            <p className="text-sm text-red-600">{deviceFingerprintsError}</p>
+          ) : deviceFingerprints && deviceFingerprints.fingerprints.length === 0 ? (
+            <p className="text-sm text-slate-500">No fingerprints have been imported for this device user. Check the fingerprint sync result if fingerprints are enrolled on the device.</p>
+          ) : deviceFingerprints ? (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-500">{deviceFingerprints.hr_employee_id ? "Linked to an HR employee." : "Not linked to an HR employee. Fingerprints are associated using the device user number."} Only fingerprint details are displayed.</p>
+              <div className="max-h-80 overflow-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead><tr className="border-b border-slate-200 text-xs uppercase text-slate-500"><th className="py-2 pr-3">Finger</th><th className="py-2 pr-3">Reader</th><th className="py-2">Status</th></tr></thead>
+                  <tbody>
+                    {deviceFingerprints.fingerprints.map((fingerprint) => (
+                      <tr key={fingerprint.id} className="border-b border-slate-100">
+                        <td className="py-2 pr-3">{fingerprint.fingerprint_id ? `Slot ${fingerprint.fingerprint_id}` : "Unknown slot"}</td>
+                        <td className="py-2 pr-3">{fingerprint.card_reader_no ?? "—"}</td>
+                        <td className="py-2">{formatStatusLabel(fingerprint.status)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter><button type="button" className="rounded-md border border-slate-300 px-3 py-1.5 text-sm" onClick={() => { deviceFingerprintRequest.current += 1; setDeviceFingerprintsOpen(false); }}>Close</button></DialogFooter>
+        </DialogPopup>
+      </Dialog>
 
       <Dialog
         open={employeeLogsOpen}
