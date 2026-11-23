@@ -1,3 +1,4 @@
+import { canQueueAttendancePunch, requiresAttendanceSelfie } from '../lib/attendance-punch-policy';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -90,11 +91,11 @@ export function AttendanceScreen({ auth }: Props) {
   });
 
   const punchPolicyQuery = useQuery({
-    queryKey: ['mobileAttendancePolicy'],
+    queryKey: ['mobileAttendancePolicy', auth.user?.companyId, auth.user?.id],
     queryFn: async () => asRecord(await api.getMyAttendanceMobilePolicy()),
     enabled: auth.isAuthenticated,
   });
-  const punchPolicy = punchPolicyQuery.data ?? {};
+  const punchPolicy = React.useMemo(() => punchPolicyQuery.data ?? {}, [punchPolicyQuery.data]);
 
   const refreshOfflineQueueStatus = React.useCallback(async () => {
     const companyId = auth.user?.companyId;
@@ -113,14 +114,7 @@ export function AttendanceScreen({ auth }: Props) {
     try {
       return await send();
     } catch (error) {
-      const networkFailure =
-        error instanceof TypeError ||
-        (error instanceof Error && /network request failed|failed to fetch|network error/i.test(error.message));
-      if (
-        !networkFailure ||
-        payload.qrToken ||
-        punchPolicy.allow_offline_punches !== true
-      ) throw error;
+      if (!canQueueAttendancePunch(punchPolicy, error, payload.qrToken)) throw error;
       const companyId = auth.user?.companyId;
       const userId = auth.user?.id;
       if (!companyId || userId === undefined || userId === null) throw error;
@@ -136,7 +130,7 @@ export function AttendanceScreen({ auth }: Props) {
   }, [
     auth.user?.companyId,
     auth.user?.id,
-    punchPolicy.allow_offline_punches,
+    punchPolicy,
     refreshOfflineQueueStatus,
   ]);
 
@@ -294,8 +288,9 @@ export function AttendanceScreen({ auth }: Props) {
     await Promise.all([
       punchesQuery.refetch(),
       todayQuery.refetch(),
+      punchPolicyQuery.refetch(),
     ]);
-  }, [punchesQuery, todayQuery]);
+  }, [punchesQuery, todayQuery, punchPolicyQuery]);
 
   const attendanceSummary = useMemo(
     () => buildAttendanceSummary(punchesQuery.data, todayQuery.data),
@@ -450,11 +445,14 @@ export function AttendanceScreen({ auth }: Props) {
             style={{ minHeight: 42, marginTop: 10, borderWidth: 1, borderColor: lineColor, borderRadius: 12, paddingHorizontal: 12, color: textColor }}
           />
         ) : null}
+        {punchPolicy.allow_mobile_punches === false ? (
+          <Text style={[styles.locationHintText, { color: mutedColor }]}>Mobile check-in and check-out are disabled by your attendance policy.</Text>
+        ) : null}
         <View style={styles.bottomButtonStage}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={actionLabel}
-            disabled={actionPending}
+            disabled={actionPending || punchPolicy.allow_mobile_punches === false}
             onPressIn={() => {
               if (!actionPending) {
                 Vibration.vibrate(12);
@@ -465,10 +463,8 @@ export function AttendanceScreen({ auth }: Props) {
               if (!busy) Animated.spring(fingerprintPulse, { toValue: 1, useNativeDriver: true, speed: 24, bounciness: 5 }).start();
             }}
             onPress={() => {
-              if (actionPending) return;
-              const selfieRequired = primaryAction === 'in'
-                ? punchPolicy.require_selfie_for_check_in === true
-                : punchPolicy.require_selfie_for_check_out === true;
+              if (actionPending || punchPolicy.allow_mobile_punches === false) return;
+              const selfieRequired = requiresAttendanceSelfie(punchPolicy, primaryAction);
               if (primaryAction === 'in') {
                 if (selfieRequired) {
                   setSelfieAction('in');

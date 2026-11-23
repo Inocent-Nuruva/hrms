@@ -886,8 +886,8 @@ function dashboardPathFromApiLink(value: unknown, fallback: string) {
 
 function resolvePersonalAttendanceHref(value: unknown, fallback: string) {
   const path = dashboardPathFromApiLink(value, fallback)
+  if (path === "/dashboard/attendance/today") return "/dashboard/attendance/attendance-history"
   if (
-    path === "/dashboard/attendance/today" ||
     path === "/dashboard/attendance/punch-action" ||
     path === "/dashboard/attendance/attendance-history" ||
     path === "/dashboard/attendance/schedule-preview" ||
@@ -2240,7 +2240,7 @@ export function EmployeeDashboardView({
   const leaveRequestHref = dashboardPathFromApiLink(linksRecord?.leave_requests, "/dashboard/me/leave/requests")
   const attendanceHref = resolvePersonalAttendanceHref(
     linksRecord?.attendance_today,
-    "/dashboard/attendance/today",
+    "/dashboard/attendance/attendance-history",
   )
   const attendanceHistoryHref = resolvePersonalAttendanceHref(
     linksRecord?.attendance_history,

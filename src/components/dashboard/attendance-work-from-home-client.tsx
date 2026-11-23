@@ -149,6 +149,7 @@ function linkedEmployeeId() {
 
 export function AttendanceWorkFromHomeClient() {
   const actor = useDashboardActor();
+  const canReadCompany = actor.permissionLabels.includes("attendance_processing:read");
   const canReview = actor.permissionLabels.includes(
     "attendance_processing:execute",
   );
@@ -162,6 +163,7 @@ export function AttendanceWorkFromHomeClient() {
     number | null
   >(null);
   const [token, setToken] = React.useState("");
+  const [reviewableTeamIds, setReviewableTeamIds] = React.useState<Set<number>>(new Set());
   const [requests, setRequests] = React.useState<WorkFromHomeRequest[]>([]);
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
@@ -197,35 +199,24 @@ export function AttendanceWorkFromHomeClient() {
     setLoading(true);
     setError("");
     try {
-      if (canReview) {
-        setRequests(
-          readRequests(await listAttendanceWorkFromHomeRequests(token, false)),
-        );
-      } else if (canReviewTeam) {
-        const [minePayload, teamPayload] = await Promise.all([
-          listAttendanceWorkFromHomeRequests(token, true),
-          listTeamAttendanceWorkFromHomeRequests(token),
-        ]);
-        const merged = [
-          ...readRequests(minePayload),
-          ...readRequests(teamPayload),
-        ];
-        setRequests(
-          Array.from(
-            new Map(merged.map((request) => [request.id, request])).values(),
-          ),
-        );
-      } else {
-        setRequests(
-          readRequests(await listAttendanceWorkFromHomeRequests(token, true)),
-        );
-      }
+      const [visible, team] = await Promise.all([
+        canReadCompany
+          ? listAttendanceWorkFromHomeRequests(token, false)
+          : currentEmployeeId ? listAttendanceWorkFromHomeRequests(token, true) : [],
+        canReviewTeam && currentEmployeeId && (!canReadCompany || !canReview)
+          ? listTeamAttendanceWorkFromHomeRequests(token)
+          : [],
+      ]);
+      const teamRequests = readRequests(team);
+      setReviewableTeamIds(new Set(teamRequests.map((request) => request.id)));
+      const combined = [...readRequests(visible), ...teamRequests];
+      setRequests(Array.from(new Map(combined.map((request) => [request.id, request])).values()));
     } catch (loadError) {
       setError(errorMessage(loadError));
     } finally {
       setLoading(false);
     }
-  }, [canReview, canReviewTeam, token]);
+  }, [canReadCompany, canReview, canReviewTeam, currentEmployeeId, token]);
 
   React.useEffect(() => {
     if (actor.ready && token) void refresh();
@@ -417,15 +408,15 @@ export function AttendanceWorkFromHomeClient() {
         <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
           <div className="mr-auto">
             <h2 className="font-semibold text-foreground">
-              {canReview
+              {canReadCompany
                 ? "Company requests"
                 : canReviewTeam
                   ? "My and team requests"
                   : "My requests"}
             </h2>
             <p className="text-xs text-muted-foreground">
-              {canReview
-                ? "Review remote-work requests across the company."
+              {canReadCompany
+                ? "View remote-work requests across the company."
                 : canReviewTeam
                   ? "Track your requests and review requests from employees who report to you."
                   : "Track your submitted requests and decisions."}
@@ -471,12 +462,12 @@ export function AttendanceWorkFromHomeClient() {
             />
             <div>
               <p className="font-medium text-foreground">
-                {canReview
+                {canReadCompany
                   ? "No requests need review"
                   : "No remote-work requests yet"}
               </p>
               <p className="text-sm text-muted-foreground">
-                {canReview
+                {canReadCompany
                   ? "New employee requests will appear here."
                   : "Submit a request to begin the approval process."}
               </p>
@@ -563,7 +554,7 @@ export function AttendanceWorkFromHomeClient() {
                   </div>
                 </div>
                 <div className="flex min-w-0 flex-wrap items-center gap-2 xl:justify-end">
-                  {(canReview || canReviewTeam) &&
+                  {(canReview || reviewableTeamIds.has(request.id)) &&
                   !isOwnRequest &&
                   request.status === "PENDING" ? (
                     <>

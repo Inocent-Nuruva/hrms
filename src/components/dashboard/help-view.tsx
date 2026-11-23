@@ -19,7 +19,7 @@ type HelpDestination = { title: string; url: string; hint: string }
 
 const SELF_PAGES: HelpDestination[] = [
   { title: "My profile", url: "/dashboard/me/profile", hint: "Name, photo, and contact details" },
-  { title: "My attendance", url: "/dashboard/attendance/today", hint: "Today’s state and punch history" },
+  { title: "My attendance", url: "/dashboard/attendance/attendance-history", hint: "Today’s state and punch history" },
   { title: "My leave", url: "/dashboard/me/leave/requests", hint: "Requests, balances, and holidays" },
   { title: "My payroll", url: "/dashboard/me/finance/payroll", hint: "Payslips and payment details" },
   { title: "My probation", url: "/dashboard/me/probation", hint: "Your confirmation case" },

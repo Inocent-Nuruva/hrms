@@ -1045,6 +1045,9 @@ function getSectionFormDescription(section: AttendanceSectionKey) {
 }
 
 function getSectionSetupGuidance(section: AttendanceSectionKey) {
+  if (section === "holidays") {
+    return ["Attendance and Leave Management share this calendar. Company-wide holidays apply across branches. Assign a branch for a local holiday. The applicable leave policy determines whether the date counts as leave."]
+  }
   if (section === "policies" || section === "settings") {
     return [
       "These rules apply to the active company.",

@@ -37,6 +37,7 @@ import {
   useReducedMotion,
 } from "framer-motion"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { useAuth } from "@/hooks/useAuth"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
@@ -3093,6 +3094,8 @@ function buildDailySummaryAdjustmentPayload(form: DailySummaryAdjustmentFormStat
 
 export function AttendanceActivityView({ section }: { section: string }) {
   const { user } = useAuth()
+  const actor = useDashboardActor()
+  const canResolveExceptions = actor.permissionLabels.includes("attendance_processing:execute")
   const activeSection = React.useMemo(() => resolveSection(section), [section])
   const config = React.useMemo(() => SECTION_CONFIG[activeSection], [activeSection])
   const lastFetchKeyRef = React.useRef<string | null>(null)
@@ -4138,6 +4141,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
   }, [detailsRow, fetchSectionData])
 
   const saveProcessingException = React.useCallback(async () => {
+    if (!canResolveExceptions) return
     const token = readStoredToken()
     if (!token) {
       setError("Authentication required. Please log in again.")
@@ -4169,7 +4173,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
     } finally {
       setDetailsActionBusy("")
     }
-  }, [detailsRow, exceptionResolutionNote, exceptionStatus, fetchSectionData])
+  }, [canResolveExceptions, detailsRow, exceptionResolutionNote, exceptionStatus, fetchSectionData])
 
   const saveCorrectionRequest = async (mode: "draft" | "submit") => {
     const token = readStoredToken()
@@ -6276,7 +6280,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                 Adjust summary
               </Button>
             </div>
-          ) : activeSection === "processing-exceptions" && detailsRow ? (
+          ) : activeSection === "processing-exceptions" && detailsRow && canResolveExceptions ? (
             <div className="flex w-full flex-col gap-3">
               <div className="grid gap-3 md:grid-cols-[minmax(0,180px)_1fr]">
                 <label className="grid gap-1 text-sm">

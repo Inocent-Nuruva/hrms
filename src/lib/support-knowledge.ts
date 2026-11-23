@@ -8,7 +8,7 @@ export type SupportPage = {
 
 export const SUPPORT_PAGES: SupportPage[] = [
   { title: "My profile", url: "/dashboard/me/profile", hint: "Name, photo, and contact details", keywords: ["profile", "photo", "name", "contact", "me"], audience: "self" },
-  { title: "My attendance", url: "/dashboard/attendance/today", hint: "Today’s punches and timesheet", keywords: ["attendance", "punch", "clock", "clock-in", "timesheet", "today"], audience: "self" },
+  { title: "My attendance", url: "/dashboard/attendance/attendance-history", hint: "Today’s punches and timesheet", keywords: ["attendance", "punch", "clock", "clock-in", "timesheet", "today"], audience: "self" },
   { title: "My leave", url: "/dashboard/me/leave/requests", hint: "Request leave and see balances", keywords: ["leave", "holiday", "vacation", "balance", "time off", "off"], audience: "self" },
   { title: "My payroll", url: "/dashboard/me/finance/payroll", hint: "Your own payslips and salary details", keywords: ["payslip", "payslips", "salary", "wage", "my payroll"], audience: "self" },
   { title: "My probation", url: "/dashboard/me/probation", hint: "Your confirmation case", keywords: ["probation", "confirmation"], audience: "self" },
@@ -175,7 +175,7 @@ export function localSupportAnswer(
     return formatSupportMatch(
       [
         SUPPORT_PAGES.find((page) => page.url === "/dashboard/insights/readiness")!,
-        SUPPORT_PAGES.find((page) => page.url === "/dashboard/attendance/today")!,
+        SUPPORT_PAGES.find((page) => page.url === "/dashboard/attendance/attendance-history")!,
       ].filter(Boolean),
       "Clock-in is two different things:\n- HR sets the company rules on Are we ready? (tap Set up clock-in).\n- You punch in on My attendance.",
     )

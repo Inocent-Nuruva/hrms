@@ -765,7 +765,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/team": MANAGER_ROUTE_PERMISSION,
   "/dashboard/me/team/overview": MANAGER_ROUTE_PERMISSION,
   "/dashboard/me/team/members": MANAGER_ROUTE_PERMISSION,
-  "/dashboard/me/team/attendance": MANAGER_ROUTE_PERMISSION,
+  "/dashboard/me/team/attendance": "team_attendance:read",
   "/dashboard/me/team/activity-summary": MANAGER_ROUTE_PERMISSION,
   "/dashboard/me/team/actions": MANAGER_ROUTE_PERMISSION,
   "/dashboard/me/insights": null,
