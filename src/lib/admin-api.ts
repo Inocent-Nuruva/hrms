@@ -1,3 +1,4 @@
+import { formatEmployeeNumber } from "./employee-number-format";
 import { extractBackupCodes } from "@/lib/backup-codes";
 import { env } from "@/lib/env";
 import { z } from "zod";
@@ -8980,6 +8981,10 @@ export async function syncAccessControlDoorsFromDevice(
   );
 }
 
+export async function listDepartmentManagerOptions(token: string, search: string) {
+  return normalizeList(await adminRequest<unknown>("/api/departments/manager-options?search=" + encodeURIComponent(search), {token}));
+}
+
 export async function createDepartment(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/departments", {
     method: "POST",
@@ -13792,7 +13797,7 @@ function formatEmployeeNumberFromSettings(record: AdminRecord | null) {
     return null;
   }
   const width = Number.isInteger(padding) && padding > 0 ? padding : 5;
-  return `${prefix}${String(nextNumber).padStart(width, "0")}`;
+  return formatEmployeeNumber(prefix, width, nextNumber);
 }
 
 async function employeeNumberExists(token: string, employeeNo: string) {
@@ -21511,14 +21516,23 @@ export type SmsGatewaySettings = {
   source: "platform" | "installation";
 };
 
+function readSmsGatewaySettings(payload: unknown) {
+  const record = asRecord(payload);
+  const settings = asRecord(record?.data) ?? record;
+  if (!settings || !Array.isArray(settings.approved_endpoints) || typeof settings.enabled !== "boolean") {
+    throw new Error("The SMS gateway settings could not be read.");
+  }
+  return settings as SmsGatewaySettings;
+}
+
 export async function getSmsGateway(token: string) {
   const payload = await adminRequest<unknown>("/api/sms/platform/gateway", { token });
-  return (normalizeSingle(payload) ?? asRecord(payload)) as SmsGatewaySettings;
+  return readSmsGatewaySettings(payload);
 }
 
 export async function saveSmsGateway(token: string, body: AdminRecord) {
   const payload = await adminRequest<unknown>("/api/sms/platform/gateway", { method: "PATCH", token, body });
-  return (normalizeSingle(payload) ?? asRecord(payload)) as SmsGatewaySettings;
+  return readSmsGatewaySettings(payload);
 }
 
 export async function getMailRouting(token: string, platform: boolean) {

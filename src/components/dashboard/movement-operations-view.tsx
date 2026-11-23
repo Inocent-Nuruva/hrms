@@ -226,6 +226,10 @@ function buildMovementForm(row: AdminRecord): Record<string, string> {
     title: readString(row, ["title"], ""),
     reason: readString(row, ["reason"], ""),
     effective_date: readString(row, ["effectiveDate", "effective_date"], ""),
+    employee_acknowledgement_required: String(
+      row.employeeAcknowledgementRequired === true ||
+        row.employee_acknowledgement_required === true,
+    ),
     new_branch_id: formValue(changedSnapshotValue(row, "branch_id")),
     new_department_id: formValue(changedSnapshotValue(row, "department_id")),
     new_position_id: formValue(changedSnapshotValue(row, "position_id")),
@@ -589,6 +593,8 @@ export function MovementOperationsView({
           title: form.title,
           reason: form.reason,
           effective_date: form.effective_date,
+          employee_acknowledgement_required:
+            form.employee_acknowledgement_required === "true",
         };
         if (form.new_branch_id)
           payload.new_branch_id = Number(form.new_branch_id);
@@ -1269,6 +1275,19 @@ export function MovementOperationsView({
                       }
                     />
                   </FluentField>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.employee_acknowledgement_required === "true"}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          employee_acknowledgement_required: String(event.target.checked),
+                        }))
+                      }
+                    />
+                    Require employee acknowledgement after the movement is applied
+                  </label>
                   {showTarget &&
                   (form.movement_type === "BRANCH_TRANSFER" ||
                     form.movement_type === "COMPOSITE") ? (

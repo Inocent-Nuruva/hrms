@@ -406,10 +406,6 @@ export const financeSectionTabGroups: DashboardSectionTabGroup[] = [
     title: "Payroll",
     items: [
       {
-        title: "Bank directory",
-        url: "/dashboard/settings/banks",
-      },
-      {
         title: "Payroll setup & operations",
         url: "/dashboard/operations/payroll",
       },

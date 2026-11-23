@@ -253,6 +253,12 @@ const adminData: SidebarData = {
       activeIcon: ActiveCompaniesIcon,
     },
     {
+      title: "Bank directory",
+      url: "/dashboard/settings/banks",
+      icon: FinanceIcon,
+      activeIcon: ActiveFinanceIcon,
+    },
+    {
       title: "Departments",
       url: "/dashboard/departments",
       icon: DepartmentsIcon,
@@ -617,6 +623,7 @@ const adminSearchIndex = [
   { title: "Insights / Readiness", url: "/dashboard/insights/readiness", section: "Insights", keywords: ["launch", "health", "security"] },
   { title: "Insights / Identity audit", url: "/dashboard/insights/identity-audit", section: "Insights", keywords: ["audit", "history", "rollback", "name", "email", "phone"] },
   { title: "Companies", url: "/dashboard/companies", section: "Organization", keywords: ["company", "organization", "tenant"] },
+  { title: "Bank directory", url: "/dashboard/settings/banks", section: "Organization", keywords: ["company", "bank", "directory"] },
   { title: "Departments", url: "/dashboard/departments", section: "Organization", keywords: ["department", "org"] },
   { title: "Branches", url: "/dashboard/branches", section: "Organization", keywords: ["branch", "location"] },
   { title: "Positions", url: "/dashboard/positions", section: "Organization", keywords: ["position", "job title"] },

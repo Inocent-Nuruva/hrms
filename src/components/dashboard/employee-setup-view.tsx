@@ -1,5 +1,6 @@
 "use client"
 
+import { formatEmployeeNumber } from "@/lib/employee-number-format"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { RefreshCw, Save } from "lucide-react";
@@ -84,16 +85,6 @@ function formatDateTime(value: unknown) {
     hour: "numeric",
     minute: "2-digit",
   }).format(parsed)
-}
-
-function sampleEmployeeNumber(prefix: string, padding: string, nextNumber: string) {
-  const numericPadding = Number(padding)
-  const numericNext = Number(nextNumber)
-  if (!Number.isFinite(numericPadding) || !Number.isFinite(numericNext)) {
-    return "-"
-  }
-  const body = String(Math.max(1, numericNext)).padStart(Math.max(1, numericPadding), "0")
-  return `${prefix.trim()}${body}`
 }
 
 function normalizeNumberingForm(record: AdminRecord | null) {
@@ -209,12 +200,12 @@ export function EmployeeSetupView() {
   }, [numberingForm])
 
   const numberingPreview = React.useMemo(
-    () => sampleEmployeeNumber(numberingForm.prefix, numberingForm.padding, numberingForm.next_number),
+    () => formatEmployeeNumber(numberingForm.prefix, Number(numberingForm.padding), Number(numberingForm.next_number)),
     [numberingForm.next_number, numberingForm.padding, numberingForm.prefix]
   )
-  const previewPrefix = numberingForm.prefix.trim()
+  const previewPrefix = numberingPreview && numberingForm.prefix.trim() ? numberingForm.prefix.trim().toUpperCase() + "/" : ""
   const previewDigits =
-    numberingPreview === "-" ? [] : numberingPreview.slice(previewPrefix.length).split("")
+    numberingPreview ? numberingPreview.slice(previewPrefix.length).split("") : []
   const isDirty =
     numberingForm.prefix !== savedNumberingForm.prefix ||
     numberingForm.padding !== savedNumberingForm.padding ||
@@ -240,7 +231,8 @@ export function EmployeeSetupView() {
                 {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
               </Button>
             </div>
-            <div className="mt-5 flex flex-wrap items-end gap-2.5">
+            <output aria-label="Employee number preview" className="sr-only">{numberingPreview ?? "Enter a valid prefix, padding and next number"}</output>
+            <div aria-hidden="true" className="mt-5 flex flex-wrap items-end gap-2.5">
               {previewPrefix ? (
                 <span className="pb-1.5 text-2xl font-semibold tracking-[0.22em] text-primary">
                   {previewPrefix}
@@ -259,7 +251,7 @@ export function EmployeeSetupView() {
                 </div>
               ) : (
                 <span className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-                  Enter a valid padding and next number
+                  Enter a valid prefix, padding and next number
                 </span>
               )}
             </div>

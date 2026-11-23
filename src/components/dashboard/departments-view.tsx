@@ -11,6 +11,7 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import {
   assignDepartmentPosition,
   createDepartment,
+  listDepartmentManagerOptions,
   deleteDepartment,
   grantDepartmentAccess,
   listBranches,
@@ -60,6 +61,7 @@ type DepartmentForm = {
   status: string
   branch_id: string
   parent_id: string
+  manager_employee_id: string
   position_ids: string[]
 }
 
@@ -171,6 +173,7 @@ function emptyForm(): DepartmentForm {
     status: "active",
     branch_id: "",
     parent_id: "",
+    manager_employee_id: "",
     position_ids: [],
   }
 }
@@ -267,6 +270,19 @@ export function DepartmentsView() {
   const [form, setForm] = React.useState<DepartmentForm>(emptyForm())
   const [editingId, setEditingId] = React.useState<number | null>(null)
 
+  const [managerSearch, setManagerSearch] = React.useState("")
+  const [managerOptions, setManagerOptions] = React.useState<AdminRecord[]>([])
+  const [managerError, setManagerError] = React.useState("")
+  React.useEffect(() => {
+    if (!openCreate) return
+    let active = true
+    const timer = window.setTimeout(() => {
+      void listDepartmentManagerOptions(readStoredToken(), managerSearch).then(options => {
+        if (active) { setManagerOptions(options); setManagerError("") }
+      }).catch(() => { if (active) { setManagerOptions([]); setManagerError("Could not load department managers.") } })
+    }, 180)
+    return () => { active = false; window.clearTimeout(timer) }
+  }, [openCreate, managerSearch])
   const [openAccess, setOpenAccess] = React.useState(false)
   const [accessDepartment, setAccessDepartment] = React.useState<AdminRecord | null>(null)
   const [accessRows, setAccessRows] = React.useState<AdminRecord[]>([])
@@ -417,6 +433,7 @@ export function DepartmentsView() {
       status: readString(row, ["status"]) === "-" ? "active" : readString(row, ["status"]),
       branch_id: String(readNumber(row, ["branch_id"]) ?? ""),
       parent_id: String(readNumber(row, ["parent_id"]) ?? ""),
+      manager_employee_id: String(readNumber(row, ["manager_employee_id"]) ?? ""),
       position_ids: readPositionIds(row).map(String),
     })
   }
@@ -465,6 +482,7 @@ export function DepartmentsView() {
       status: form.status || "active",
       branch_id: form.branch_id.trim() ? Number(form.branch_id) : 0,
       parent_id: form.parent_id.trim() ? Number(form.parent_id) : undefined,
+      manager_employee_id: form.manager_employee_id ? Number(form.manager_employee_id) : null,
     }
     const nextPositionIds = form.position_ids
       .map(Number)
@@ -758,7 +776,7 @@ export function DepartmentsView() {
                 onClick={() => {
                   fillFormFromRow(row)
                   setEditingId(id)
-                  setOpenCreate(true)
+                  setManagerSearch(""); setOpenCreate(true)
                   const token = readStoredToken()
                   if (token && id !== null) {
                     void listDepartmentPositions(token, id)
@@ -871,7 +889,7 @@ export function DepartmentsView() {
                 onClick={() => {
                   setEditingId(null)
                   setForm(emptyForm())
-                  setOpenCreate(true)
+                  setManagerSearch(""); setOpenCreate(true)
                 }}
                 aria-label="Add department"
                 title="Add department"
@@ -995,6 +1013,15 @@ export function DepartmentsView() {
                   ]}
                 />
               </label>
+              <div className="grid gap-2">
+                <label className="grid gap-1">Find a department manager<input value={managerSearch} onChange={event => setManagerSearch(event.target.value)} placeholder="Search name or employee number" className="rounded-md border border-border px-3 py-2" /></label>
+                <label className="grid gap-1"><span>Department manager</span><FluentSelect ariaLabel="Department manager" value={form.manager_employee_id} placeholder="No manager assigned"
+                  onChange={value => setForm(previous => ({...previous,manager_employee_id:value}))}
+                  options={[{value:"",label:"No manager assigned"},
+                    ...(form.manager_employee_id && !managerOptions.some(row => String(row.id)===form.manager_employee_id) ? [{value:form.manager_employee_id,label:"Employee #"+form.manager_employee_id}] : []),
+                    ...managerOptions.map(row => ({value:String(row.id),label:[row.first_name,row.last_name].filter(Boolean).join(" ")+" ("+row.employee_no+")"}))]} /></label>
+                {managerError && <p role="alert">{managerError}</p>}
+              </div>
               <fieldset className="grid gap-1 md:col-span-2">
                 <legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Assigned Positions
