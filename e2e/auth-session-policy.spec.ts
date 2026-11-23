@@ -79,6 +79,96 @@ function deadlines(idle: number) {
   };
 }
 
+test("linked company sign-in returns to HRMS for two-factor verification", async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const state = "test-state-for-browser-signin";
+  let browserKey = "";
+  let confirmed = false;
+  await context.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/sso/login/start") {
+      const body = route.request().postDataJSON();
+      expect(body.company).toBe("example");
+      browserKey = body.browser_key;
+      return route.fulfill({
+        json: {
+          authorization_url:
+            "https://idp.example.test/authorize?state=" + state,
+        },
+      });
+    }
+    if (path === "/api/auth/sso/login/finish") {
+      expect(route.request().postDataJSON()).toMatchObject({
+        state,
+        code: "fixture-code",
+        browser_key: browserKey,
+      });
+      return route.fulfill({
+        json: { requires2FA: true, tempToken: "fixture-challenge" },
+      });
+    }
+    if (path === "/api/auth/2fa/complete-login") {
+      expect(route.request().postDataJSON()).toEqual({
+        tempToken: "fixture-challenge",
+        code: "123456",
+      });
+      confirmed = true;
+      return route.fulfill({
+        json: { access_token: token(600), refresh_token: "replacement", user },
+      });
+    }
+    if (path === "/api/auth/session-policy")
+      return route.fulfill({ json: deadlines(300000) });
+    return route.fulfill({ json: { data: user } });
+  });
+  await context.route("https://idp.example.test/authorize**", (route) =>
+    route.fulfill({
+      status: 302,
+      headers: {
+        location: new URL(
+          "/auth/sso/callback?state=" + state + "&code=fixture-code",
+          baseURL,
+        ).href,
+      },
+    }),
+  );
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Sign in with SSO" }).click();
+  await page.getByLabel("Company sign-in code").fill("example");
+  await page
+    .getByRole("button", { name: "Continue to identity provider" })
+    .click();
+  await expect(page.getByLabel("Authentication code")).toBeVisible();
+  await expect(page).toHaveURL(/\/auth\/sso\/callback$/);
+  expect(
+    await page.evaluate(
+      () =>
+        JSON.parse(localStorage.getItem("hrms.auth.session.v1") ?? "null")
+          ?.tokens ?? null,
+    ),
+  ).toBeNull();
+  await page.getByLabel("Authentication code").fill("123456");
+  await page.locator('form button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/dashboard/);
+  expect(confirmed).toBe(true);
+});
+
+test("a cancelled provider sign-in offers password recovery", async ({
+  page,
+}) => {
+  await page.goto("/auth/sso/callback?error=access_denied");
+  await page.getByRole("link", { name: "Return to sign in" }).click();
+  await expect(
+    page.getByRole("button", { name: "Sign in", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Forgot password?" }),
+  ).toBeVisible();
+});
+
 test("two tabs without Web Locks share one refresh", async ({
   context,
   baseURL,

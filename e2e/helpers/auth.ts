@@ -33,10 +33,10 @@ export async function loginAs(page: Page, user: TestUser) {
   })
   await page.reload()
 
-  await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible()
   await page.locator('input[type="email"]').fill(user.email)
   await page.locator('input[type="password"], input[autocomplete="current-password"]').first().fill(user.password)
-  await page.getByRole("button", { name: /sign in/i }).click()
+  await page.getByRole("button", { name: "Sign in", exact: true }).click()
 
   const twoFactor = page.getByText(/two-factor authentication/i)
   const errorBox = page.locator(".text-destructive, .input-message-error").first()

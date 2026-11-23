@@ -48,7 +48,7 @@ async function signIn(page: Page, role: Role) {
     .locator('input[type="password"], input[autocomplete="current-password"]')
     .first()
     .fill(process.env[`HRMS_E2E_${role}_PASSWORD`]!);
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   const twoFactor = page.getByText(/two-factor|authenticator code/i).first();
   await Promise.race([
     page.waitForURL(/\/dashboard/, { timeout: 60_000 }),

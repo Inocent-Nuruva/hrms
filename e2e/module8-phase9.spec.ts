@@ -8,7 +8,7 @@ async function signIn(page: Page, email: string, password: string) {
     .locator('input[type="password"], input[autocomplete="current-password"]')
     .first()
     .fill(password);
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.waitForURL(/\/dashboard/, { timeout: 45_000 });
 }
 
