@@ -1260,8 +1260,8 @@ export function DataTable({
         permissionOptions.map((option) => option.name),
       );
       setRoleForm({
-        name: suggestion.key,
-        display_name: suggestion.displayName,
+        name: slugifyRoleKey(`${suggestion.displayName} custom`),
+        display_name: `${suggestion.displayName} (custom)`,
         description: suggestion.description,
       });
       setRolePermissionNames(

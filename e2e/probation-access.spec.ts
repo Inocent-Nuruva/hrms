@@ -1,8 +1,8 @@
 import { test, expect, type Page } from "@playwright/test"
 import { DASHBOARD_AUTH_COOKIE } from "../src/lib/dashboard-permissions"
 
-async function workspace(page: Page) {
-  const permissions = ["data_scope:company","company_dashboard:read","probation_policies:read","probation_policies:create","probation_cases:read","probation_reviews:manager-review","probation_letters:generate"]
+async function workspace(page: Page, additionalPermissions: string[] = []) {
+  const permissions = ["data_scope:company","company_dashboard:read","probation_policies:read","probation_policies:create","probation_cases:read","probation_reviews:manager-review","probation_letters:generate",...additionalPermissions]
   const user = { id: 231, fullName:"Test reviewer", email:"reviewer@example.test", roles:["HR"], permissions, scope:"company", userType:"COMPANY_USER", companyId:10, companyMembershipId:71, dashboardType:"admin", accessContextResolved:true }
   const token = `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({...user,sub:user.id,exp:Math.floor(Date.now()/1000)+3600})).toString("base64url")}.test`
   await page.context().addCookies([{name:DASHBOARD_AUTH_COOKIE,value:"1",url:test.info().project.use.baseURL ?? "http://localhost:3000"}])
@@ -23,7 +23,8 @@ async function workspace(page: Page) {
       json={id:6,...saved[path]}
     } else if (path==="/api/probation/policy-options") {
       json={targets:{branch_id:[{id:3,name:"Central branch"}],department_id:[],position_id:[],grade_id:[]},defaults:{probation_period_days:150,maximum_extensions:2,default_extension_days:60,maximum_extension_days:120,maximum_total_days:365,reminder_days:[14,3]}}
-    } else if (path==="/api/probation/cases") json=[sample]
+    } else if (path==="/api/users") json={data:[{id:322,first_name:"Example",last_name:"Account",email:"example.account@example.test"}],total:1}
+    else if (path==="/api/probation/cases") json=[sample]
     else if (path==="/api/probation/cases/42") json=sample
     else if (path==="/api/probation/letter-templates") json=saved[path]?[saved[path]]:[]
     else if (path==="/api/auth/session" || path==="/api/users/me" || path==="/api/auth/me") json={...user,data:user}
@@ -33,6 +34,19 @@ async function workspace(page: Page) {
 }
 
 for (const [name,width,height] of [["desktop",1366,900],["mobile",390,844]] as const) {
+  test(`opens Users from Access Control and by bookmark on ${name}`,async ({page})=>{
+    await page.setViewportSize({width,height})
+    await workspace(page,["roles:read","users:read"])
+    await page.goto("/dashboard/access-control/roles")
+    await page.getByRole("tab",{name:"Users",exact:true}).click()
+    await expect(page).toHaveURL(/\/dashboard\/users$/)
+    const account=page.getByText("example.account@example.test",{exact:true}).first()
+    await expect(account).toBeVisible()
+    await expect(page.getByRole("button",{name:"Open search users"})).toBeVisible()
+    await page.reload()
+    await expect(account).toBeVisible()
+  })
+
   test(`probation policy, review and letter on ${name}`,async ({page})=>{
     test.setTimeout(120_000)
     await page.setViewportSize({width,height})

@@ -159,7 +159,7 @@ const DEFAULT_EMPLOYEE_PREFETCH_QUERY = {
   sortOrder: "DESC" as const,
 };
 const RESOURCE_ROUTE_MAP: Record<AdminResourceKey, string> = {
-  users: "/dashboard/employees/all",
+  users: "/dashboard/users",
   roles: "/dashboard/access-control/roles",
   permissions: "/dashboard/access-control/permissions",
   companies: "/dashboard/companies",
@@ -403,11 +403,9 @@ export default function AdminDashboardView({
   useHideRememberedForbiddenPath();
   const inferredActiveResource = React.useMemo(() => {
     const match = currentPath.match(
-      /^\/dashboard\/(?:(?:access-control\/)?(roles|permissions)|users)(?:\/|$)/,
+      /^\/dashboard\/(?:(?:access-control\/)?(roles|permissions)|(users))(?:\/|$)/,
     );
-    return (
-      ((match?.[1] ?? match?.[2]) as AdminResourceKey | undefined) ?? undefined
-    );
+    return (match?.[1] ?? match?.[2]) as AdminResourceKey | undefined;
   }, [currentPath]);
   const resolvedActiveResource = activeResource ?? inferredActiveResource;
   const resolvedShowOverview = showOverview || currentPath === "/dashboard";
@@ -417,10 +415,9 @@ export default function AdminDashboardView({
 
   // Keep Access Control tabs mounted in the shell so switching Devices → Roles
   // (different route trees) does not remount/refresh the tab rail.
-  // Keep Access Control tabs mounted in the shell so switching Devices → Roles
-  // (different route trees) does not remount/refresh the tab rail.
   // Platform Access Governance is roles/permissions only — not tenant devices.
   const showAccessControlTabs =
+    currentPath === RESOURCE_ROUTE_MAP.users ||
     currentPath === "/dashboard/roles" ||
     currentPath === "/dashboard/permissions" ||
     currentPath === "/dashboard/access-control" ||
