@@ -11,6 +11,9 @@ const base = {
 }
 
 describe("positionCapacityWarning", () => {
+  it("explains why an enforced full position blocks an invitation", () => {
+    expect(positionCapacityWarning({...base,enforced:true,will_overfill:true,available:0,pending_invitations:1})).toContain("A seat must be available")
+  })
   it("stays quiet while there is room or capacity is unknown", () => {
     expect(positionCapacityWarning(base)).toBeNull()
     expect(positionCapacityWarning(null)).toBeNull()

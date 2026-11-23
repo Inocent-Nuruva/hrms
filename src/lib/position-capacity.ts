@@ -16,5 +16,6 @@ export function positionCapacityWarning(
     capacity.pending_invitations > 0
       ? ` and ${plural(capacity.pending_invitations, "pending invitation")}`
       : ""
+  if (capacity.enforced) return `This position is full in the selected department. ${capacity.filled} of ${plural(capacity.headcount, "seat")} filled${pending}. A seat must be available before an invitation can be sent.`
   return `This position is full in the selected department: ${capacity.filled} of ${plural(capacity.headcount, "seat")} filled${pending}. Accepting this invitation will exceed that department's staffing limit.`
 }

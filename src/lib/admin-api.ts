@@ -875,6 +875,7 @@ export interface PositionCapacity {
   available: number;
   /** True when one more acceptance would exceed the approved headcount. */
   will_overfill: boolean;
+  enforced?: boolean;
 }
 
 /** Seats taken in a position, counting pending invitations as taken. */
@@ -8979,6 +8980,13 @@ export async function syncAccessControlDoorsFromDevice(
       token,
     },
   );
+}
+
+export async function getStaffingPolicy(token: string, enforce?: boolean) {
+  const payload = await adminRequest<{enforce_staffing_limit:boolean}>("/api/positions/staffing-policy", {
+    token, ...(enforce !== undefined ? {method:"PATCH", body:{enforce_staffing_limit:enforce}} : {}),
+  });
+  return payload.enforce_staffing_limit;
 }
 
 export async function listDepartmentManagerOptions(token: string, search: string) {

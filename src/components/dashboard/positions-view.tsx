@@ -1,5 +1,6 @@
 "use client"
 
+import { getStaffingPolicy } from "@/lib/admin-api"
 import * as React from "react"
 import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
@@ -186,6 +187,23 @@ export function PositionsView() {
   const actor = useDashboardActor()
   const actorPermissions = actor.permissionLabels
   const permissionsReady = actor.ready
+  const [strictStaffing, setStrictStaffing] = React.useState<boolean | null>(null)
+  const [policyError, setPolicyError] = React.useState("")
+  const [changingPolicy,setChangingPolicy] = React.useState(false)
+  React.useEffect(() => {
+    if (!permissionsReady) return
+    let active = true
+    getStaffingPolicy(readStoredToken()).then(value => {if (active) setStrictStaffing(value)})
+      .catch(() => {if (active) setPolicyError("Could not load the staffing policy.")})
+    return () => {active = false}
+  }, [permissionsReady])
+  async function changeStaffingPolicy(value: boolean) {
+    setChangingPolicy(true)
+    setPolicyError("")
+    try { setStrictStaffing(await getStaffingPolicy(readStoredToken(),value)) }
+    catch (error) { setPolicyError(error instanceof Error ? error.message : "Could not save the staffing policy.") }
+    finally { setChangingPolicy(false) }
+  }
   const canCreatePositions = React.useMemo(
     () => permissionsReady && canPerformPermission(actorPermissions, "positions:create"),
     [actorPermissions, permissionsReady]
@@ -514,6 +532,16 @@ export function PositionsView() {
     <div className="space-y-2">
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
+      <section aria-label="Department staffing policy" className="space-y-1 rounded-lg border border-border p-3 text-sm">
+        <h2 className="font-semibold">Department staffing policy</h2>
+        {policyError && <p role="alert">{policyError}</p>}
+        {typeof strictStaffing === "boolean" && <>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={strictStaffing}
+            disabled={changingPolicy || !canUpdatePositions || !canPerformPermission(actorPermissions,"data_scope:company")}
+            onChange={event => void changeStaffingPolicy(event.target.checked)} />Enforce staffing limits across hiring and transfers</label>
+          <p className="text-muted-foreground">{strictStaffing ? "Active employees, employees joining, suspended employees and unexpired pending invitations take up seats in the selected department." : "Invitations warn when a position is full. Direct hires and position changes check occupied seats."}</p>
+        </>}
+      </section>
       <ResizableTable
         title="Position"
         data={rows}

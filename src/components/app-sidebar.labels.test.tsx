@@ -48,6 +48,7 @@ afterEach(async () => {
 })
 
 const CANONICAL_MODULE_NAMES = [
+  "Bank directory",
   "KPI & Performance", "Forms & Feedback", "To do", "Access Control", "Attendance", "Branches",
   "Companies", "Departments", "Employees", "Promotion", "Leave Management", "Probation", "Field",
   "Finance", "Movements", "Positions", "Structure", "Reports & Analytics", "Notifications", "Insights",

@@ -440,7 +440,7 @@ export function EmployeeInviteView() {
       .then((capacity) => {
         if (active) setPositionCapacity(capacity)
       })
-      // Capacity is advisory; never block the form on it.
+      // The server rechecks the current staffing policy when saving.
       .catch(() => undefined)
     return () => {
       active = false
@@ -896,6 +896,7 @@ export function EmployeeInviteView() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (positionCapacity?.enforced && capacityWarning) { toast.error(capacityWarning); return }
     if (!token) {
       toast.error("Authentication required. Please log in again.")
       return
@@ -1340,7 +1341,7 @@ export function EmployeeInviteView() {
             type="submit"
             appearance="primary"
             size="large"
-            disabled={submitting || loading}
+            disabled={submitting || loading || Boolean(positionCapacity?.enforced && capacityWarning)}
             icon={submitting ? <FluentLoadingIndicator className="animate-spin" /> : <UserPlus2Icon />}
           >
             {submitting

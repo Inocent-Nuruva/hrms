@@ -270,6 +270,7 @@ export function DepartmentsView() {
   const [form, setForm] = React.useState<DepartmentForm>(emptyForm())
   const [editingId, setEditingId] = React.useState<number | null>(null)
 
+  const [selectedManagerName,setSelectedManagerName] = React.useState("")
   const [managerSearch, setManagerSearch] = React.useState("")
   const [managerOptions, setManagerOptions] = React.useState<AdminRecord[]>([])
   const [managerError, setManagerError] = React.useState("")
@@ -427,6 +428,7 @@ export function DepartmentsView() {
   }, [])
 
   function fillFormFromRow(row: AdminRecord) {
+    setSelectedManagerName(typeof row.manager_name === "string" ? row.manager_name : "")
     setForm({
       name: readString(row, ["name"]),
       description: readString(row, ["description"]),
@@ -755,6 +757,7 @@ export function DepartmentsView() {
   ]
 
   const departmentColumns: Column<AdminRecord>[] = [
+    { key: "manager_name", label: "Department manager", render: (row) => readString(row, ["manager_name"]) },
     { key: "name", label: "Name", defaultWidth: 120, sortable: true, render: (r) => readString(r, ["name"]) },
     { key: "code", label: "Code", defaultWidth: 60, sortable: true, render: (r) => readString(r, ["code"]) },
     { key: "branch", label: "Branch", defaultWidth: 80, render: (r) => branchName(readNumber(r, ["branch_id"])) },
@@ -1016,9 +1019,9 @@ export function DepartmentsView() {
               <div className="grid gap-2">
                 <label className="grid gap-1">Find a department manager<input value={managerSearch} onChange={event => setManagerSearch(event.target.value)} placeholder="Search name or employee number" className="rounded-md border border-border px-3 py-2" /></label>
                 <label className="grid gap-1"><span>Department manager</span><FluentSelect ariaLabel="Department manager" value={form.manager_employee_id} placeholder="No manager assigned"
-                  onChange={value => setForm(previous => ({...previous,manager_employee_id:value}))}
+                  onChange={value => {const selected=managerOptions.find(row=>String(row.id)===value); setSelectedManagerName(selected ? [selected.first_name,selected.last_name].filter(Boolean).join(" ") : ""); setForm(previous => ({...previous,manager_employee_id:value}))}}
                   options={[{value:"",label:"No manager assigned"},
-                    ...(form.manager_employee_id && !managerOptions.some(row => String(row.id)===form.manager_employee_id) ? [{value:form.manager_employee_id,label:"Employee #"+form.manager_employee_id}] : []),
+                    ...(form.manager_employee_id && !managerOptions.some(row => String(row.id)===form.manager_employee_id) ? [{value:form.manager_employee_id,label:selectedManagerName || "Employee #"+form.manager_employee_id}] : []),
                     ...managerOptions.map(row => ({value:String(row.id),label:[row.first_name,row.last_name].filter(Boolean).join(" ")+" ("+row.employee_no+")"}))]} /></label>
                 {managerError && <p role="alert">{managerError}</p>}
               </div>
