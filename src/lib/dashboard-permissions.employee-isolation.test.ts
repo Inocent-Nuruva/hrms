@@ -3,6 +3,11 @@ import { canAccessDashboardRoute, DASHBOARD_ROUTE_PERMISSIONS } from "./dashboar
 
 describe("employee-only management isolation", () => {
   const employee = ["data_scope:self", "employees:read", "leave_requests:read", "leave_balances:read", "attendance_summaries:read", "attendance_policies:read"]
+  it("opens Team attendance only for the grant used by both team APIs", () => {
+    const route = "/dashboard/me/team/attendance"
+    expect(canAccessDashboardRoute(route, ["team_attendance:read", "data_scope:team"], "employee")).toBe(true)
+    expect(canAccessDashboardRoute(route, ["manager:read", "manager_team:read"], "employee")).toBe(false)
+  })
   it("blocks management pages while keeping personal pages", () => {
     for (const path of ["/dashboard/employees/all", "/dashboard/leave-management/requests", "/dashboard/leave-management/balances", "/dashboard/attendance/daily-summaries", "/dashboard/attendance/policies"]) {
       expect(canAccessDashboardRoute(path, employee, "employee")).toBe(false)

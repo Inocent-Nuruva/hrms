@@ -9371,6 +9371,7 @@ export function LeaveManagementView({
 
       {tab === "holidays" ? (
         <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">This calendar is shared with Attendance. Manage company-wide dates here and branch dates in Attendance Setup → Holidays.</p>
           <ResizableTable
             title="Holidays"
             toolbarActions={

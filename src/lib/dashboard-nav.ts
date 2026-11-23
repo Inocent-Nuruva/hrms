@@ -134,7 +134,7 @@ export function selfServiceHomeFor(url: string): string | null {
     return "/dashboard/me/profile"
   }
   if (PERSONAL_ATTENDANCE_ROUTES.has(path) || path.startsWith("/dashboard/attendance")) {
-    return "/dashboard/attendance/today"
+    return "/dashboard/attendance/attendance-history"
   }
   if (path === "/dashboard/me" || path.startsWith("/dashboard/me/")) {
     return "/dashboard/me/profile"

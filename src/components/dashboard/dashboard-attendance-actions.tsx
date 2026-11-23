@@ -475,6 +475,7 @@ export function AttendancePunchActions({
   const [pendingAction, setPendingAction] = React.useState<"in" | "out" | null>(null)
   const [exceptionReason, setExceptionReason] = React.useState("")
   const [punchPolicy, setPunchPolicy] = React.useState<Record<string, unknown>>({})
+  const webPunchesDisabled = punchPolicy.allow_web_punches === false
   const [message, setMessage] = React.useState<{
     tone: "success" | "error"
     text: string
@@ -501,7 +502,7 @@ export function AttendancePunchActions({
 
   const submitPunch = React.useCallback(
     async (action: "in" | "out") => {
-      if (inFlightRef.current) return
+      if (inFlightRef.current || webPunchesDisabled) return
       inFlightRef.current = true
       setMessage(null)
       setBusyAction(action)
@@ -584,11 +585,12 @@ export function AttendancePunchActions({
         setBusyAction(null)
       }
     },
-    [exceptionReason, onAttendanceChanged, punchPolicy, selfieFile],
+    [exceptionReason, onAttendanceChanged, punchPolicy, selfieFile, webPunchesDisabled],
   )
 
   return (
     <div className={cn("mt-2 flex flex-col gap-1.5", className)}>
+      {webPunchesDisabled && <p role="status" className="text-sm text-muted-foreground">Web check-in and check-out are disabled by your attendance policy.</p>}
       <Dialog open={pendingAction !== null} onOpenChange={(open) => {
         if (!open && busyAction === null) {
           requestIdRef.current = null
@@ -631,7 +633,7 @@ export function AttendancePunchActions({
               setSelfieFile(null)
               setExceptionReason("")
             }}>Cancel</Button>
-            <Button type="button" disabled={busyAction !== null || (pendingAction === "in" ? !canCheckIn : !canCheckOut)} onClick={() => {
+            <Button type="button" disabled={webPunchesDisabled || busyAction !== null || (pendingAction === "in" ? !canCheckIn : !canCheckOut)} onClick={() => {
               if (pendingAction) void submitPunch(pendingAction)
             }}>{busyAction !== null ? "Submitting…" : pendingAction === "out" ? "Confirm check out" : "Confirm check in"}</Button>
           </DialogFooter>
@@ -649,7 +651,7 @@ export function AttendancePunchActions({
           className={compact
             ? "h-10 min-h-10 min-w-[6rem] gap-1.5 rounded-lg bg-gradient-to-r from-primary to-primary/85 px-3 text-sm font-semibold shadow-sm transition-all hover:-translate-y-px hover:shadow-md disabled:translate-y-0 disabled:shadow-none disabled:opacity-40"
             : "h-8 gap-1.5 px-2.5 text-xs"}
-          disabled={!canCheckIn || busyAction !== null}
+          disabled={webPunchesDisabled || !canCheckIn || busyAction !== null}
           onClick={() => setPendingAction("in")}
         >
           {busyAction === "in" ? (
@@ -666,7 +668,7 @@ export function AttendancePunchActions({
           className={compact
             ? "h-10 min-h-10 min-w-[6.25rem] gap-1.5 rounded-lg border-border/70 bg-muted/40 px-3 text-sm font-semibold shadow-none transition-all hover:-translate-y-px hover:border-primary/30 hover:bg-primary/10 disabled:translate-y-0 disabled:border-transparent disabled:bg-muted/50 disabled:text-muted-foreground/55 disabled:opacity-100"
             : "h-8 gap-1.5 px-2.5 text-xs"}
-          disabled={!canCheckOut || busyAction !== null}
+          disabled={webPunchesDisabled || !canCheckOut || busyAction !== null}
           onClick={() => setPendingAction("out")}
         >
           {busyAction === "out" ? (

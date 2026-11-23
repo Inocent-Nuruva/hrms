@@ -18,5 +18,5 @@ function appendSearchParams(path: string, values: Record<string, string | string
 }
 
 export default async function LegacyAttendancePage({ searchParams }: LegacyAttendancePageProps) {
-  redirect(appendSearchParams("/dashboard/attendance/today", (await searchParams) ?? {}))
+  redirect(appendSearchParams("/dashboard/attendance/attendance-history", (await searchParams) ?? {}))
 }

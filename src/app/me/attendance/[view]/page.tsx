@@ -9,14 +9,14 @@ const destinationByView: Record<string, string> = {
   "check-in": "/dashboard/attendance/punch-action",
   "check-out": "/dashboard/attendance/punch-action",
   history: "/dashboard/attendance/attendance-history",
-  overview: "/dashboard/attendance/today",
+  overview: "/dashboard/attendance/attendance-history",
   punches: "/dashboard/attendance/attendance-history",
   schedule: "/dashboard/attendance/schedule-preview",
-  today: "/dashboard/attendance/today",
+  today: "/dashboard/attendance/attendance-history",
   "work-from-home": "/dashboard/attendance/work-from-home-requests",
 }
 
 export default async function LegacyAttendanceViewPage({ params }: LegacyAttendanceViewPageProps) {
   const { view } = await params
-  redirect(destinationByView[view.toLowerCase()] ?? "/dashboard/attendance/today")
+  redirect(destinationByView[view.toLowerCase()] ?? "/dashboard/attendance/attendance-history")
 }
