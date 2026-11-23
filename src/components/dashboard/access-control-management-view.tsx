@@ -884,6 +884,21 @@ export function AccessControlManagementView({
   const [doorBusy, setDoorBusy] = React.useState("")
   const [doorConfig, setDoorConfig] = React.useState<AdminRecord | null>(null)
   const [impactOpen, setImpactOpen] = React.useState(false)
+  const [historyId, setHistoryId] = React.useState<string | null>(null)
+  const [history, setHistory] = React.useState<AdminRecord[] | null>(null)
+  const [historyError, setHistoryError] = React.useState("")
+  React.useEffect(() => {
+    const token = readStoredToken()
+    if (!historyId || !token || (activeSection !== "templates" && activeSection !== "week-plans")) return
+    let active = true
+    setHistory(null)
+    setHistoryError("")
+    const detail = activeSection === "templates" ? getAccessScheduleTemplate(token, historyId) : getAccessControlResourceById(token, "week-plans", historyId)
+    detail.then(record => {
+      if (active && token === readStoredToken()) setHistory(Array.isArray(record?.revisions) ? record.revisions : [])
+    }).catch((error: Error) => { if (active) setHistoryError(error.message) })
+    return () => { active = false }
+  }, [historyId, activeSection])
   const [impact, setImpact] = React.useState<AccessScheduleImpact | null>(null)
   const [impactLoading, setImpactLoading] = React.useState(false)
   const [impactError, setImpactError] = React.useState<string | null>(null)
@@ -1358,10 +1373,9 @@ export function AccessControlManagementView({
       const response = activeSection === "week-plans"
         ? await syncAccessWeekPlanToDevice(token, syncToRecordId.trim(), { device_id: deviceId })
         : await syncAccessScheduleTemplateToDevice(token, syncToRecordId.trim(), { device_id: deviceId })
-      if (response && typeof response === "object" && (response as AdminRecord).ok === false) {
-        throw new Error("The device rejected the synchronization. Review the device response and try again.")
-      }
-      setMessage(activeSection === "week-plans" ? "Week plan synced to device." : "Template synced to device.")
+      const result = response as { ok?: boolean; message?: string } | null
+      if (result?.ok !== true) throw new Error(result?.message || "Device read-back could not confirm the schedule.")
+      setMessage(result.message || "Schedule verified on the device.")
       setSyncToOpen(false)
       setSyncToRecordId("")
       setSyncToDeviceId("")
@@ -1531,6 +1545,7 @@ export function AccessControlManagementView({
                           <DoorArrowRight16Regular className="size-4 text-emerald-600 dark:text-emerald-400" />
                         </button>
                       ) : null}
+                      {(activeSection === "templates" || activeSection === "week-plans") && <button type="button" className="admin-table-icon-button" aria-label="Schedule history" title="Schedule history" onClick={() => setHistoryId(String(resolveRowId(row, rows.indexOf(row))))}><Eye16Regular className="size-4" /></button>}
                       {(activeSection === "templates" || activeSection === "week-plans") && canUpdate ? (
                         <button
                           type="button"
@@ -1943,6 +1958,18 @@ export function AccessControlManagementView({
         </DialogPopup>
       </Dialog>
 
+      <Dialog open={historyId !== null} onOpenChange={open => { if (!open) setHistoryId(null) }}>
+        <DialogPopup className="max-h-[80dvh] overflow-auto sm:max-w-xl">
+          <DialogHeader><DialogTitle>Schedule history</DialogTitle><DialogDescription>Latest 20 saved revisions, newest first.</DialogDescription></DialogHeader>
+          {historyError ? <p role="alert">{historyError}</p> : history === null ? <p>Loading history…</p> : history.length === 0 ? <p>No revisions recorded.</p> : history.map(row => (
+            <details key={String(row.revision)} className="rounded border p-2">
+              <summary className="cursor-pointer">Revision {String(row.revision)} · {new Date(String(row.recorded_at)).toLocaleString()}</summary>
+              <dl className="mt-2 grid gap-1 text-sm">{Object.entries((row.configuration ?? {}) as AdminRecord).map(([key, value]) => <div key={key}><dt className="font-medium capitalize">{key.replaceAll("_", " ")}</dt><dd className="break-words">{Array.isArray(value) ? value.map(item => Array.isArray(item) ? item.join(" · ") : String(item)).join(", ") || "None" : String(value ?? "None")}</dd></div>)}</dl>
+            </details>
+          ))}
+          <DialogFooter><FluentButton onClick={() => setHistoryId(null)}>Close</FluentButton></DialogFooter>
+        </DialogPopup>
+      </Dialog>
       <Dialog open={impactOpen} onOpenChange={setImpactOpen}>
         <DialogPopup className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader><DialogTitle>Configuration impact</DialogTitle><DialogDescription>Review dependencies before changing this schedule.</DialogDescription></DialogHeader>

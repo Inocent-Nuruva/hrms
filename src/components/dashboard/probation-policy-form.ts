@@ -13,7 +13,7 @@ export const policyNumbers = [
 export const policyFlags = [
   ["is_default", "Default policy", false], ["self_assessment_required", "Self-assessment required", false],
   ["objectives_required", "Objectives required", true], ["manager_review_required", "Manager review required", true],
-  ["hr_approval_required", "HR approval required", true], ["confirmation_letter_required", "Confirmation letter required", true],
+  ["confirmation_letter_required", "Confirmation letter required", true],
 ] as const
 
 function value(row: AdminRecord, key: string) {
