@@ -6301,6 +6301,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                   <span className="font-medium text-slate-700">Resolution note</span>
                   <Textarea
                     className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                    aria-label="Resolution note"
                     value={exceptionResolutionNote}
                     onChange={(event) => setExceptionResolutionNote(event.target.value)}
                     placeholder="Explain how this exception was resolved or why it is being ignored."

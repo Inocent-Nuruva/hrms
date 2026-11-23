@@ -2,14 +2,14 @@ import path from "path"
 import { transformWithOxc } from "vite"
 import { configDefaults, defineConfig } from "vitest/config"
 
-const mobileNotificationRouting = /\/android\/src\/lib\/mobile-notification-routing\.ts$/
+const standaloneMobileModules = /\/android\/src\/lib\/(?:mobile-notification-routing|attendance-punch-policy)\.ts$/
 
 export default defineConfig({
-  oxc: { exclude: mobileNotificationRouting },
+  oxc: { exclude: standaloneMobileModules },
   plugins: [{
-    name: "standalone-mobile-notification-routing",
+    name: "standalone-mobile-modules",
     async transform(code, id) {
-      if (!mobileNotificationRouting.test(id)) return
+      if (!standaloneMobileModules.test(id)) return
       return transformWithOxc(code, id, { tsconfig: false })
     },
   }],
