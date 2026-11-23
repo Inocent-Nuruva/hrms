@@ -694,9 +694,9 @@ export function NavMain({
           ? collectPinnableNodes(group.items).filter((node) => node.url && !pinnedUrls.includes(node.url))
           : []
         if (group.items?.length && visibleDestinations.length === 0) return null
-        // Skip redundant category navigation when only one destination remains.
+        // Keep the module name even when it links directly to its only destination.
         const item: NavMainItem = visibleDestinations.length === 1
-          ? { ...group, ...visibleDestinations[0], title: group.title === "KPI & Performance" ? group.title : visibleDestinations[0].title, items: undefined }
+          ? { ...group, ...visibleDestinations[0], title: group.title, items: undefined }
           : group
         const isActive = nodeContainsCurrentPath(item, currentPath)
         const Icon = item.icon ?? item.activeIcon

@@ -49,6 +49,17 @@ function pinControl(label: string) {
 }
 
 describe("sidebar navigation pin controls", () => {
+  it("retains the module name when only one permitted destination remains", async () => {
+    await act(async () => {
+      root = createRoot(container)
+      root.render(<NavMain items={[{ title: "Employees", items: [{ title: "My profile", url: "/dashboard/me/profile" }] }]} />)
+    })
+    const link = container.querySelector<HTMLButtonElement>('button[value="/dashboard/me/profile"]')!
+    expect(link.textContent).toContain("Employees")
+    expect(link.textContent).not.toContain("My profile")
+    await act(async () => link.click())
+    expect(navigation.push).toHaveBeenCalledWith("/dashboard/me/profile")
+  })
   it("shows KPI & Performance as a direct link when only the personal destination is available", async () => {
     navigation.path = "/dashboard/me/kpi/overview"
     await act(async () => {
@@ -88,11 +99,11 @@ describe("sidebar navigation pin controls", () => {
     })
     expect(container.querySelector("button button, button a, a button")).toBeNull()
     expect(container.querySelector('[aria-label="Branches needs attention"]')).not.toBeNull()
-    for (const title of ["Branches", "Joining & onboarding"]) {
+    for (const [title, pinnedTitle] of [["Branches", "Branches"], ["Employees", "Joining & onboarding"]]) {
       const pin = pinControl(`Pin ${title}`)
       expect(pin.parentElement?.closest("button")).toBeNull()
       await act(async () => pin.click())
-      expect(pinControl(`Unpin ${title}`).getAttribute("aria-pressed")).toBe("true")
+      expect(pinControl(`Unpin ${pinnedTitle}`).getAttribute("aria-pressed")).toBe("true")
       expect(container.querySelector("button button")).toBeNull()
     }
     expect(navigation.push).not.toHaveBeenCalled()

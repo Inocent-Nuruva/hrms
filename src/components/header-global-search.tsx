@@ -238,25 +238,38 @@ export function HeaderGlobalSearch({
             {normalizedQuery ? "Results" : recentItems.length > 0 ? "Recent" : "Quick navigation"}
           </p>
           <div className="max-h-72 overflow-y-auto">
-            {results.length > 0 ? results.map((result, index) => (
-              <button
-                key={`${result.url}-${result.title}`}
-                type="button"
-                className={cn(
-                  "flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left",
-                  activeIndex === index
-                    ? "bg-primary/10 text-primary"
-                    : "text-foreground hover:bg-muted",
-                )}
-                onMouseEnter={() => setActiveIndex(index)}
-                onClick={() => navigateToResult(result)}
-              >
-                <span className="min-w-0 truncate text-[13px] font-medium">{result.title}</span>
-                {result.section ? (
-                  <span className="shrink-0 text-[10px] text-muted-foreground">{result.section}</span>
-                ) : null}
-              </button>
-            )) : (
+            {results.length > 0 ? results.map((result, index) => {
+              // Titles follow the sidebar path "Module / Group / Page". Show the page
+              // name first so results stay distinguishable on narrow screens.
+              const segments = result.title.split(" / ")
+              const pageName = segments[segments.length - 1]
+              const path = segments.slice(0, -1).join(" › ")
+              return (
+                <button
+                  key={`${result.url}-${result.title}`}
+                  type="button"
+                  title={result.title}
+                  className={cn(
+                    "flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left",
+                    activeIndex === index
+                      ? "bg-primary/10 text-primary"
+                      : "text-foreground hover:bg-muted",
+                  )}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => navigateToResult(result)}
+                >
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate text-[13px] font-medium">{pageName}</span>
+                    {path ? (
+                      <span className="truncate text-[11px] text-muted-foreground">{path}</span>
+                    ) : null}
+                  </span>
+                  {result.section && !path ? (
+                    <span className="shrink-0 text-[10px] text-muted-foreground">{result.section}</span>
+                  ) : null}
+                </button>
+              )
+            }) : (
               <p className="px-2 py-6 text-center text-xs text-muted-foreground">No matching pages</p>
             )}
           </div>
