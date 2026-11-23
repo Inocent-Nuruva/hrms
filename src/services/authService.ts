@@ -1,4 +1,16 @@
 import { ApiResponseSchema, EmptyResponseSchema } from "@/lib/request-json";
+import { z } from "zod";
+
+const accessSnapshotSchema = z.object({
+  id: z.number().int().positive(),
+  companyId: z.number().int().positive().nullish(),
+  employeeId: z.number().int().positive().nullish(),
+  scope: z.enum(["platform", "company"]),
+  userType: z.string(),
+  dashboardType: z.enum(["admin", "employee"]),
+  roles: z.array(z.string()),
+  permissions: z.array(z.string()),
+});
 import type {
   AuthSessionRecord,
   AuthScope,
@@ -921,6 +933,10 @@ export const authService = {
       }
       throw error;
     }
+  },
+
+  async getAccessSnapshot(token: string) {
+    return apiRequest("/api/auth/session", accessSnapshotSchema, { method: "GET", token });
   },
 
   async getCurrentUser(token: string) {

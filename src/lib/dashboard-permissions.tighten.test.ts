@@ -11,7 +11,7 @@ import {
 describe("tightened dashboard permissions", () => {
   it("fails closed on unmapped dashboard routes", () => {
     expect(canAccessDashboardRoute("/dashboard/users", ["employees:read"], "admin")).toBe(false)
-    expect(canAccessDashboardRoute("/dashboard/unknown-module", ["view_company_dashboard"], "admin")).toBe(
+    expect(canAccessDashboardRoute("/dashboard/unknown-module", ["company_dashboard:read"], "admin")).toBe(
       false,
     )
     expect(canAccessDashboardRoute("/dashboard", [], "employee")).toBe(true)
@@ -20,9 +20,9 @@ describe("tightened dashboard permissions", () => {
   it("does not treat role names or resource wildcards as global bypass", () => {
     expect(hasPermission(["admin"], "payroll:read")).toBe(false)
     expect(hasPermission(["administrator"], "companies:read")).toBe(false)
-    expect(hasPermission(["employees:*"], "employees:read")).toBe(true)
+    expect(hasPermission(["employees:*"], "employees:read")).toBe(false)
     expect(hasPermission(["employees:*"], "payroll:read")).toBe(false)
-    expect(hasPermission(["*"], "payroll:read")).toBe(true)
+    expect(hasPermission(["*"], "payroll:read")).toBe(false)
   })
 
   it("does not collect a display name or role as a permission label", () => {
@@ -157,7 +157,7 @@ describe("tightened dashboard permissions", () => {
 
   it("gates recruitment and operations promotion on the real module grant", () => {
     expect(
-      canAccessDashboardRoute("/dashboard/operations/recruitment", ["view_company_dashboard"], "admin"),
+      canAccessDashboardRoute("/dashboard/operations/recruitment", ["company_dashboard:read"], "admin"),
     ).toBe(false)
     expect(
       canAccessDashboardRoute("/dashboard/operations/recruitment", ["employees:create"], "admin"),
@@ -217,10 +217,10 @@ describe("tightened dashboard permissions", () => {
 
   it("keeps company overview as an intentional admin-shell-only route", () => {
     expect(
-      canAccessDashboardRoute("/dashboard/company-overview", ["view_company_dashboard"], "employee"),
+      canAccessDashboardRoute("/dashboard/company-overview", ["company_dashboard:read"], "employee"),
     ).toBe(false)
     expect(
-      canAccessDashboardRoute("/dashboard/company-overview", ["view_company_dashboard"], "admin"),
+      canAccessDashboardRoute("/dashboard/company-overview", ["company_dashboard:read"], "admin"),
     ).toBe(true)
   })
 
@@ -229,7 +229,7 @@ describe("tightened dashboard permissions", () => {
       buildDashboardActorSnapshotFromSources({
         dashboard_type: "employee",
         roles: [{ name: "HR_MANAGER" }],
-        permissions: ["view_company_dashboard"],
+        permissions: ["company_dashboard:read"],
       }).accessMode,
     ).toBe("admin")
   })

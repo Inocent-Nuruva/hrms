@@ -325,6 +325,7 @@ const probationOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [
       { title: "Overview", url: "/dashboard/probation/overview" },
       { title: "Policies", url: "/dashboard/probation/policies" },
+      { title: "Letter templates", url: "/dashboard/probation/letter-templates" },
       { title: "Cases", url: "/dashboard/probation/cases" },
       { title: "My team", url: "/dashboard/probation/team" },
     ],
@@ -618,7 +619,7 @@ export const accessGovernanceSectionTabGroups: DashboardSectionTabGroup[] = [
 ];
 
 export const accessControlSectionTabGroups: DashboardSectionTabGroup[] = [
-  { items: [...ACCESS_CONTROL_DEVICE_TABS, ...ACCESS_GOVERNANCE_TABS] },
+  { items: [...ACCESS_CONTROL_DEVICE_TABS, ...ACCESS_GOVERNANCE_TABS, { title: "Users", url: "/dashboard/users" }] },
 ];
 
 export function allDashboardSectionTabGroups(): DashboardSectionTabGroup[] {

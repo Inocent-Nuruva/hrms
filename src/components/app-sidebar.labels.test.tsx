@@ -4,7 +4,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AppSidebar, resolveDashboardSearchItems } from "./app-sidebar"
-import allPermissions from "./__fixtures__/all-permissions.json"
+import allPermissions from "@/lib/permission-catalogue.json"
 
 type Item = { title: string; url?: string; items?: Item[] }
 const capture = vi.hoisted(() => {

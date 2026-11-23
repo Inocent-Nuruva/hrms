@@ -86,7 +86,7 @@ function personPhoto(row: AdminRecord) {
 
 export function SalaryApprovalsView() {
   const actor = useDashboardActor()
-  const canApprove = canPerformPermission(actor.permissionLabels, "payroll:salary:approve")
+  const canApprove = canPerformPermission(actor.permissionLabels, "payroll:salary-approve")
   const canAssignApprovers = canApprove || canPerformPermission(actor.permissionLabels, "company_users:update")
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [structures, setStructures] = React.useState<AdminRecord[]>([])

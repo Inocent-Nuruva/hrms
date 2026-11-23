@@ -58,28 +58,17 @@ export function SessionExpiryGuard() {
 
       if (!accessSyncInFlightRef.current) {
         accessSyncInFlightRef.current = (async () => {
-          const cachedActor = readDashboardActorSnapshotFromBrowser();
-          if (cachedActor.scope === "platform") {
-            // /api/users/me is company-membership scoped and correctly rejects
-            // platform-only owners. Re-verify from the signed login/JWT context
-            // instead of repeatedly turning that expected 403 into shell churn.
-            publishDashboardActorSnapshotFromBrowserStorage(accessToken);
-            lastAccessSyncAtRef.current = Date.now();
-            return "ok" as const;
-          }
-
           try {
-            const user = await authService.getCurrentUser(accessToken);
+            const snapshot = await authService.getAccessSnapshot(accessToken);
             if (readStoredSessionTokens().accessToken !== accessToken)
               return "failed" as const;
-            persistSessionUser(user);
-            // When /api/users/me explicitly includes access fields it replaces
-            // every cached/JWT permission. Older API deployments that omit the
-            // access context retain the current token as a compatibility fallback.
-            publishDashboardActorSnapshotFromSources(
-              user,
-              ...(user.accessContextResolved ? [] : [accessToken]),
-            );
+            publishDashboardActorSnapshotFromSources(snapshot);
+            if (readDashboardActorSnapshotFromBrowser().scope === "company") {
+              const user = await authService.getCurrentUser(accessToken);
+              if (readStoredSessionTokens().accessToken !== accessToken) return "failed" as const;
+              persistSessionUser(user);
+              publishDashboardActorSnapshotFromSources(snapshot);
+            }
             lastAccessSyncAtRef.current = Date.now();
             return "ok" as const;
           } catch (errorObject) {

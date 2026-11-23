@@ -6,18 +6,18 @@ import {
 } from "./dashboard-permissions"
 
 const COMPANY_ADMIN_PERMISSIONS = [
-  "view_company_dashboard",
-  "view_company_data",
+  "company_dashboard:read",
+  "company_data:read",
   "company_users:read",
   "employees:read",
   "roles:read",
 ]
 
 const COMPANY_ADMIN_SMS_PERMISSIONS = [
-  "sms:settings:read",
-  "sms:settings:update",
-  "sms:logs:read",
-  "sms:logs:retry",
+  "sms:settings-read",
+  "sms:settings-update",
+  "sms:logs-read",
+  "sms:logs-retry",
   "sms:test",
 ]
 
@@ -29,10 +29,11 @@ describe("sms and manager route access", () => {
     expect(hasSmsAccess(COMPANY_ADMIN_PERMISSIONS)).toBe(false)
   })
 
-  it("shows SMS operations for sms:read regardless of access mode", () => {
-    expect(canAccessDashboardRoute("/dashboard/sms", ["sms:read"], "admin")).toBe(true)
-    expect(canAccessDashboardRoute("/dashboard/sms/logs", ["sms:read"], "admin")).toBe(true)
-    expect(canAccessDashboardRoute("/dashboard/sms/registry", ["sms:read"], "employee")).toBe(true)
+  it("shows SMS operations for sms:logs-read regardless of access mode", () => {
+    expect(canAccessDashboardRoute("/dashboard/sms", ["sms:logs-read"], "admin")).toBe(true)
+    expect(canAccessDashboardRoute("/dashboard/sms/logs", ["sms:logs-read"], "admin")).toBe(true)
+    expect(canAccessDashboardRoute("/dashboard/sms/registry", ["sms:logs-read"], "employee")).toBe(false)
+    expect(canAccessDashboardRoute("/dashboard/sms/registry", ["sms:settings-read"], "employee")).toBe(true)
   })
 
   it("shows company SMS for the live sms:settings and sms:logs grants", () => {
@@ -68,13 +69,13 @@ describe("sms and manager route access", () => {
 
   it("shows personal team pages for manager:read", () => {
     expect(canAccessDashboardRoute("/dashboard/me/team/overview", ["manager:read"], "employee")).toBe(true)
-    expect(canAccessDashboardRoute("/dashboard/me/team/actions", ["view_team"], "admin")).toBe(true)
+    expect(canAccessDashboardRoute("/dashboard/me/team/actions", ["manager_team:read"], "admin")).toBe(true)
   })
 
   it("does not treat sms:read as platform SMS access", () => {
-    expect(canAccessDashboardRoute("/dashboard/sms/platform", ["sms:read"], "admin")).toBe(false)
+    expect(canAccessDashboardRoute("/dashboard/sms/platform", ["sms:logs-read"], "admin")).toBe(false)
     expect(
-      canAccessDashboardRoute("/dashboard/sms/platform", ["sms:read", "companies:read"], "admin"),
+      canAccessDashboardRoute("/dashboard/sms/platform", ["sms:logs-read", "companies:read"], "admin"),
     ).toBe(true)
   })
 })

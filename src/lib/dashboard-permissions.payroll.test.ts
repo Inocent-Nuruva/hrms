@@ -6,8 +6,8 @@ import {
 } from "./dashboard-permissions"
 
 const COMPANY_ADMIN_PERMISSIONS = [
-  "view_company_dashboard",
-  "view_company_data",
+  "company_dashboard:read",
+  "company_data:read",
   "company_users:read",
   "employees:read",
   "roles:read",
@@ -25,50 +25,50 @@ describe("payroll route access", () => {
     expect(hasPayrollAccess(COMPANY_ADMIN_PERMISSIONS)).toBe(false)
   })
 
-  it("keeps operations payroll for actors with payroll:read", () => {
+  it("keeps operations payroll for actors with payroll:runs-read", () => {
     expect(
       canAccessDashboardRoute(
         "/dashboard/operations/payroll",
-        ["payroll:read", "view_company_dashboard"],
+        ["payroll:runs-read", "company_dashboard:read"],
         "admin",
       ),
     ).toBe(true)
   })
 
-  it("treats payroll_runs:read as enough to open the route", () => {
-    expect(hasPayrollAccess(["payroll_runs:read"])).toBe(true)
+  it("treats payroll:periods-read as enough to open the route", () => {
+    expect(hasPayrollAccess(["payroll:periods-read"])).toBe(true)
     expect(
-      canAccessDashboardRoute("/dashboard/operations/payroll", ["payroll_runs:read"], "admin"),
+      canAccessDashboardRoute("/dashboard/operations/payroll", ["payroll:periods-read"], "admin"),
     ).toBe(true)
   })
 
   it("lets employee-shell users open operations payroll when they have payroll access", () => {
     expect(
-      canAccessDashboardRoute("/dashboard/operations/payroll", ["payroll:read"], "employee"),
+      canAccessDashboardRoute("/dashboard/operations/payroll", ["payroll:runs-read"], "employee"),
     ).toBe(true)
   })
 
   it("opens payroll and finance routes for the backend-seeded permission labels", () => {
-    for (const label of ["payroll:runs:read", "payroll:config:read", "payroll:reports"]) {
+    for (const label of ["payroll:runs-read", "payroll:config-read", "payroll:reports"]) {
       expect(canAccessDashboardRoute("/dashboard/operations/payroll", [label], "admin")).toBe(true)
     }
     expect(
-      canAccessDashboardRoute("/dashboard/finance/overview", ["employee_finance:applications:read"], "admin"),
+      canAccessDashboardRoute("/dashboard/finance/overview", ["employee_finance:applications-read"], "admin"),
     ).toBe(true)
     expect(
-      canAccessDashboardRoute("/dashboard/finance/products", ["employee_finance:products:read"], "admin"),
+      canAccessDashboardRoute("/dashboard/finance/products", ["employee_finance:products-read"], "admin"),
     ).toBe(true)
     expect(
-      canAccessDashboardRoute("/dashboard/finance/accounts", ["employee_finance:accounts:read"], "admin"),
+      canAccessDashboardRoute("/dashboard/finance/accounts", ["employee_finance:accounts-read"], "admin"),
     ).toBe(true)
   })
 
   it("keeps self-service labels out of the payroll and finance admin routes", () => {
     expect(
-      canAccessDashboardRoute("/dashboard/operations/payroll", ["payroll:payslips:self"], "admin"),
+      canAccessDashboardRoute("/dashboard/operations/payroll", ["payroll:payslips-self"], "admin"),
     ).toBe(false)
     expect(
-      canAccessDashboardRoute("/dashboard/finance/overview", ["employee_finance:applications:self"], "admin"),
+      canAccessDashboardRoute("/dashboard/finance/overview", ["employee_finance:applications-self"], "admin"),
     ).toBe(false)
   })
 

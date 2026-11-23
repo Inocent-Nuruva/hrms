@@ -1,5 +1,7 @@
 "use client";
 
+import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
+
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -530,30 +532,8 @@ function memberRoleIds(row: AdminRecord) {
 }
 
 function memberPermissionIds(row: AdminRecord) {
-  const user = nestedAdminRecord(row, "user");
-  const companyUser = nestedAdminRecord(row, "company_user");
-  return collectAssignmentIds(row, [
-    "direct_permissions",
-    "directPermissions",
-    "permissions",
-  ])
-    .concat(
-      user
-        ? collectAssignmentIds(user, [
-            "direct_permissions",
-            "directPermissions",
-            "permissions",
-          ])
-        : [],
-      companyUser
-        ? collectAssignmentIds(companyUser, [
-            "direct_permissions",
-            "directPermissions",
-            "permissions",
-          ])
-        : [],
-    )
-    .filter((value, index, values) => values.indexOf(value) === index);
+  const membership = nestedAdminRecord(row, "company_user") ?? row;
+  return collectAssignmentIds(membership, ["direct_permissions", "directPermissions"]);
 }
 
 export function CompaniesView() {
@@ -626,6 +606,7 @@ export function CompaniesView() {
   const [editingMember, setEditingMember] = React.useState<AdminRecord | null>(
     null,
   );
+  const [grantSearch, setGrantSearch] = React.useState("");
   const [editingMemberRoleIds, setEditingMemberRoleIds] = React.useState<
     string[]
   >([]);
@@ -637,14 +618,14 @@ export function CompaniesView() {
     permissionsReady &&
     isPlatformScope &&
     canPerformPermission(actorPermissions, {
-      permissions: ["companies:update", "update_company"],
+      permissions: ["companies:update", "companies:update"],
       mode: "any",
     });
   const canCreateCompanies =
     permissionsReady &&
     isPlatformScope &&
     canPerformPermission(actorPermissions, {
-      permissions: ["companies:create", "create_company"],
+      permissions: ["companies:create", "companies:create"],
       mode: "any",
     });
   const canManageCompanyUsers =
@@ -1441,6 +1422,8 @@ export function CompaniesView() {
       (id) => !nextPermissionIds.has(id),
     );
 
+    const changes = addRoleIds.length + removeRoleIds.length + addPermissionIds.length + removePermissionIds.length;
+    if (changes && !(await fluentConfirm(`Apply ${changes} access change(s) to ${currentCompanyUserLabel(editingMember)} in this company? Role and data-scope changes affect the records this member can access.`))) return;
     setSaving(true);
     setMembersError(null);
     try {
@@ -2011,10 +1994,16 @@ export function CompaniesView() {
 
       {editingMember ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-3xl rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
+          <div className="max-h-[90dvh] w-full max-w-3xl overflow-y-auto rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
             <h3 className="text-lg font-semibold text-slate-900">
               Manage Access: {currentCompanyUserLabel(editingMember)}
             </h3>
+            <label className="mt-3 grid gap-1 text-sm">Find a permission
+              <input type="search" className="rounded border p-2" value={grantSearch} onChange={event => setGrantSearch(event.target.value)} />
+            </label>
+            <details className="mt-2 text-sm"><summary>Effective permissions in this company</summary>
+              <ul className="max-h-44 overflow-y-auto p-2">{(Array.isArray(editingMember.permission_names) ? editingMember.permission_names : []).filter((name): name is string => typeof name === "string" && name.toLowerCase().includes(grantSearch.trim().toLowerCase())).sort().map(name => <li key={name}>{name}</li>)}</ul>
+            </details>
             <div
               className={`mt-4 grid gap-4 ${canUsePermissionCatalog ? "lg:grid-cols-2" : ""}`}
             >
@@ -2061,7 +2050,7 @@ export function CompaniesView() {
                   </legend>
                   <div className="max-h-72 overflow-y-auto rounded-md border border-slate-300 bg-white p-2">
                     <div className="grid gap-1">
-                      {permissions.map((permission) => {
+                      {permissions.filter(permission => [permission.name, permission.display_name].some(value => String(value ?? "").toLowerCase().includes(grantSearch.trim().toLowerCase()))).map((permission) => {
                         const id = readNumber(permission, ["id"]);
                         if (id === null) return null;
                         const value = String(id);

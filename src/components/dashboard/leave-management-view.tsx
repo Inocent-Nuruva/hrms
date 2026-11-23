@@ -1352,8 +1352,8 @@ export function LeaveManagementView({
   const canReadBalances = canPerformPermission(actor.permissionLabels, {
     permissions: [
       "leave_balances:read",
-      "leave-balances.view",
-      "leave-balances.manage",
+      "leave_balances:list",
+      "leave_balances:manage",
     ],
     mode: "any",
   });
@@ -1370,7 +1370,7 @@ export function LeaveManagementView({
     permissions: [
       "leave_balances:update",
       "leave_balances:create",
-      "leave-balances.manage",
+      "leave_balances:manage",
     ],
     mode: "any",
   });

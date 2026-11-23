@@ -19113,6 +19113,21 @@ export async function createProbationPolicy(token: string, data: AdminRecord) {
   });
 }
 
+export function getProbationPolicyOptions(token: string) {
+  return adminRequest<{
+    targets: Record<string, Array<{id: number; name: string}>>;
+    defaults: { probation_period_days: number; maximum_extensions: number; default_extension_days: number; maximum_extension_days: number; maximum_total_days: number; reminder_days: number[] };
+  }>("/api/probation/policy-options", { token });
+}
+
+export async function listProbationLetterTemplates(token: string) {
+  return normalizeList(await adminRequest<unknown>("/api/probation/letter-templates", { token }));
+}
+
+export function saveProbationLetterTemplate(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/probation/letter-templates", { token, method: "POST", body: data });
+}
+
 export async function updateProbationPolicy(
   token: string,
   id: string | number,

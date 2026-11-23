@@ -256,17 +256,17 @@ export function PlatformAdminDashboard() {
   }, [actor.ready, actor.scope, refreshKey])
 
   const canCompanies = hasPermission(actor.permissionLabels, {
-    permissions: ["companies:read", "view_companies"],
+    permissions: ["companies:read", "companies:read"],
     mode: "any",
   })
   const canRoles = hasPermission(actor.permissionLabels, "roles:read")
   const canPermissions = hasPermission(actor.permissionLabels, "permissions:read")
   const canNotifications = hasPermission(actor.permissionLabels, {
-    permissions: ["notifications:settings:read", "notifications:mail-logs:read"],
+    permissions: ["notifications:settings-read", "notifications:mail-logs-read"],
     mode: "any",
   })
   const canSms = hasPermission(actor.permissionLabels, {
-    permissions: ["sms:settings:read", "sms:logs:read"],
+    permissions: ["sms:settings-read", "sms:logs-read"],
     mode: "any",
   })
   const errorCount = Object.keys(summary.errors).length

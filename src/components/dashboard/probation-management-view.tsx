@@ -57,6 +57,8 @@ import {
   textareaClass,
 } from "@/components/dashboard/talent-visuals";
 import { cn } from "@/lib/utils";
+import { managerRatingPayload, managerReviewCriteria } from "./probation-case";
+import { policyFormValues, policyRulePayload, policyTargets, policyNumbers, policyFlags } from "./probation-policy-form";
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
 import {
   createProbationCase,
@@ -67,6 +69,7 @@ import {
   generateProbationLetter,
   getProbationCase,
   getProbationDashboard,
+  getProbationPolicyOptions,
   listMyTeamProbationCases,
   listEmployees,
   listProbationCases,
@@ -243,6 +246,7 @@ export function ProbationManagementView({
 
   const [dashboard, setDashboard] = React.useState<AdminRecord | null>(null);
   const [policies, setPolicies] = React.useState<AdminRecord[]>([]);
+  const [policyOptions, setPolicyOptions] = React.useState<Awaited<ReturnType<typeof getProbationPolicyOptions>> | null>(null);
   const [cases, setCases] = React.useState<AdminRecord[]>([]);
   const [teamCases, setTeamCases] = React.useState<AdminRecord[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -279,7 +283,7 @@ export function ProbationManagementView({
   const [saving, setSaving] = React.useState(false);
   const [busyId, setBusyId] = React.useState("");
   const [criteriaRows, setCriteriaRows] = React.useState<
-    Array<{ code: string; name: string; weight: string; description: string }>
+    Array<{ code: string; name: string; weight: string; description: string; maximum_rating?: number; is_required?: boolean; self_rating_enabled?: boolean }>
   >([]);
 
   const openCriterionDialog = React.useCallback(() => {
@@ -327,22 +331,18 @@ export function ProbationManagementView({
     setLoading(true);
     setError(null);
     try {
-      const tasks: Array<Promise<unknown>> = [
-        getProbationDashboard(token).then(setDashboard),
-      ];
-      if (
-        activeTab === "policies" ||
-        activeTab === "overview" ||
-        activeTab === "cases"
-      ) {
+      const tasks: Array<Promise<unknown>> = [];
+      if (activeTab === "overview") tasks.push(getProbationDashboard(token).then(setDashboard));
+      if (activeTab === "policies") tasks.push(getProbationPolicyOptions(token).then(setPolicyOptions));
+      if (canPerformPermission(actor.permissionLabels, "probation_policies:read") && activeTab !== "team") {
         tasks.push(listProbationPolicies(token).then(setPolicies));
       }
-      if (activeTab === "cases" || activeTab === "overview") {
+      if (activeTab === "cases" || (activeTab === "overview" && canPerformPermission(actor.permissionLabels, "probation_cases:read"))) {
         tasks.push(
           listProbationCases(token, statusFilter || undefined).then(setCases),
         );
       }
-      if (activeTab === "team" || activeTab === "overview") {
+      if (activeTab === "team" || (activeTab === "overview" && canPerformPermission(actor.permissionLabels, "probation_cases:read-team"))) {
         tasks.push(
           listMyTeamProbationCases(token, statusFilter || undefined).then(
             setTeamCases,
@@ -373,7 +373,7 @@ export function ProbationManagementView({
     } finally {
       setLoading(false);
     }
-  }, [activeTab, statusFilter]);
+  }, [activeTab, statusFilter, actor.permissionLabels]);
 
   React.useEffect(() => {
     if (!canAccess) return;
@@ -487,17 +487,16 @@ export function ProbationManagementView({
       name: string;
       weight: string;
       description: string;
+      maximum_rating?: number;
+      self_rating_enabled?: boolean;
+      is_required?: boolean;
     }> = [],
   ) {
     setFormMode(mode);
-    setForm(seed);
+    setForm(mode === "policy" && !seed.id ? { ...Object.fromEntries(Object.entries(policyOptions?.defaults ?? {}).map(([key, value]) => [key, String(value)])), ...seed } : seed);
     if (mode === "case") setEmployeeQuery("");
     setCriteriaRows(
-      mode === "policy"
-        ? criteria.length > 0
-          ? criteria
-          : [{ code: "", name: "", weight: "100", description: "" }]
-        : [],
+      mode === "policy" ? criteria : [],
     );
     setFormError(null);
     setFormOpen(true);
@@ -557,26 +556,13 @@ export function ProbationManagementView({
           code: form.code,
           name: form.name,
           description: form.description || undefined,
-          employment_type: form.employment_type || undefined,
+          employment_type: form.employment_type || null,
           probation_period_days: Number(form.probation_period_days),
-          self_assessment_required: form.self_assessment_required !== "false",
-          objectives_required: form.objectives_required === "true",
           minimum_confirmation_score: form.minimum_confirmation_score
             ? Number(form.minimum_confirmation_score)
             : undefined,
-          maximum_extensions: form.maximum_extensions
-            ? Number(form.maximum_extensions)
-            : undefined,
-          default_extension_days: form.default_extension_days
-            ? Number(form.default_extension_days)
-            : undefined,
-          manager_review_required: form.manager_review_required !== "false",
-          hr_approval_required: form.hr_approval_required !== "false",
-          confirmation_letter_required:
-            form.confirmation_letter_required !== "false",
-          is_default: form.is_default === "true",
+          ...policyRulePayload(form),
           effective_from: form.effective_from,
-          effective_to: form.effective_to || undefined,
           criteria: criteriaRows
             .filter((row) => row.code && row.name && row.weight)
             .map((row) => ({
@@ -584,8 +570,9 @@ export function ProbationManagementView({
               name: row.name,
               weight: Number(row.weight),
               description: row.description || undefined,
-              self_rating_enabled: true,
-              is_required: true,
+              maximum_rating: row.maximum_rating ?? 5,
+              self_rating_enabled: row.self_rating_enabled ?? true,
+              is_required: row.is_required ?? true,
             })),
         };
         if (form.id) {
@@ -598,6 +585,7 @@ export function ProbationManagementView({
           throw new Error("Recommendation and comments are required.");
         }
         await submitProbationManagerReview(token, form.case_id, {
+          ratings: managerRatingPayload(caseDetail, form),
           recommendation: form.recommendation,
           comments: form.comments,
           recommended_extension_days: form.recommended_extension_days
@@ -788,12 +776,16 @@ export function ProbationManagementView({
                         name: readString(criterion, ["name"]),
                         weight: readString(criterion, ["weight"]),
                         description: readString(criterion, ["description"]),
+                        maximum_rating: readNumber(criterion, ["maximumRating", "maximum_rating"]) ?? 5,
+                        is_required: readBoolean(criterion, ["isRequired", "is_required"]),
+                        self_rating_enabled: readBoolean(criterion, ["selfRatingEnabled", "self_rating_enabled"]),
                       }),
                     );
                     openForm(
                       "policy",
                       {
                         id: rowId(row),
+                        ...policyFormValues(row),
                         code: readString(row, ["code"]),
                         name: readString(row, ["name"]),
                         description: readString(row, ["description"]),
@@ -1533,7 +1525,7 @@ export function ProbationManagementView({
                       type="number"
                       min={1}
                       step={1}
-                      value={form.probation_period_days ?? "90"}
+                      value={form.probation_period_days ?? ""}
                       onChange={(_event, data) =>
                         setForm((current) => ({
                           ...current,
@@ -1543,6 +1535,25 @@ export function ProbationManagementView({
                       className="!w-full"
                     />
                   </FluentField>
+                  {policyTargets.map(([key, label]) => (
+                    <FluentField key={key} label={label}>
+                      <FluentSelect ariaLabel={label} value={form[key] ?? ""} onChange={value => setForm(current => ({ ...current, [key]: value }))}
+                        options={[{ value: "", label: "Any" }, ...(form[key] && !policyOptions?.targets[key]?.some(item => String(item.id) === form[key]) ? [{ value: form[key], label: `Current selection (#${form[key]})` }] : []), ...(policyOptions?.targets[key] ?? []).map(item => ({ value: String(item.id), label: item.name }))]} />
+                    </FluentField>
+                  ))}
+                  {policyNumbers.map(([key, label, min]) => (
+                    <FluentField key={key} label={label}>
+                      <FluentInput type="number" step={1} min={min} value={form[key] ?? ""} onChange={(_, data) => setForm(current => ({ ...current, [key]: data.value }))} />
+                    </FluentField>
+                  ))}
+                  {policyFlags.map(([key, label, fallback]) => (
+                    <label key={key} className="flex items-center gap-2"><input type="checkbox" checked={(form[key] ?? String(fallback)) === "true"}
+                      onChange={event => setForm({ ...form, [key]: String(event.target.checked) })} />{label}</label>
+                  ))}
+                  <FluentField label="Effective to">
+                    <FluentInput type="date" min={form.effective_from} value={form.effective_to ?? ""} onChange={(_, data) => setForm(current => ({ ...current, effective_to: data.value }))} />
+                  </FluentField>
+                  {policyOptions?.defaults && <p className="text-sm text-muted-foreground">Company policies use the installation limit of {policyOptions.defaults.maximum_total_days} total days. Reminder days before the due date: {policyOptions.defaults.reminder_days.join(", ")}.</p>}
                   <FluentField label="Minimum score">
                     <FluentInput
                       type="number"
@@ -1676,6 +1687,15 @@ export function ProbationManagementView({
               ) : null}
               {formMode === "manager-review" ? (
                 <>
+                  {managerReviewCriteria(caseDetail).map(({ code, name, maximum }) => (
+                    <div key={code} className="grid gap-2">
+                      <FluentField label={`${name} rating (0–${maximum})`} required>
+                        <FluentInput type="number" min={0} max={maximum} step="any" value={form[`rating_${code}`] ?? ""} onChange={(_, data) => setForm(current => ({ ...current, [`rating_${code}`]: data.value }))} />
+                      </FluentField>
+                      <FluentField label={`${name} comment`}><FluentInput maxLength={2000} value={form[`comment_${code}`] ?? ""} onChange={(_, data) => setForm(current => ({ ...current, [`comment_${code}`]: data.value }))} /></FluentField>
+                    </div>
+                  ))}
+                  {form.recommendation === "FURTHER_REVIEW" && <p className="text-sm">HR will receive this case for a decision. Explain the points that need review in Comments.</p>}
                   <Field label="Recommendation">
                     <FluentSelect
                       ariaLabel="Recommendation"

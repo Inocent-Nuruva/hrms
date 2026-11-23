@@ -34,9 +34,9 @@ describe("permission picker selection", () => {
     ).toBe("employees:read")
   })
 
-  it("treats id and label aliases as selected and toggles them off by name", () => {
+  it("selects by ID or key and ignores ambiguous display names", () => {
     expect(isPermissionSelected(employeesRead, ["12"])).toBe(true)
-    expect(isPermissionSelected(employeesRead, ["Read employees"])).toBe(true)
+    expect(isPermissionSelected(employeesRead, ["Read employees"])).toBe(false)
     expect(togglePermissionSelection(employeesRead, ["12", "employees:write"])).toEqual([
       "employees:write",
     ])
@@ -46,13 +46,13 @@ describe("permission picker selection", () => {
     ])
   })
 
-  it("canonicalizes mixed ids and labels onto catalog names", () => {
+  it("resolves IDs and ignores unrecognized assignments", () => {
     expect(
       canonicalizePermissionNames(
         ["12", "Read employees", "employees:write", "unknown.perm"],
         [employeesRead, employeesWrite],
       ),
-    ).toEqual(["employees:read", "employees:write", "unknown.perm"])
+    ).toEqual(["employees:read", "employees:write"])
   })
 
   it("can list only enabled permissions", () => {

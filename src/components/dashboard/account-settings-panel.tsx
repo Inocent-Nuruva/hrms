@@ -1524,7 +1524,7 @@ function AccountSettingsPanelContent({
                   ) : null}
 
                   {activeTab === "devices" && actor.ready && <AuthenticationSettings key={String(getSessionSnapshot().subject)+"-"+String(getSessionSnapshot().companyId)} token={token}
-                    platform={actor.scope==="platform"} manage={hasPermission(actor.permissionLabels,"manage_company_users")}
+                    platform={actor.scope==="platform"} manage={hasPermission(actor.permissionLabels,"company_users:manage")}
                     audit={hasPermission(actor.permissionLabels,"security_events:read")} />}
                   {sessionPolicy ? (
                     <p className="text-xs text-muted-foreground">

@@ -13,7 +13,7 @@ describe("describeSecurityEvent", () => {
         reason: "Required permission check failed",
         metadata: JSON.stringify({
           path: "/api/analytics/freshness",
-          missing_permissions: ["analytics:datasets:read"],
+          missing_permissions: ["analytics:datasets-read"],
         }),
         occurred_at: "2026-08-18T14:45:00.000Z",
       },

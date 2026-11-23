@@ -2,8 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { DASHBOARD_AUTH_COOKIE } from "../src/lib/dashboard-permissions";
 async function prepare(page: Page) {
   const permissions = [
-    "view_company_dashboard",
-    "view_company_data",
+    "company_dashboard:read",
+    "company_data:read",
     "data_scope:company",
     "forms_feedback:manage",
   ];

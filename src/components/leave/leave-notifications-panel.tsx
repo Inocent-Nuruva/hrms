@@ -62,8 +62,8 @@ const str = (v: unknown) => (v == null || v === "" ? "—" : String(v))
  */
 export function LeaveNotificationsPanel() {
   const actor = useDashboardActor()
-  const canEdit = canPerformPermission(actor.permissionLabels, "notifications:settings:update")
-  const canReadDeliveries = canPerformPermission(actor.permissionLabels, "notifications:delivery-logs:read")
+  const canEdit = canPerformPermission(actor.permissionLabels, "notifications:settings-update")
+  const canReadDeliveries = canPerformPermission(actor.permissionLabels, "notifications:delivery-logs-read")
   const token = readStoredSessionTokens().accessToken ?? ""
   const [rules, setRules] = React.useState<NotificationRuleItem[]>([])
   const [deliveries, setDeliveries] = React.useState<AdminRecord[]>([])

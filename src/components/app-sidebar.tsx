@@ -218,6 +218,7 @@ const adminData: SidebarData = {
         "/dashboard/access-control/audit-logs",
         "/dashboard/access-control/device-command-logs",
         "/dashboard/access-control/hikvision-sync-logs",
+        "/dashboard/users",
         "/dashboard/roles",
         "/dashboard/permissions",
       ],
@@ -627,6 +628,7 @@ const adminSearchIndex = [
   { title: "Reports & Analytics / Scheduled Reporting", url: "/dashboard/operations/scheduled-reporting", section: "Operations", keywords: ["scheduled reporting", "templates", "schedules", "executions", "smtp"] },
   { title: "Notifications / Current notifications", url: "/dashboard/operations/notifications", section: "Notifications", keywords: ["notifications", "inbox", "alerts", "read", "seen", "archive"] },
   { title: "Access Control / Roles", url: "/dashboard/access-control/roles", section: "Access Control", keywords: ["role", "access", "authorization"] },
+  { title: "Access Control / Users", url: "/dashboard/users", section: "Access Control", keywords: ["users", "accounts", "members"] },
   { title: "Access Control / Permissions", url: "/dashboard/access-control/permissions", section: "Access Control", keywords: ["permission", "policy", "authorization"] },
   { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
   {

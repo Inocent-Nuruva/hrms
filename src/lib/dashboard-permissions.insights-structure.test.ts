@@ -8,8 +8,8 @@ import {
 } from "./dashboard-permissions"
 
 const COMPANY_ADMIN_PERMISSIONS = [
-  "view_company_dashboard",
-  "view_company_data",
+  "company_dashboard:read",
+  "company_data:read",
   "company_users:read",
   "employees:read",
   "roles:read",
@@ -61,20 +61,20 @@ describe("structure and insights route access", () => {
     expect(hasInsightsAccess(COMPANY_ADMIN_PERMISSIONS)).toBe(false)
   })
 
-  it("shows the sales-field dashboard for analytics:read", () => {
+  it("shows the sales-field dashboard for analytics:dashboards-sales-field", () => {
     expect(
-      canAccessDashboardRoute("/dashboard/insights/sales-field", ["analytics:read"], "admin"),
+      canAccessDashboardRoute("/dashboard/insights/sales-field", ["analytics:dashboards-sales-field"], "admin"),
     ).toBe(true)
     expect(
       canAccessDashboardRoute("/dashboard/insights/sales-field", ["employees:read"], "admin"),
     ).toBe(false)
   })
 
-  it("shows HR insights for dashboards:read but not readiness", () => {
-    expect(canAccessDashboardRoute("/dashboard/insights/hr", ["dashboards:read"], "admin")).toBe(true)
-    expect(canAccessDashboardRoute("/dashboard/insights/readiness", ["dashboards:read"], "employee")).toBe(false)
+  it("shows HR insights for analytics:dashboards-hr but not readiness", () => {
+    expect(canAccessDashboardRoute("/dashboard/insights/hr", ["analytics:dashboards-hr"], "admin")).toBe(true)
+    expect(canAccessDashboardRoute("/dashboard/insights/readiness", ["analytics:dashboards-hr"], "employee")).toBe(false)
     expect(
-      canAccessDashboardRoute("/dashboard/insights/readiness", ["launch_readiness:read"], "admin"),
+      canAccessDashboardRoute("/dashboard/insights/readiness", ["hrms_launch_readiness:read"], "admin"),
     ).toBe(true)
   })
 
@@ -89,7 +89,7 @@ describe("structure and insights route access", () => {
     expect(
       canAccessDashboardRoute(
         "/dashboard/access-control/access-credentials",
-        ["access_credentials:read"],
+        ["employee_access_credentials:read"],
         "admin",
       ),
     ).toBe(true)
@@ -97,7 +97,7 @@ describe("structure and insights route access", () => {
 
   it("does not treat company dashboard access as analytics catalog access", () => {
     expect(hasAnalyticsAccess(COMPANY_ADMIN_PERMISSIONS)).toBe(false)
-    expect(hasAnalyticsAccess(["analytics:read"])).toBe(true)
+    expect(hasAnalyticsAccess(["analytics:dashboards-sales-field"])).toBe(true)
   })
 
   it("leaves leftover personal insights links available so they can redirect home", () => {

@@ -7,8 +7,8 @@ import {
 } from "./dashboard-permissions"
 
 const COMPANY_ADMIN_PERMISSIONS = [
-  "view_company_dashboard",
-  "view_company_data",
+  "company_dashboard:read",
+  "company_data:read",
   "company_users:read",
   "employees:read",
   "roles:read",
@@ -22,18 +22,18 @@ describe("field and finance route access", () => {
     expect(hasFieldAccess(COMPANY_ADMIN_PERMISSIONS)).toBe(false)
   })
 
-  it("shows field visits for field_visits:read but not parties", () => {
+  it("shows field visits for field_visits:hr-read but not parties", () => {
     expect(
-      canAccessDashboardRoute("/dashboard/field/visits", ["field_visits:read"], "admin"),
+      canAccessDashboardRoute("/dashboard/field/visits", ["field_visits:hr-read"], "admin"),
     ).toBe(true)
     expect(
-      canAccessDashboardRoute("/dashboard/field/visits", ["field_visits:read"], "employee"),
+      canAccessDashboardRoute("/dashboard/field/visits", ["field_visits:hr-read"], "employee"),
     ).toBe(true)
     expect(
-      canAccessDashboardRoute("/dashboard/field/parties", ["field_visits:read"], "admin"),
+      canAccessDashboardRoute("/dashboard/field/parties", ["field_visits:hr-read"], "admin"),
     ).toBe(false)
     expect(
-      canAccessDashboardRoute("/dashboard/field/parties", ["field_parties:read"], "admin"),
+      canAccessDashboardRoute("/dashboard/field/parties", ["field_visits:config"], "admin"),
     ).toBe(true)
   })
 
@@ -46,19 +46,19 @@ describe("field and finance route access", () => {
 
   it("shows finance applications for read, not products or accounts", () => {
     expect(
-      canAccessDashboardRoute("/dashboard/finance/applications", ["employee_finance:read"], "admin"),
+      canAccessDashboardRoute("/dashboard/finance/applications", ["employee_finance:applications-read"], "admin"),
     ).toBe(true)
     expect(
-      canAccessDashboardRoute("/dashboard/finance/accounts", ["employee_finance:read"], "employee"),
+      canAccessDashboardRoute("/dashboard/finance/accounts", ["employee_finance:applications-read"], "employee"),
     ).toBe(false)
     expect(
-      canAccessDashboardRoute("/dashboard/finance/accounts", ["employee_finance:update"], "admin"),
+      canAccessDashboardRoute("/dashboard/finance/accounts", ["employee_finance:accounts-read"], "admin"),
     ).toBe(true)
     expect(
-      canAccessDashboardRoute("/dashboard/finance/products", ["employee_finance:read"], "admin"),
+      canAccessDashboardRoute("/dashboard/finance/products", ["employee_finance:applications-read"], "admin"),
     ).toBe(false)
     expect(
-      canAccessDashboardRoute("/dashboard/finance/products", ["employee_finance:create"], "admin"),
+      canAccessDashboardRoute("/dashboard/finance/products", ["employee_finance:products"], "admin"),
     ).toBe(true)
   })
 

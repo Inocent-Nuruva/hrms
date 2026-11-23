@@ -19,10 +19,10 @@ const catalog = [
   "leave_requests:approve",
   "attendance_policies:read",
   "attendance_devices:read",
-  "field_visits:self-service:read",
-  "field_visits:self-service:update",
+  "field_visits:self-service-read",
+  "field_visits:self-service-update",
   "field_visits:config",
-  "view_company_data",
+  "company_data:read",
   "users:update",
 ].map(
   (name, index): PermissionOption => ({
@@ -75,7 +75,7 @@ describe("role suggestions", () => {
       sales,
       catalog.map((item) => item.name),
     )
-    expect(names).toContain("field_visits:self-service:update")
+    expect(names).toContain("field_visits:self-service-update")
     expect(names).not.toContain("field_visits:config")
   })
 })

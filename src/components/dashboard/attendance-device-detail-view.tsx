@@ -1,5 +1,7 @@
 "use client";
 
+import { Input } from "@/components/ui/input";
+
 import { fluentPrompt } from "@/components/ui/fluent-dialog-service";
 
 import * as React from "react";
@@ -211,7 +213,7 @@ const CREDENTIAL_TYPE_CHOICES: CredentialTypeChoice[] = [
     label: "Card",
     icon: CreditCardIcon,
     description: "Use a physical access card.",
-    enabled: false,
+    enabled: true,
   },
   {
     value: "FINGERPRINT",
@@ -624,6 +626,7 @@ function formatDeviceEmployeesError(errorObject: unknown) {
 function buildInitialCredentialForm(userVerifyMode = "") {
   return {
     credential_type: "FINGERPRINT" as CredentialTypeValue,
+    card_no: "",
     pin_password: "",
     user_verify_mode: userVerifyMode,
     fingerprint_id: "",
@@ -858,8 +861,7 @@ function CredentialTypePicker({
     return (
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
         The selected verify mode does not expose any credential types this
-        screen can manage yet. Use a verify mode that allows fingerprint,
-        password, or PIN.
+        screen can manage. Select a verify mode supported by the reader.
       </div>
     );
   }
@@ -1950,7 +1952,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
       const allowedCredentialTypes = getAllowedCredentialTypes(userVerifyMode);
       if (!allowedCredentialTypes.size) {
         throw new Error(
-          "The selected verify mode does not support a credential flow in this screen yet. Use a mode that allows fingerprint, password, or PIN.",
+          "Select a verify mode that allows this credential on this reader.",
         );
       }
       if (!allowedCredentialTypes.has(credentialForm.credential_type)) {
@@ -1959,6 +1961,16 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
         );
       }
 
+      if (credentialForm.credential_type === "CARD") {
+        const cardNo = credentialForm.card_no.trim();
+        if (!cardNo) throw new Error("Enter the card number.");
+        await createEmployeeDeviceCard(token, employeeId, deviceId, {
+          card_no: cardNo,
+          user_verify_mode: userVerifyMode,
+          sync_to_device: true,
+        });
+        return;
+      }
       if (isPasswordCredential) {
         const pinPassword = credentialForm.pin_password.trim();
         if (!pinPassword) {
@@ -3937,6 +3949,11 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                         options will unlock below.
                       </div>
                     ) : null}
+                    {assignCredentialModeReady && credentialForm.credential_type === "CARD" && (
+                      <label className="grid gap-1">Card number
+                        <Input value={credentialForm.card_no} onChange={(event) => setCredentialForm(current => ({ ...current, card_no: event.target.value }))} />
+                      </label>
+                    )}
                     {assignCredentialModeReady && isPasswordCredential ? (
                       <label className="grid gap-1">
                         <span className="text-xs font-medium uppercase text-slate-600">
@@ -4184,6 +4201,11 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                 )}
               </div>
 
+              {manageCredentialModeReady && credentialForm.credential_type === "CARD" && (
+                <label className="grid gap-1">Card number
+                  <Input value={credentialForm.card_no} onChange={(event) => setCredentialForm(current => ({ ...current, card_no: event.target.value }))} />
+                </label>
+              )}
               {manageCredentialModeReady && isPasswordCredential ? (
                 <label className="grid gap-1.5">
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">

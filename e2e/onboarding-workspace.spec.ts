@@ -3,7 +3,7 @@ import { DASHBOARD_AUTH_COOKIE } from "../src/lib/dashboard-permissions"
 
 async function prepareWorkspace(page: Page, canActivate = true, extraPermissions: string[] = []) {
   await page.context().addCookies([{ name: DASHBOARD_AUTH_COOKIE, value: "1", url: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000" }])
-  const permissions = ["view_company_dashboard", "view_company_data", "data_scope:company", "employees:read", "employment_contracts:read", "onboarding_requests:read", ...(canActivate ? ["onboarding_requests:complete"] : []), ...extraPermissions]
+  const permissions = ["company_dashboard:read", "company_data:read", "data_scope:company", "employees:read", "employment_contracts:read", "onboarding_requests:read", ...(canActivate ? ["onboarding_requests:complete"] : []), ...extraPermissions]
   const user = { id: 90, fullName: "Test HR", first_name: "Test", last_name: "HR", email: "phase4@example.test", roles: ["HR"], permissions, scope: "company", companyId: 10, company_id: 10, dashboardType: "admin", accessContextResolved: true }
   const token = `${Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url")}.${Buffer.from(JSON.stringify({ sub: 90, email: user.email, scope: "company", userType: "COMPANY_USER", companyId: 10, companyMembershipId: 90, roles: user.roles, permissions, exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url")}.fixture`
   await page.addInitScript(({ token, user, permissions }) => {
@@ -222,7 +222,7 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
   })
 
   test("preserves masked payroll identifiers when editing payroll setup", async ({ page }) => {
-    await prepareWorkspace(page, true, ["payroll:profiles:read", "payroll:profiles"])
+    await prepareWorkspace(page, true, ["payroll:profiles-read", "payroll:profiles"])
     const requirement = { id: "TIN", label: "Tax identification number", group: "Employment & payroll", owner: "Payroll", required: true, status: "pending", action: "payroll" }
     await page.route("**/api/onboarding/requests/55/readiness", (route) => route.fulfill({ json: { employee_id: 501, employee_status: "onboarding", request_status: "in_progress", closed: false, ready_to_activate: false, blocker_count: 1, completed_required: 0, total_required: 1, next_action: requirement, requirements: [requirement] } }))
     let submitted: Record<string, unknown> | null = null

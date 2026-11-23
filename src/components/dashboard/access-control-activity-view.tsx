@@ -540,7 +540,7 @@ export function AccessControlActivityView({
   const canManageCredentials =
     actor.ready &&
     canPerformPermission(actor.permissionLabels, {
-      permissions: ["attendance_devices:update", "employees:update", "view_company_data"],
+      permissions: ["attendance_devices:update", "employees:update", "company_data:read"],
       mode: "any",
     })
 

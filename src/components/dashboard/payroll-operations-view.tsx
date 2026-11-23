@@ -2753,7 +2753,7 @@ export function PayrollOperationsView() {
       "payroll:periods",
       "payroll:inputs",
       "payroll:runs",
-      "payroll:runs:process",
+      "payroll:runs-process",
       "payroll:payslips",
       "payroll:banking",
       "payroll:accounting",
@@ -2768,18 +2768,18 @@ export function PayrollOperationsView() {
       "payroll_runs:approve",
       "payroll_inputs:approve",
       "manage_payroll",
-      "payroll:runs:approve",
-      "payroll:runs:lock",
-      "payroll:inputs:approve",
+      "payroll:runs-approve",
+      "payroll:runs-lock",
+      "payroll:inputs-approve",
     ],
     mode: "any",
   });
   const canManageRecoveries = canPerformPermission(actor.permissionLabels, {
-    permissions: ["payroll:recoveries:manage", "manage_payroll"],
+    permissions: ["payroll:recoveries-manage", "manage_payroll"],
     mode: "any",
   });
   const canApproveRecoveries = canPerformPermission(actor.permissionLabels, {
-    permissions: ["payroll:recoveries:approve", "manage_payroll"],
+    permissions: ["payroll:recoveries-approve", "manage_payroll"],
     mode: "any",
   });
   const canPostAccounting = canPerformPermission(actor.permissionLabels, {
@@ -2791,11 +2791,11 @@ export function PayrollOperationsView() {
     mode: "any",
   });
   const canCancelPayrollRun = canPerformPermission(actor.permissionLabels, {
-    permissions: ["payroll:runs:cancel", "manage_payroll"],
+    permissions: ["payroll:runs-cancel", "manage_payroll"],
     mode: "any",
   });
   const canReversePayrollRun = canPerformPermission(actor.permissionLabels, {
-    permissions: ["payroll:runs:reverse", "manage_payroll"],
+    permissions: ["payroll:runs-reverse", "manage_payroll"],
     mode: "any",
   });
   const canStartSalaryRevision = canPerformPermission(actor.permissionLabels, {
@@ -2803,7 +2803,7 @@ export function PayrollOperationsView() {
     mode: "any",
   });
   const canApproveStatutoryRule = canPerformPermission(actor.permissionLabels, {
-    permissions: ["payroll:statutory:approve"],
+    permissions: ["payroll:statutory-approve"],
   });
   const canCreate =
     canMutatePayroll &&

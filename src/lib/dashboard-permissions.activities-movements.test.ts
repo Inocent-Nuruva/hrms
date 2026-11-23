@@ -7,8 +7,8 @@ import {
 } from "./dashboard-permissions"
 
 const COMPANY_ADMIN_PERMISSIONS = [
-  "view_company_dashboard",
-  "view_company_data",
+  "company_dashboard:read",
+  "company_data:read",
   "company_users:read",
   "employees:read",
   "roles:read",
@@ -26,32 +26,32 @@ describe("activity and movement route access", () => {
     expect(hasActivitiesAccess(COMPANY_ADMIN_PERMISSIONS)).toBe(false)
   })
 
-  it("shows activity reports for activities:read but not reviews or setup", () => {
+  it("shows activity reports for work_activities:hr-read but not reviews or setup", () => {
     expect(
       canAccessDashboardRoute(
         "/dashboard/activities/reports",
-        ["activities:read"],
+        ["work_activities:hr-read"],
         "employee",
       ),
     ).toBe(true)
     expect(
       canAccessDashboardRoute(
         "/dashboard/activities/reviews",
-        ["activities:read"],
+        ["work_activities:hr-read"],
         "admin",
       ),
     ).toBe(false)
     expect(
       canAccessDashboardRoute(
         "/dashboard/activities/reviews",
-        ["activities:update"],
+        ["work_activities:manager-review"],
         "admin",
       ),
     ).toBe(true)
     expect(
       canAccessDashboardRoute(
         "/dashboard/activities/setup",
-        ["activities:read"],
+        ["work_activities:hr-read"],
         "admin",
       ),
     ).toBe(false)

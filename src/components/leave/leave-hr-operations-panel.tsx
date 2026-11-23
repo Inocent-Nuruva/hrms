@@ -41,8 +41,8 @@ export function LeaveHrOperationsPanel({
   leaveTypeLabel: (leaveTypeId: number | null) => string
 }) {
   const actor = useDashboardActor()
-  const canView = canPerformPermission(actor.permissionLabels, "leave-balances.view")
-  const canManage = canPerformPermission(actor.permissionLabels, "leave-balances.manage")
+  const canView = canPerformPermission(actor.permissionLabels, "leave_balances:list")
+  const canManage = canPerformPermission(actor.permissionLabels, "leave_balances:manage")
 
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [employeeFilter, setEmployeeFilter] = React.useState("")

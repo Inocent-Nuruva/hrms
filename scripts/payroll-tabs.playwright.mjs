@@ -16,7 +16,7 @@ const token = encodeJwt({
   userType: "COMPANY_USER",
   companyId: 1,
   roles: ["COMPANY_ADMIN"],
-  permissions: ["view_company_dashboard", "view_company_data"],
+  permissions: ["company_dashboard:read", "company_data:read"],
 })
 
 const user = {
@@ -24,7 +24,7 @@ const user = {
   first_name: "Admin",
   last_name: "User",
   roles: ["COMPANY_ADMIN"],
-  permissions: ["view_company_dashboard", "view_company_data"],
+  permissions: ["company_dashboard:read", "company_data:read"],
 }
 
 function json(route, payload, status = 200) {

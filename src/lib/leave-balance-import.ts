@@ -31,10 +31,10 @@ export const LEAVE_BALANCE_IMPORT_STEPS: Array<{
 ]
 
 export const LEAVE_BALANCE_IMPORT_PERMISSIONS = {
-  export: "leave-balances.export",
-  bulkImport: "leave-balances.bulk-import",
-  validRowsOnly: "leave-balances.bulk-import.partial",
-  history: "leave-balances.import-history",
+  export: "leave_balances:export",
+  bulkImport: "leave_balances:import",
+  validRowsOnly: "leave_balances:import-partial",
+  history: "leave_balances:read-import-history",
 } as const
 
 const BATCH_STATUS: Record<LeaveBalanceImportBatchStatus, { label: string; tone: ImportTone }> = {

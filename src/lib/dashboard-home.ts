@@ -237,7 +237,7 @@ function kindFromSpecificPermissions(permissionLabels: string[]): HomeDashboardK
   }
   if (
     hasPermission(permissionLabels, {
-      permissions: ["view_company_dashboard", "view_company_data"],
+      permissions: ["company_dashboard:read", "company_data:read"],
       mode: "any",
     })
   ) {
@@ -283,7 +283,7 @@ export function resolveHomeDashboardKind(input: {
   // scope grants, which describe data access but do not select the home view.
   if (
     hasPermission(input.permissionLabels, {
-      permissions: ["view_company_dashboard"],
+      permissions: ["company_dashboard:read"],
       mode: "any",
     })
   ) {

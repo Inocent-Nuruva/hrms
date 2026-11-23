@@ -1730,7 +1730,7 @@ export function OnboardingView() {
     [actorPermissions],
   );
   const canReadPayrollProfile = React.useMemo(
-    () => canPerformPermission(actorPermissions, "payroll:profiles:read"),
+    () => canPerformPermission(actorPermissions, "payroll:profiles-read"),
     [actorPermissions],
   );
   const canReadJoiningSalary = canReadPayrollProfile;
@@ -1755,7 +1755,7 @@ export function OnboardingView() {
     [actorPermissions],
   );
   const canApproveJoiningSalary = React.useMemo(
-    () => canPerformPermission(actorPermissions, "payroll:salary:approve"),
+    () => canPerformPermission(actorPermissions, "payroll:salary-approve"),
     [actorPermissions],
   );
   const canCreateOnboardingWorkflows = React.useMemo(

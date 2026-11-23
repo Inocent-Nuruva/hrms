@@ -56,7 +56,7 @@ describe("resolveHomeDashboardKind", () => {
     expect(
       resolveHomeDashboardKind({
         accessMode: "admin",
-        permissionLabels: ["view_company_dashboard", "dashboards:read"],
+        permissionLabels: ["company_dashboard:read", "dashboards:read"],
         roleNames: ["HR_MANAGER"],
       }),
     ).toBe("hr")
@@ -106,7 +106,7 @@ describe("resolveHomeDashboardKind", () => {
     expect(
       resolveHomeDashboardKind({
         accessMode: "admin",
-        permissionLabels: ["view_company_dashboard"],
+        permissionLabels: ["company_dashboard:read"],
         roleNames: ["COMPANY_ADMIN"],
       }),
     ).toBe("company")
@@ -126,7 +126,7 @@ describe("resolveHomeDashboardKind", () => {
     expect(
       resolveHomeDashboardKind({
         accessMode: "admin",
-        permissionLabels: ["view_company_dashboard", "manager_self_service:read"],
+        permissionLabels: ["company_dashboard:read", "manager_self_service:read"],
         roleNames: [],
       }),
     ).toBe("company")
@@ -136,7 +136,7 @@ describe("resolveHomeDashboardKind", () => {
     expect(
       resolveHomeDashboardKind({
         accessMode: "admin",
-        permissionLabels: ["view_company_dashboard", "data_scope:department"],
+        permissionLabels: ["company_dashboard:read", "data_scope:department"],
         roleNames: [],
       }),
     ).toBe("company")
@@ -146,7 +146,7 @@ describe("resolveHomeDashboardKind", () => {
     expect(
       resolveHomeDashboardKind({
         accessMode: "admin",
-        permissionLabels: ["view_company_dashboard", "view_manager_dashboard"],
+        permissionLabels: ["company_dashboard:read", "view_manager_dashboard"],
         roleNames: ["MANAGER"],
       }),
     ).toBe("company")
@@ -174,7 +174,7 @@ describe("resolveHomeDashboardKind", () => {
     expect(
       resolveHomeDashboardKind({
         accessMode: "employee",
-        permissionLabels: ["view_company_dashboard", "view_manager_dashboard", "sales_field:read"],
+        permissionLabels: ["company_dashboard:read", "view_manager_dashboard", "sales_field:read"],
         roleNames: ["COMPANY_USER"],
       }),
     ).toBe("employee")
@@ -206,7 +206,7 @@ describe("canSeeHrLeaveRequestsQueue", () => {
     expect(
       canSeeHrLeaveRequestsQueue({
         accessMode: "admin",
-        permissionLabels: ["leave_requests:read", "leave_requests:approve", "view_company_dashboard"],
+        permissionLabels: ["leave_requests:read", "leave_requests:approve", "company_dashboard:read"],
         roleNames: ["COMPANY_ADMIN"],
       }),
     ).toBe(false)

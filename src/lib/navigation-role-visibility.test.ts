@@ -4,7 +4,7 @@ import { canSeeDashboardPage } from "./forbidden-routes"
 
 // Permission subsets mirroring backend/src/database/seeds/005-company-roles.seed.ts.
 const SELF_SERVICE = [
-  "view_company_data",
+  "company_data:read",
   "employees:read",
   "leave_types:read",
   "leave_requests:read",
@@ -23,7 +23,7 @@ const ROLES = {
     mode: "employee" as const,
     permissions: [
       ...SELF_SERVICE,
-      "view_company_dashboard",
+      "company_dashboard:read",
       "data_scope:department",
       "manager_self_service:read",
       "manager_team:read",
@@ -38,19 +38,19 @@ const ROLES = {
     mode: "admin" as const,
     permissions: [
       ...SELF_SERVICE,
-      "view_company_dashboard",
+      "company_dashboard:read",
       "data_scope:company",
       "self_service_requests:approve",
       "self_service_requests:final_approve",
-      "profile_change_request.view_all",
+      "profile_change_request:view_all",
       "leave_requests:approve",
     ],
   },
   management: {
     mode: "admin" as const,
     permissions: [
-      "view_company_dashboard",
-      "view_company_data",
+      "company_dashboard:read",
+      "company_data:read",
       "data_scope:company",
       "dashboard:management",
       "performance_dashboards:read",

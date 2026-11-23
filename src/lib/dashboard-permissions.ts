@@ -56,20 +56,17 @@ type DashboardActorIdentityResolution = {
   isAdmin: boolean
 }
 
-const COMPANY_DASHBOARD_SWITCH_PERMISSION = "view_company_dashboard"
-
-/** Only true platform wildcards grant every route. Role names and `employees:*` do not. */
-const GLOBAL_BYPASS_LABELS = new Set(["*", "*:*", "all"])
+const COMPANY_DASHBOARD_SWITCH_PERMISSION = "company_dashboard:read"
 
 /**
  * Company-wide overview (HR analytics on `/dashboard`).
  * Driven only by permission labels from the API — not role name hardcoding.
- * Aligns with other company-level routes that already use `view_company_data`.
+ * Aligns with other company-level routes that already use `company_data:read`.
  */
 export const COMPANY_DASHBOARD_PERMISSION: PermissionRequirement = {
   permissions: [
-    "view_company_dashboard",
-    "view_company_data",
+    "company_dashboard:read",
+    "company_data:read",
   ],
   mode: "any",
 }
@@ -81,43 +78,30 @@ export const COMPANY_DASHBOARD_PERMISSION: PermissionRequirement = {
  */
 export const PAYROLL_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
-    "payroll:read",
-    "payroll:create",
-    "payroll:update",
-    "payrolls:read",
-    "payroll_runs:read",
-    "payroll_runs:create",
-    "payroll_inputs:read",
-    "payroll_profiles:read",
-    "employee_payroll_profiles:read",
-    "payroll_employees:read",
-    "payroll_configuration:read",
-    "payroll_periods:read",
     "payroll_reports:read",
-    "manage_payroll",
-    "view_payroll",
+
     // Labels seeded by the backend (001-permissions.seed.ts) and enforced by
-    // /api/payroll/*. `payroll:payslips:self` is self-service and stays out.
+    // /api/payroll/*. `payroll:payslips-self` is self-service and stays out.
     "payroll:config",
-    "payroll:config:read",
+    "payroll:config-read",
     "payroll:profiles",
-    "payroll:profiles:read",
+    "payroll:profiles-read",
     "payroll:periods",
-    "payroll:periods:read",
+    "payroll:periods-read",
     "payroll:inputs",
-    "payroll:inputs:read",
-    "payroll:inputs:approve",
+    "payroll:inputs-read",
+    "payroll:inputs-approve",
     "payroll:runs",
-    "payroll:runs:read",
-    "payroll:runs:process",
-    "payroll:runs:approve",
-    "payroll:runs:lock",
-    "payroll:runs:cancel",
-    "payroll:runs:reverse",
-    "payroll:payments:confirm",
-    "payroll:runs:close",
+    "payroll:runs-read",
+    "payroll:runs-process",
+    "payroll:runs-approve",
+    "payroll:runs-lock",
+    "payroll:runs-cancel",
+    "payroll:runs-reverse",
+    "payroll:payments-confirm",
+    "payroll:runs-close",
     "payroll:payslips",
-    "payroll:payslips:read",
+    "payroll:payslips-read",
     "payroll:banking",
     "payroll:accounting",
     "payroll:reports",
@@ -137,52 +121,29 @@ export const EMPLOYMENT_CONTRACT_MANAGE_PERMISSION = "employment_contracts:manag
  * HR Probation (`/dashboard/probation/*`).
  * Company dashboard access is not enough — /api/probation/* is its own grant.
  */
-const PROBATION_MODULE_WIDE = [
-  "probation:read",
-  "probation:create",
-  "probation:update",
-  "manage_probation",
-  "view_probation",
-]
 
 export const PROBATION_ROUTE_PERMISSION: PermissionRequirement = {
-  permissions: [...PROBATION_MODULE_WIDE, "probation_policies:read", "probation_cases:read"],
+  permissions: ["probation_cases:read", "probation_cases:read-team", "manager:read", "manager_team:read", "manager_self_service:read"],
   mode: "any",
 }
 
 export const PROBATION_POLICIES_PERMISSION: PermissionRequirement = {
-  permissions: [...PROBATION_MODULE_WIDE, "probation_policies:read"],
+  permissions: ["probation_policies:read"],
   mode: "any",
 }
 
 export const PROBATION_CASES_PERMISSION: PermissionRequirement = {
-  permissions: [...PROBATION_MODULE_WIDE, "probation_cases:read"],
+  permissions: ["probation_cases:read", "probation_cases:read-team", "manager:read", "manager_team:read", "manager_self_service:read"],
   mode: "any",
 }
 
 export const PROBATION_TEAM_PERMISSION: PermissionRequirement = {
-  permissions: [
-    ...PROBATION_MODULE_WIDE,
-    "probation_cases:read-team",
-    "manager:read",
-    "team:read",
-    "view_team",
-    "manager_team:read",
-  ],
+  permissions: ["probation_cases:read-team", "manager:read", "manager_team:read", "manager_self_service:read", "probation_reviews:manager-review"],
   mode: "any",
 }
 
 export const PROBATION_SECTION_PERMISSION: PermissionRequirement = {
-  permissions: [
-    ...PROBATION_MODULE_WIDE,
-    "probation_policies:read",
-    "probation_cases:read",
-    "probation_cases:read-team",
-    "manager:read",
-    "team:read",
-    "view_team",
-    "manager_team:read",
-  ],
+  permissions: ["probation_policies:read", "probation_cases:read", "probation_letters:generate", "probation_reviews:manager-review", "probation_cases:read-team", "manager:read", "manager_team:read", "manager_self_service:read"],
   mode: "any",
 }
 
@@ -190,39 +151,19 @@ export const PROBATION_SECTION_PERMISSION: PermissionRequirement = {
  * Field operations (`/dashboard/field/*`).
  * Shown when the actor has a field / work-activity grant — not by HR identity.
  */
-const FIELD_MODULE_WIDE = [
-  "field:read",
-  "field:create",
-  "view_field",
-  "manage_field",
-]
 
 export const FIELD_ROUTE_PERMISSION: PermissionRequirement = {
-  permissions: [
-    ...FIELD_MODULE_WIDE,
-    "field_visits:read",
-    "field_visits:create",
-    "field_parties:read",
-    "field_parties:create",
-    "view_field_visits",
-    "manage_field_visits",
-  ],
+  permissions: ["field_visits:hr-read", "field_visits:manager-read", "field_visits:manager-review", "field_visits:config", "field_locations:read", "field_reports:read"],
   mode: "any",
 }
 
 export const FIELD_VISITS_PERMISSION: PermissionRequirement = {
-  permissions: [
-    ...FIELD_MODULE_WIDE,
-    "field_visits:read",
-    "field_visits:create",
-    "view_field_visits",
-    "manage_field_visits",
-  ],
+  permissions: ["field_visits:hr-read", "field_visits:manager-read", "field_visits:manager-review"],
   mode: "any",
 }
 
 export const FIELD_PARTIES_PERMISSION: PermissionRequirement = {
-  permissions: [...FIELD_MODULE_WIDE, "field_parties:read", "field_parties:create"],
+  permissions: ["field_visits:config"],
   mode: "any",
 }
 
@@ -230,44 +171,30 @@ export const FIELD_PARTIES_PERMISSION: PermissionRequirement = {
  * Employee finance operations (`/dashboard/finance/*`).
  * Shown when the actor has a finance / loan / advance grant — not by HR identity.
  */
-const FINANCE_MODULE_WIDE = [
-  "finance:read",
-  "finance:create",
-  "view_finance",
-  "manage_finance",
-  "view_employee_finance",
-  "manage_employee_finance",
-]
 
 export const FINANCE_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
-    ...FINANCE_MODULE_WIDE,
-    "employee_finance:read",
-    "employee_finance:create",
-    "employee_finance:update",
-    "staff_loans:read",
-    "salary_advances:read",
     // Labels seeded by the backend and enforced by /api/employee-finance/*.
-    // `employee_finance:applications:self` is self-service and stays out.
+    // `employee_finance:applications-self` is self-service and stays out.
     "employee_finance:products",
-    "employee_finance:products:read",
-    "employee_finance:applications:read",
-    "employee_finance:applications:manager-review",
-    "employee_finance:applications:hr-approve",
-    "employee_finance:applications:finance-approve",
-    "employee_finance:accounts:read",
+    "employee_finance:products-read",
+    "employee_finance:applications-read",
+    "employee_finance:applications-manager-review",
+    "employee_finance:applications-hr-approve",
+    "employee_finance:applications-finance-approve",
+    "employee_finance:accounts-read",
     "employee_finance:disbursements",
-    "employee_finance:disbursements:approve",
+    "employee_finance:disbursements-approve",
     "employee_finance:repayments",
-    "employee_finance:repayments:approve",
+    "employee_finance:repayments-approve",
     "employee_finance:payroll",
     "employee_finance:settlements",
     "employee_finance:reports",
     "employee_finance:reconciliation",
-    "employee_finance:applications:management-approve",
-    "employee_finance:settlements:approve",
+    "employee_finance:applications-management-approve",
+    "employee_finance:settlements-approve",
     "employee_finance:adjustments",
-    "employee_finance:adjustments:approve",
+    "employee_finance:adjustments-approve",
     "employee_finance:templates",
     "employee_finance:integrations",
     "employee_finance:migration",
@@ -278,25 +205,23 @@ export const FINANCE_ROUTE_PERMISSION: PermissionRequirement = {
 /** Deferment, reschedule, adjustment, and exit-recovery queues. */
 export const FINANCE_SERVICING_PERMISSION: PermissionRequirement = {
   permissions: [
-    ...FINANCE_MODULE_WIDE,
     "employee_finance:settlements",
-    "employee_finance:settlements:approve",
+    "employee_finance:settlements-approve",
     "employee_finance:adjustments",
-    "employee_finance:adjustments:approve",
+    "employee_finance:adjustments-approve",
     "employee_finance:reconciliation",
   ],
   mode: "any",
 }
 
 export const FINANCE_PAYROLL_PERMISSION: PermissionRequirement = {
-  permissions: [...FINANCE_MODULE_WIDE, "employee_finance:payroll"],
+  permissions: ["employee_finance:payroll"],
   mode: "any",
 }
 
 /** Bank and ERP connections, journal and payment files, and loan migration. */
 export const FINANCE_INTEGRATIONS_PERMISSION: PermissionRequirement = {
   permissions: [
-    ...FINANCE_MODULE_WIDE,
     "employee_finance:integrations",
     "employee_finance:migration",
   ],
@@ -306,7 +231,6 @@ export const FINANCE_INTEGRATIONS_PERMISSION: PermissionRequirement = {
 /** Sanction letter template and approval delegations. */
 export const FINANCE_SETTINGS_PERMISSION: PermissionRequirement = {
   permissions: [
-    ...FINANCE_MODULE_WIDE,
     "employee_finance:templates",
     "employee_finance:delegations",
   ],
@@ -315,28 +239,19 @@ export const FINANCE_SETTINGS_PERMISSION: PermissionRequirement = {
 
 export const FINANCE_PRODUCTS_PERMISSION: PermissionRequirement = {
   permissions: [
-    ...FINANCE_MODULE_WIDE,
-    "employee_finance:create",
-    "employee_finance_products:read",
-    "finance_products:read",
     "employee_finance:products",
-    "employee_finance:products:read",
+    "employee_finance:products-read",
   ],
   mode: "any",
 }
 
 export const FINANCE_ACCOUNTS_PERMISSION: PermissionRequirement = {
   permissions: [
-    ...FINANCE_MODULE_WIDE,
-    "employee_finance:update",
-    "employee_finance_accounts:read",
-    "staff_loans:read",
-    "salary_advances:read",
-    "employee_finance:accounts:read",
+    "employee_finance:accounts-read",
     "employee_finance:disbursements",
-    "employee_finance:disbursements:approve",
+    "employee_finance:disbursements-approve",
     "employee_finance:repayments",
-    "employee_finance:repayments:approve",
+    "employee_finance:repayments-approve",
     "employee_finance:settlements",
     "employee_finance:reconciliation",
   ],
@@ -348,51 +263,28 @@ export const FINANCE_ACCOUNTS_PERMISSION: PermissionRequirement = {
  * Shown when the actor has an activities / work-activity grant — not by HR identity.
  */
 const ACTIVITY_MODULE_WIDE = [
-  "activities:read",
-  "activities:create",
-  "activities:update",
-  "work_activities:read",
-  "work_activities:create",
-  "daily_activities:read",
-  "view_activities",
-  "manage_activities",
-  "view_daily_activities",
-  "manage_daily_activities",
-  "work_activities:manager:read",
-  "work_activities:manager:review",
-  "work_activities:hr:read",
+
+  "work_activities:manager-read",
+  "work_activities:manager-review",
+  "work_activities:hr-read",
   "work_activities:config",
 ]
 
 export const ACTIVITY_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
     ...ACTIVITY_MODULE_WIDE,
-    "activity_categories:read",
-    "activity_policies:read",
   ],
   mode: "any",
 }
 
 export const ACTIVITY_REVIEWS_PERMISSION: PermissionRequirement = {
-  permissions: [
-    "activities:update",
-    "activities:approve",
-    "work_activities:update",
-    "manage_activities",
-    "manage_daily_activities",
-  ],
+  permissions: ["work_activities:manager-review"],
   mode: "any",
 }
 
 export const ACTIVITY_SETUP_PERMISSION: PermissionRequirement = {
   permissions: [
     "work_activities:config",
-    "activity_categories:read",
-    "activity_categories:create",
-    "activity_policies:read",
-    "activity_policies:create",
-    "activities:create",
-    "manage_activities",
   ],
   mode: "any",
 }
@@ -404,63 +296,42 @@ export const ACTIVITY_SETUP_PERMISSION: PermissionRequirement = {
 const MOVEMENT_MODULE_WIDE = [
   "employee_movements:read",
   "employee_movements:create",
-  "movements:read",
-  "movements:create",
-  "view_employee_movements",
 ]
 
 export const MOVEMENT_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
     ...MOVEMENT_MODULE_WIDE,
-    "employee_movements:update",
     "employee_movements:approve",
-    "manage_employee_movements",
   ],
   mode: "any",
 }
 
 export const MOVEMENT_OPERATIONS_PERMISSION: PermissionRequirement = {
   permissions: [
-    "employee_movements:update",
     "employee_movements:approve",
     "employee_movements:apply",
-    "manage_employee_movements",
   ],
   mode: "any",
 }
 
 const SMS_SETTINGS_READ_LABELS = [
-  "sms:settings:read",
-  "sms:read",
-  "sms_registry:read",
-  "view_sms",
-  "manage_sms",
+  "sms:settings-read",
 ]
 
 const SMS_SETTINGS_UPDATE_LABELS = [
-  "sms:settings:update",
-  "sms:update",
-  "manage_sms",
+  "sms:settings-update",
 ]
 
 const SMS_LOGS_READ_LABELS = [
-  "sms:logs:read",
-  "sms:read",
-  "sms_logs:read",
-  "view_sms",
-  "manage_sms",
+  "sms:logs-read",
 ]
 
 const SMS_LOGS_RETRY_LABELS = [
-  "sms:logs:retry",
-  "sms:update",
-  "manage_sms",
+  "sms:logs-retry",
 ]
 
 const SMS_TEST_LABELS = [
   "sms:test",
-  "sms:create",
-  "manage_sms",
 ]
 
 /**
@@ -512,16 +383,12 @@ const COST_CENTER_PERMISSIONS = [
   "cost_centers:read",
   "cost_centers:create",
   "cost_centers:update",
-  "view_cost_centers",
-  "manage_cost_centers",
 ]
 
 const GRADE_PERMISSIONS = [
   "employee_grades:read",
   "employee_grades:create",
   "employee_grades:update",
-  "view_employee_grades",
-  "manage_employee_grades",
 ]
 
 export const COST_CENTER_ROUTE_PERMISSION: PermissionRequirement = {
@@ -540,7 +407,6 @@ export const STRUCTURE_ROUTE_PERMISSION: PermissionRequirement = {
     ...GRADE_PERMISSIONS,
     "employee_numbering:read",
     "employee_numbering:update",
-    "employee_numbering:create",
   ],
   mode: "any",
 }
@@ -550,68 +416,32 @@ export const STRUCTURE_ROUTE_PERMISSION: PermissionRequirement = {
  * Company dashboard access is not enough — /api/dashboards/* is its own grant.
  */
 export const ANALYTICS_ROUTE_PERMISSION: PermissionRequirement = {
-  permissions: [
-    "analytics:read",
-    "analytics:create",
-    "analytics_datasets:read",
-    "analytics_reports:read",
-    "view_analytics",
-    "manage_analytics",
-  ],
+  permissions: ["analytics:audit-read", "analytics:dashboards-hr", "analytics:dashboards-management", "analytics:dashboards-manager", "analytics:dashboards-sales-field", "analytics:datasets-read", "analytics:exports", "analytics:location", "analytics:metrics-read", "analytics:reconciliation", "analytics:refresh", "analytics:reports", "analytics:sensitive", "analytics:sources-read", "analytics:statutory-reports"],
   mode: "any",
 }
 
 export const INSIGHTS_ROUTE_PERMISSION: PermissionRequirement = {
-  permissions: [
-    "dashboards:read",
-    "hr_dashboards:read",
-    "view_dashboards",
-    "view_hr_dashboard",
-    "manage_dashboards",
-    "launch_readiness:read",
-    "security_events:read",
-    "identity_audit:read",
-    "analytics:read",
-    "sales_field:read",
-  ],
+  permissions: ["analytics:dashboards-hr", "analytics:dashboards-management", "analytics:dashboards-manager", "analytics:dashboards-sales-field", "hrms_launch_readiness:read", "identity_audit:read"],
   mode: "any",
 }
 
 export const INSIGHTS_HR_PERMISSION: PermissionRequirement = {
-  permissions: [
-    "dashboards:read",
-    "hr_dashboards:read",
-    "view_dashboards",
-    "view_hr_dashboard",
-    "manage_dashboards",
-  ],
+  permissions: ["analytics:dashboards-hr"],
   mode: "any",
 }
 
 export const INSIGHTS_MANAGEMENT_PERMISSION: PermissionRequirement = {
-  permissions: [
-    "dashboards:read",
-    "view_dashboards",
-    "view_management_dashboard",
-    "management_dashboards:read",
-    "manage_dashboards",
-  ],
+  permissions: ["analytics:dashboards-management"],
   mode: "any",
 }
 
 export const INSIGHTS_MANAGER_PERMISSION: PermissionRequirement = {
-  permissions: [
-    "dashboards:read",
-    "view_dashboards",
-    "view_manager_dashboard",
-    "manager_dashboards:read",
-    "manage_dashboards",
-  ],
+  permissions: ["analytics:dashboards-manager"],
   mode: "any",
 }
 
 export const INSIGHTS_READINESS_PERMISSION: PermissionRequirement = {
-  permissions: ["launch_readiness:read", "security_events:read", "view_launch_readiness"],
+  permissions: ["hrms_launch_readiness:read"],
   mode: "any",
 }
 
@@ -621,14 +451,7 @@ export const INSIGHTS_IDENTITY_AUDIT_PERMISSION: PermissionRequirement = {
 }
 
 export const INSIGHTS_SALES_FIELD_PERMISSION: PermissionRequirement = {
-  permissions: [
-    "analytics:read",
-    "dashboards:read",
-    "view_dashboards",
-    "view_sales_field",
-    "sales_field:read",
-    "manage_analytics",
-  ],
+  permissions: ["analytics:dashboards-sales-field"],
   mode: "any",
 }
 
@@ -636,7 +459,6 @@ export const NUMBERING_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
     "employee_numbering:read",
     "employee_numbering:update",
-    "employee_numbering:create",
   ],
   mode: "any",
 }
@@ -644,12 +466,6 @@ export const NUMBERING_ROUTE_PERMISSION: PermissionRequirement = {
 export const MANAGER_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
     "manager:read",
-    "managers:read",
-    "team:read",
-    "teams:read",
-    "view_team",
-    "view_manager_dashboard",
-    "manager_dashboard:read",
     "manager_team:read",
   ],
   mode: "any",
@@ -697,38 +513,33 @@ export const NOTIFICATIONS_ADMIN_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
     "notifications:read",
     "notifications:update",
-    "notifications:create",
-    "notifications:settings:read",
-    "notifications:settings:update",
-    "notifications:mail-logs:read",
-    "notifications:mail-logs:retry",
-    "view_notifications",
-    "manage_notifications",
+    "notifications:settings-read",
+    "notifications:settings-update",
+    "notifications:mail-logs-read",
+    "notifications:mail-logs-retry",
   ],
   mode: "any",
 }
 
 export const ATTENDANCE_REPORTS_ROUTE_PERMISSION: PermissionRequirement = {
   permissions: [
-    "reports.view",
-    "reports.export",
-    "reports.custom.create",
-    "reports.custom.manage",
-    "employee_reports.view",
-    "attendance_reports.view",
-    "leave_reports.view",
-    "field_reports.view",
-    "activity_reports.view",
-    "payroll_reports.view",
-    "loan_reports.view",
+    "reports:read",
+    "reports:export",
+    "custom_reports:create",
+    "custom_reports:manage",
+    "employee_reports:read",
+    "attendance_reports:read",
+    "leave_reports:read",
+    "field_reports:read",
+    "activity_reports:read",
+    "payroll_reports:read",
+    "loan_reports:read",
     "analytics:reports",
     "analytics:exports",
-    "analytics:dashboards:hr",
+    "analytics:dashboards-hr",
     "attendance_summaries:read",
     "attendance_processing:read",
-    "attendance_reports:read",
-    "view_attendance_reports",
-    "view_company_data",
+    "company_data:read",
   ],
   mode: "any",
 }
@@ -739,7 +550,7 @@ export const ATTENDANCE_REPORTS_ROUTE_PERMISSION: PermissionRequirement = {
  * page — those users get "Platform access is required" from GET /api/companies.
  */
 export const COMPANY_MANAGEMENT_ROUTE_PERMISSION: PermissionRequirement = {
-  permissions: ["companies:read", "companies:update", "view_companies", "update_company"],
+  permissions: ["companies:read", "companies:update",  ],
   mode: "any",
 }
 
@@ -823,7 +634,7 @@ const EMPLOYEE_DIRECTORY_ROUTE_PERMISSION: PermissionRequirement = {
     "employees:delete",
     "company_users:create",
     "users:create",
-    "create_company_user",
+    "company_accounts:create",
   ],
   mode: "any",
 }
@@ -834,7 +645,7 @@ export const EMPLOYEE_REGISTRATION_PERMISSION = {
     "employees:create",
     "company_users:create",
     "users:create",
-    "create_company_user",
+    "company_accounts:create",
   ],
   mode: "any",
 } satisfies PermissionRequirement
@@ -924,8 +735,6 @@ const ATTENDANCE_ROUTE_PERMISSIONS: PermissionRequirement = {
     "timetable_rotation_rules:read",
     "employee_timetables:read",
     "self_service_requests:approve",
-    "access_credentials:read",
-    "access_credentials:update",
     "employee_access_credentials:read",
     "attendance_devices:update",
   ],
@@ -936,7 +745,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/kpi": null,
   "/dashboard/me/scorecards": null,
   "/dashboard/me/evaluations": null,
-  "/dashboard/kpi": { permissions: ["data_scope:company", "data_scope:department", "data_scope:branch", "data_scope:team", "kpi_assignments:read", "kpi_definitions:create"], mode: "any" },
+  "/dashboard/kpi": { permissions: ["kpi_assignments:read", "kpi_definitions:create"], mode: "any" },
   "/dashboard/me/profile": null,
   "/dashboard/me/organization": null,
   "/dashboard/me/promotion": null,
@@ -991,7 +800,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
       "employees:delete",
       "company_users:create",
       "users:create",
-      "create_company_user",
+      "company_accounts:create",
       "offboarding_requests:read",
       "offboarding_workflows:read",
       "onboarding_requests:read",
@@ -1006,7 +815,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/employees/invite": "employees:create",
   "/dashboard/employees/contracts": EMPLOYMENT_CONTRACT_READ_PERMISSION,
   "/dashboard/employees/salary-approvals": {
-    permissions: ["payroll:salary:approve", "payroll:profiles:read"],
+    permissions: ["payroll:salary-approve", "payroll:profiles-read"],
     mode: "any",
   },
   "/dashboard/employees/offboarding": {
@@ -1031,13 +840,11 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/employees/profile": EMPLOYEE_DIRECTORY_ROUTE_PERMISSION,
   "/dashboard/employees/profile/": EMPLOYEE_DIRECTORY_ROUTE_PERMISSION,
   "/dashboard/employees/profile-update-approvals": SELF_SERVICE_REVIEW_ROUTE_PERMISSION,
-  // Backed by /api/hr/profile-change-requests (profile_change_request.view_all).
-  "/dashboard/employees/profile-change-requests": "profile_change_request.view_all",
+  // Backed by /api/hr/profile-change-requests (profile_change_request:view_all).
+  "/dashboard/employees/profile-change-requests": "profile_change_request:view_all",
   "/dashboard/attendance": ATTENDANCE_ROUTE_PERMISSIONS,
   "/dashboard/attendance/biometric-access": {
     permissions: [
-      "access_credentials:read",
-      "access_credentials:update",
       "employee_access_credentials:read",
       "attendance_devices:update",
     ],
@@ -1086,11 +893,11 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
       "leave_requests:read",
       "leave_requests:approve",
       "leave_balances:read",
-      "leave-balances.view",
-      "leave-balances.manage",
-      "leave-balances.export",
-      "leave-balances.bulk-import",
-      "leave-balances.import-history",
+      "leave_balances:list",
+      "leave_balances:manage",
+      "leave_balances:export",
+      "leave_balances:import",
+      "leave_balances:read-import-history",
       "holidays:read",
       "attendance_holidays:read",
       "leave_policies:read",
@@ -1113,26 +920,26 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     mode: "any",
   },
   "/dashboard/leave-management/balances": {
-    // Matches GET /leave/balances{,/transactions} (leave-balances.view).
-    permissions: ["leave-balances.view", "leave-balances.manage"],
+    // Matches GET /leave/balances{,/transactions} (leave_balances:list).
+    permissions: ["leave_balances:list", "leave_balances:manage"],
     mode: "any",
   },
   "/dashboard/leave-management/transactions": {
-    // Matches GET /leave/balances{,/transactions} (leave-balances.view).
-    permissions: ["leave-balances.view", "leave-balances.manage"],
+    // Matches GET /leave/balances{,/transactions} (leave_balances:list).
+    permissions: ["leave_balances:list", "leave_balances:manage"],
     mode: "any",
   },
   "/dashboard/leave-management/balance-import": {
     permissions: [
-      "leave-balances.export",
-      "leave-balances.bulk-import",
-      "leave-balances.import-history",
+      "leave_balances:export",
+      "leave_balances:import",
+      "leave_balances:read-import-history",
     ],
     mode: "any",
   },
   // Same set as backend leave-reports.controller (PermissionsAny).
   "/dashboard/leave-management/reports": {
-    permissions: ["leave_reports.view", "leave-balances.view", "leave-balances.export", "leave_requests:approve"],
+    permissions: ["leave_reports:read", "leave_balances:list", "leave_balances:export", "leave_requests:approve"],
     mode: "any",
   },
   "/dashboard/leave-management/business-trips": ATTENDANCE_BUSINESS_TRIPS_ROUTE_PERMISSION,
@@ -1147,8 +954,8 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/leave-management/statutory": "leave_statutory:read",
   "/dashboard/leave-management/payroll-integration": {
     permissions: [
-      "leave-balances.manage",
-      "leave-balances.adjust",
+      "leave_balances:manage",
+      "leave_balances:adjust-manually",
       "leave_encashment:finance_confirm",
     ],
     mode: "any",
@@ -1161,10 +968,10 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/operations/reports": ATTENDANCE_REPORTS_ROUTE_PERMISSION,
   "/dashboard/operations/scheduled-reporting": SCHEDULED_REPORTING_ROUTE_PERMISSION,
   "/dashboard/operations/notifications": NOTIFICATIONS_ADMIN_ROUTE_PERMISSION,
-
   "/dashboard/probation": PROBATION_SECTION_PERMISSION,
   "/dashboard/probation/overview": PROBATION_ROUTE_PERMISSION,
   "/dashboard/probation/policies": PROBATION_POLICIES_PERMISSION,
+  "/dashboard/probation/letter-templates": "probation_letters:generate",
   "/dashboard/probation/cases": PROBATION_CASES_PERMISSION,
   "/dashboard/probation/team": PROBATION_TEAM_PERMISSION,
   "/dashboard/field": FIELD_ROUTE_PERMISSION,
@@ -1187,7 +994,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/activities/overview": ACTIVITY_ROUTE_PERMISSION,
   "/dashboard/activities/reports": ACTIVITY_ROUTE_PERMISSION,
   "/dashboard/activities/team": {
-    permissions: ["work_activities:manager:read", "work_activities:manager:review"],
+    permissions: ["work_activities:manager-read", "work_activities:manager-review"],
     mode: "any",
   },
   "/dashboard/activities/reviews": ACTIVITY_REVIEWS_PERMISSION,
@@ -1216,18 +1023,11 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/insights/readiness": INSIGHTS_READINESS_PERMISSION,
   "/dashboard/insights/identity-audit": INSIGHTS_IDENTITY_AUDIT_PERMISSION,
   "/dashboard/help": null,
-  "/dashboard/users": {
-    permissions: [
-      "users:read",
-      "users:create",
-      "users:update",
-      "company_users:read",
-      "company_users:create",
-    ],
-    mode: "any",
-  },
+  "/dashboard/users": "users:read",
   "/dashboard/access-control": {
     permissions: [
+      "users:read",
+      "access_control_sync:execute",
       "attendance_devices:read",
       "access_doors:read",
       "access_schedule_templates:read",
@@ -1247,18 +1047,10 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   },
   "/dashboard/access-control/organizations": "access_organizations:read",
   "/dashboard/access-control/groups": "access_groups:read",
-  "/dashboard/access-control/access-credentials": {
-    permissions: [
-      "access_credentials:read",
-      "access_credentials:update",
-      "employee_access_credentials:read",
-      "attendance_devices:update",
-    ],
-    mode: "any",
-  },
-  "/dashboard/access-control/audit-logs": "attendance_devices:read",
-  "/dashboard/access-control/device-command-logs": "attendance_devices:read",
-  "/dashboard/access-control/hikvision-sync-logs": "attendance_devices:read",
+  "/dashboard/access-control/access-credentials": "employee_access_credentials:read",
+  "/dashboard/access-control/audit-logs": "access_control_sync:execute",
+  "/dashboard/access-control/device-command-logs": "access_control_sync:execute",
+  "/dashboard/access-control/hikvision-sync-logs": "access_control_sync:execute",
   "/dashboard/access-control/roles": "roles:read",
   "/dashboard/access-control/permissions": "permissions:read",
   "/dashboard/roles": "roles:read",
@@ -1267,7 +1059,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/settings/banks": "employees:update",
   "/dashboard/settings/default-avatars": {
     permissions: [
-      "view_company_data",
+      "company_data:read",
       "users:update",
       "employees:update",
       "employees:create",
@@ -1290,54 +1082,11 @@ function decodeBase64Url(input: string) {
 }
 
 export function canonicalizePermissionLabel(label: string) {
-  return label.trim().toLowerCase().replace(/\./g, ":")
+  return label.trim()
 }
 
-function isGlobalBypassLabel(label: string) {
-  return GLOBAL_BYPASS_LABELS.has(canonicalizePermissionLabel(label))
-}
-
-// Mirrors backend PERMISSION_ALIASES (backend/src/common/utils/permission.util.ts):
-// a required permission is also satisfied by any of its aliases. Canonical form.
-const PERMISSION_ALIASES: Record<string, string[]> = {
-  "leave-balances:view": ["leave_balances:read"],
-  "leave-balances:view-own": ["leave_balances:read"],
-  "leave-balances:manage": ["leave_balances:read", "leave_balances:adjust"],
-  "leave-balances:adjust": ["leave_balances:adjust"],
-  "leave-balances:generate": ["leave_balances:adjust"],
-  "leave-balances:carry-forward": ["leave_balances:adjust"],
-  "users:enable-2fa": ["users:manage-2fa"],
-  "users:disable-2fa": ["users:manage-2fa"],
-}
-
-function permissionMatches(owned: string, required: string) {
-  if (owned === required) {
-    return true
-  }
-  if (PERMISSION_ALIASES[required]?.includes(owned)) {
-    return true
-  }
-  if (isGlobalBypassLabel(owned)) {
-    return true
-  }
-  if (owned.endsWith(":*")) {
-    const resource = owned.slice(0, -2)
-    return Boolean(resource) && (required === resource || required.startsWith(`${resource}:`))
-  }
-  return false
-}
-
-function looksLikePermissionLabel(label: string) {
-  const normalized = canonicalizePermissionLabel(label)
-  return (
-    isGlobalBypassLabel(normalized) ||
-    normalized.includes(":") ||
-    normalized.startsWith("view_") ||
-    normalized.startsWith("create_") ||
-    normalized.startsWith("update_") ||
-    normalized.startsWith("delete_") ||
-    normalized.startsWith("manage_")
-  )
+function looksLikePermissionLabel(value: string) {
+  return /^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$/.test(value)
 }
 
 export function normalizePermissionLabels(permissionLabels: string[]) {
@@ -1345,7 +1094,7 @@ export function normalizePermissionLabels(permissionLabels: string[]) {
     new Set(
       permissionLabels
         .map((label) => canonicalizePermissionLabel(label))
-        .filter((label) => label.length > 0)
+        .filter(looksLikePermissionLabel)
     )
   )
 }
@@ -1713,14 +1462,10 @@ export function hasPermission(
   requirement: PermissionRequirement | null | undefined
 ) {
   const resolved = resolvePermissionRequirement(requirement)
-  if (!resolved || resolved.permissions.length === 0) {
-    return true
-  }
+  if (!resolved) return true
+  if (!resolved.permissions.length) return false
 
   const normalizedPermissions = normalizePermissionLabels(permissionLabels)
-  if (normalizedPermissions.some(isGlobalBypassLabel)) {
-    return true
-  }
 
   if (normalizedPermissions.length === 0) {
     return false
@@ -1728,17 +1473,17 @@ export function hasPermission(
 
   const requiredPermissions = normalizePermissionLabels(resolved.permissions)
   if (requiredPermissions.length === 0) {
-    return true
+    return false
   }
 
   if (resolved.mode === "all") {
     return requiredPermissions.every((required) =>
-      normalizedPermissions.some((owned) => permissionMatches(owned, required))
+      normalizedPermissions.includes(required)
     )
   }
 
   return requiredPermissions.some((required) =>
-    normalizedPermissions.some((owned) => permissionMatches(owned, required))
+    normalizedPermissions.includes(required)
   )
 }
 
@@ -1760,122 +1505,39 @@ export function canViewCompanyDashboard(permissionLabels: string[]) {
 }
 
 export function hasPayrollAccess(permissionLabels: string[]) {
-  if (hasPermission(permissionLabels, PAYROLL_ROUTE_PERMISSION)) {
-    return true
-  }
-  return normalizePermissionLabels(permissionLabels).some((label) => {
-    const compact = label.replace(/[.-]/g, "_")
-    return (
-      compact.startsWith("payroll") ||
-      compact.includes("_payroll") ||
-      compact.startsWith("view_payroll") ||
-      compact.startsWith("manage_payroll")
-    )
-  })
-}
-
-function hasPrefixedAccess(
-  permissionLabels: string[],
-  requirement: PermissionRequirement,
-  prefixes: string[],
-) {
-  if (hasPermission(permissionLabels, requirement)) {
-    return true
-  }
-  return normalizePermissionLabels(permissionLabels).some((label) => {
-    const compact = label.replace(/[.-]/g, "_")
-    return prefixes.some(
-      (prefix) =>
-        compact === prefix ||
-        compact.startsWith(`${prefix}:`) ||
-        compact.startsWith(`${prefix}_`) ||
-        compact.includes(`_${prefix}`),
-    )
-  })
+  return hasPermission(permissionLabels, PAYROLL_ROUTE_PERMISSION)
 }
 
 export function hasProbationAccess(permissionLabels: string[]) {
-  return hasPrefixedAccess(permissionLabels, PROBATION_ROUTE_PERMISSION, [
-    "probation",
-    "view_probation",
-    "manage_probation",
-  ])
+  return hasPermission(permissionLabels, PROBATION_ROUTE_PERMISSION)
 }
 
 export function hasFieldAccess(permissionLabels: string[]) {
-  return hasPrefixedAccess(permissionLabels, FIELD_ROUTE_PERMISSION, [
-    "field",
-    "field_visit",
-    "field_party",
-    "view_field",
-    "manage_field",
-  ])
+  return hasPermission(permissionLabels, FIELD_ROUTE_PERMISSION)
 }
 
 export function hasFinanceAccess(permissionLabels: string[]) {
-  return hasPrefixedAccess(permissionLabels, FINANCE_ROUTE_PERMISSION, [
-    "finance",
-    "employee_finance",
-    "staff_loan",
-    "salary_advance",
-    "view_finance",
-    "manage_finance",
-  ])
+  return hasPermission(permissionLabels, FINANCE_ROUTE_PERMISSION)
 }
 
 export function hasActivitiesAccess(permissionLabels: string[]) {
-  return hasPrefixedAccess(permissionLabels, ACTIVITY_ROUTE_PERMISSION, [
-    "activities",
-    "work_activit",
-    "daily_activit",
-    "activity_categor",
-    "activity_polic",
-    "view_activities",
-    "manage_activities",
-  ])
+  return hasPermission(permissionLabels, ACTIVITY_ROUTE_PERMISSION)
 }
 
 export function hasSmsAccess(permissionLabels: string[]) {
-  if (hasPermission(permissionLabels, SMS_ROUTE_PERMISSION)) {
-    return true
-  }
-  // "sms" is too short for hasPrefixedAccess — `*_sms` would treat OTP or
-  // notification channel grants as company SMS admin.
-  return normalizePermissionLabels(permissionLabels).some((label) => {
-    const compact = label.replace(/[.-]/g, "_")
-    return (
-      compact === "sms" ||
-      compact.startsWith("sms:") ||
-      compact.startsWith("sms_") ||
-      compact === "view_sms" ||
-      compact === "manage_sms" ||
-      compact.startsWith("view_sms_") ||
-      compact.startsWith("manage_sms_")
-    )
-  })
+  return hasPermission(permissionLabels, SMS_ROUTE_PERMISSION)
 }
 
 export function hasCostCenterAccess(permissionLabels: string[]) {
-  return hasPrefixedAccess(permissionLabels, COST_CENTER_ROUTE_PERMISSION, [
-    "cost_center",
-    "view_cost_center",
-    "manage_cost_center",
-  ])
+  return hasPermission(permissionLabels, COST_CENTER_ROUTE_PERMISSION)
 }
 
 export function hasGradeAccess(permissionLabels: string[]) {
-  return hasPrefixedAccess(permissionLabels, GRADE_ROUTE_PERMISSION, [
-    "employee_grade",
-    "view_employee_grade",
-    "manage_employee_grade",
-  ])
+  return hasPermission(permissionLabels, GRADE_ROUTE_PERMISSION)
 }
 
 export function hasNumberingAccess(permissionLabels: string[]) {
-  return hasPrefixedAccess(permissionLabels, NUMBERING_ROUTE_PERMISSION, [
-    "employee_numbering",
-    "employee_number",
-  ])
+  return hasPermission(permissionLabels, NUMBERING_ROUTE_PERMISSION)
 }
 
 export function hasStructureAccess(permissionLabels: string[]) {
@@ -1887,28 +1549,15 @@ export function hasStructureAccess(permissionLabels: string[]) {
 }
 
 export function hasAnalyticsAccess(permissionLabels: string[]) {
-  return hasPrefixedAccess(permissionLabels, ANALYTICS_ROUTE_PERMISSION, [
-    "analytic",
-    "view_analytic",
-    "manage_analytic",
-  ])
+  return hasPermission(permissionLabels, ANALYTICS_ROUTE_PERMISSION)
 }
 
 export function hasInsightsAccess(permissionLabels: string[]) {
-  return hasPrefixedAccess(permissionLabels, INSIGHTS_ROUTE_PERMISSION, [
-    "hr_dashboard",
-    "view_hr_dashboard",
-    "launch_readiness",
-    "security_event",
-  ])
+  return hasPermission(permissionLabels, INSIGHTS_ROUTE_PERMISSION)
 }
 
 export function hasMovementsAccess(permissionLabels: string[]) {
-  return hasPrefixedAccess(permissionLabels, MOVEMENT_ROUTE_PERMISSION, [
-    "employee_movement",
-    "view_employee_movement",
-    "manage_employee_movement",
-  ])
+  return hasPermission(permissionLabels, MOVEMENT_ROUTE_PERMISSION)
 }
 
 function resolveDashboardRouteShellRequirement(url: string) {
@@ -1959,10 +1608,6 @@ export function canAccessDashboardRoute(
 
   if (path === "/dashboard/sms/platform" || path.startsWith("/dashboard/sms/platform/")) {
     return hasSmsPlatformAccess(permissionLabels)
-  }
-
-  if (path === "/dashboard/sms" || path.startsWith("/dashboard/sms/")) {
-    return hasSmsAccess(permissionLabels)
   }
 
   const requirement = resolveRequiredPermissions(path)

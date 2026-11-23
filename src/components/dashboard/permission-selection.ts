@@ -44,7 +44,7 @@ export function toPermissionOptions(permissions: AdminRecord[]): PermissionOptio
     const id =
       typeof idRaw === "number" || typeof idRaw === "string" ? String(idRaw) : ""
     const name =
-      readPermissionString(permission, ["name", "key", "code", "display_name", "displayName"])
+      readPermissionString(permission, ["name", "key", "code"])
     if (!id || !name) continue
     const label =
       readPermissionString(permission, ["display_name", "displayName", "name"]) || name
@@ -103,10 +103,6 @@ export function permissionTokenFromAssignment(entry: unknown): string | null {
   }
 
   const fallbacks = [
-    record.display_name,
-    record.displayName,
-    nested?.display_name,
-    nested?.displayName,
     record.permission_id,
     record.permissionId,
     nested?.id,
@@ -120,7 +116,7 @@ export function permissionTokenFromAssignment(entry: unknown): string | null {
 }
 
 export function permissionAliases(option: PermissionOption): string[] {
-  return Array.from(new Set([option.name, option.id, option.label].filter(Boolean)))
+  return [option.name, option.id]
 }
 
 export function isPermissionSelected(
@@ -176,8 +172,8 @@ export function canonicalizePermissionNames(
   const result: string[] = []
   const seen = new Set<string>()
   for (const name of names) {
-    const canonical = byAlias.get(name) ?? name
-    if (seen.has(canonical)) continue
+    const canonical = byAlias.get(name)
+    if (!canonical || seen.has(canonical)) continue
     seen.add(canonical)
     result.push(canonical)
   }

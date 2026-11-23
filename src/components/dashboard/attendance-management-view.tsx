@@ -531,7 +531,7 @@ const SECTION_FIELDS: Record<AttendanceSectionKey, FieldConfig[]> = {
       description: "Choose how this device exchanges attendance data with the system.",
       type: "select",
       required: true,
-      options: ["PULL", "PUSH"],
+      options: ["PULL"],
     },
     { key: "status", label: "Status", type: "select", required: true, options: ["ACTIVE", "INACTIVE", "OFFLINE"] },
     {

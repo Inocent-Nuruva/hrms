@@ -155,7 +155,7 @@ export function DefaultAvatarsView() {
     !permissionsReady ||
     canPerformPermission(actorPermissions, "users:update") ||
     canPerformPermission(actorPermissions, "employees:update") ||
-    canPerformPermission(actorPermissions, "view_company_data") ||
+    canPerformPermission(actorPermissions, "company_data:read") ||
     canPerformPermission(actorPermissions, "employees:create")
 
   const [token, setToken] = React.useState("")

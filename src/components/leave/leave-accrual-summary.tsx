@@ -97,7 +97,7 @@ export function EmployeeLeaveBalanceCard({
 }) {
   const actor = useDashboardActor()
   const canView = canPerformPermission(actor.permissionLabels, {
-    permissions: ["leave-balances.view", "leave-balances.manage"],
+    permissions: ["leave_balances:list", "leave_balances:manage"],
     mode: "any",
   })
   const [rows, setRows] = React.useState<LeaveAccrualSummaryRow[] | null>(null)

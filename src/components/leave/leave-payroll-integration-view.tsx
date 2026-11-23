@@ -45,7 +45,7 @@ export function LeavePayrollIntegrationView() {
   const actor = useDashboardActor()
   const canConfirm = canPerformPermission(actor.permissionLabels, "leave_encashment:finance_confirm")
   const canSync = canPerformPermission(actor.permissionLabels, {
-    permissions: ["leave-balances.manage", "leave-balances.adjust"],
+    permissions: ["leave_balances:manage", "leave_balances:adjust-manually"],
     mode: "any",
   })
   const [components, setComponents] = React.useState<LeavePayrollComponentStatus[]>([])

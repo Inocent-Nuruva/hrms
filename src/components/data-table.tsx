@@ -1045,6 +1045,7 @@ export function DataTable({
     React.useState<CompanyForm>(EMPTY_COMPANY_FORM);
   const [editingEntity, setEditingEntity] = React.useState<{
     resource: EntityResource;
+    systemRole: boolean;
     id: string | number;
     label: string;
   } | null>(null);
@@ -1221,6 +1222,7 @@ export function DataTable({
       rolePermissionsDraftDirtyRef.current = false;
       setEditingEntity({
         resource: activeResource,
+        systemRole: activeResource === "roles" && isSystemGenerated(row),
         id: rowId,
         label: rowLabel,
       });
@@ -1587,7 +1589,7 @@ export function DataTable({
             >
               <FluentCopyIcon className="size-4" aria-hidden="true" />
             </button>
-            {isEditableResource(activeResource) && canDeleteResource ? (
+            {isEditableResource(activeResource) && canDeleteResource && !(activeResource === "roles" && isSystemGenerated(row.__source)) ? (
               <button
                 type="button"
                 className="inline-flex size-8 items-center justify-center rounded-md text-rose-600 transition-colors hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -1868,7 +1870,7 @@ export function DataTable({
   const canManageAssignments =
     hasActorPermission(actorPermissions, "users:update") ||
     hasActorPermission(actorPermissions, "company_users:update") ||
-    hasActorPermission(actorPermissions, "manage_company_users") ||
+    hasActorPermission(actorPermissions, "company_users:manage") ||
     hasActorPermission(actorPermissions, "permissions:update") ||
     hasActorPermission(actorPermissions, "roles:update") ||
     hasActorPermission(actorPermissions, "users:assign-role");
@@ -3870,7 +3872,7 @@ export function DataTable({
           >
             {roleSheetTab === "general" ? (
               <div className="space-y-4 overflow-y-auto">
-                {canUpdateResource ? (
+                {canUpdateResource && !editingEntity?.systemRole ? (
                   <>
                     <div className="space-y-1.5">
                       <Label htmlFor="entity-display-name">Display name</Label>
@@ -4117,13 +4119,14 @@ export function DataTable({
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 {membersLoading || rolePermissionsLoading ? (
                   <SectionLoader label="Loading role permissions…" />
-                ) : canManageAssignments ? (
+                ) : canUpdateResource || editingEntity?.systemRole ? (
                   <PermissionPicker
                     loading={pickerPermissionsLoading}
                     options={permissionOptions}
                     selectedNames={displayedRolePermissionNames}
                     onChange={handleRolePermissionsChange}
-                    selectionDisabled={membersBusy}
+                    selectionDisabled={membersBusy || !!editingEntity?.systemRole}
+                    reviewSelected={editingEntity?.systemRole}
                     className="min-h-0 flex-1"
                   />
                 ) : (
@@ -4140,7 +4143,7 @@ export function DataTable({
           </div>
 
           <DialogFooter className="mt-0 shrink-0 border-t border-border/70 px-6 py-3">
-            {canUpdateResource &&
+            {canUpdateResource && !editingEntity?.systemRole &&
             roleSheetTab === "general" &&
             isEditingEntityDirty ? (
               <Button
@@ -4152,7 +4155,7 @@ export function DataTable({
               </Button>
             ) : null}
             {canUsePermissionCatalog &&
-            canUpdateResource &&
+            canUpdateResource && !editingEntity?.systemRole &&
             roleSheetTab === "permissions" &&
             editingEntity?.resource === "roles" &&
             isRolePermissionsDirty ? (

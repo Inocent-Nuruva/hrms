@@ -6,13 +6,14 @@ const user = {
   fullName: "Session tester",
   email: "session@example.test",
   scope: "company",
+  userType: "COMPANY_USER",
   dashboardType: "admin",
   companyId: 1,
   roles: ["ADMIN"],
   permissions: [
-    "manage_company_users",
+    "company_users:manage",
     "security_events:read",
-    "view_company_dashboard",
+    "company_dashboard:read",
   ],
   accessContextResolved: true,
 };
@@ -120,6 +121,7 @@ test("linked company sign-in returns to HRMS for two-factor verification", async
         json: { access_token: token(600), refresh_token: "replacement", user },
       });
     }
+    if (path === "/api/auth/session") return route.fulfill({ json: user });
     if (path === "/api/auth/session-policy")
       return route.fulfill({ json: deadlines(300000) });
     return route.fulfill({ json: { data: user } });
@@ -186,6 +188,7 @@ test("two tabs without Web Locks share one refresh", async ({
         json: { access_token: token(600), refresh_token: "replacement", user },
       });
     }
+    if (path === "/api/auth/session") return route.fulfill({ json: user });
     if (path === "/api/auth/session-policy")
       return route.fulfill({ json: deadlines(300000) });
     return route.fulfill({ json: { data: user } });
@@ -230,6 +233,7 @@ for (const [device, width, height] of [
           activity++;
           return route.fulfill({ json: deadlines(idle) });
         }
+        if (url.pathname === "/api/auth/session") return route.fulfill({ json: user });
         if (url.pathname === "/api/auth/session-policy")
           return route.fulfill({ json: deadlines(idle) });
         if (url.pathname === "/api/users/me")

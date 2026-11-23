@@ -66,15 +66,15 @@ describe("forbidden route memory", () => {
     expect(
       firstVisibleSiblingOrHome(
         "/dashboard/sms",
-        ["sms:settings:read", "sms:logs:read", "companies:read"],
+        ["sms:settings-read", "sms:logs-read", "companies:read"],
         "admin",
       ),
     ).toBe("/dashboard/sms/overview")
     expect(
-      canSeeDashboardPage("/dashboard/sms/overview", ["sms:settings:read"], "admin"),
+      canSeeDashboardPage("/dashboard/sms/overview", ["sms:settings-read"], "admin"),
     ).toBe(true)
     expect(
-      canSeeDashboardPage("/dashboard/sms/platform", ["sms:settings:read", "companies:read"], "admin"),
+      canSeeDashboardPage("/dashboard/sms/platform", ["sms:settings-read", "companies:read"], "admin"),
     ).toBe(false)
   })
 
@@ -124,7 +124,7 @@ describe("forbidden route memory", () => {
     expect(
       canSeeDashboardPage(
         "/dashboard/me/activities/today",
-        ["work_activities:self-service:read"],
+        ["work_activities:self-service-read"],
         "admin",
         options,
       ),
