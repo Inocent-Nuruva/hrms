@@ -463,10 +463,11 @@ function ruleStatusLabel(row: AdminRecord | null | undefined) {
 }
 
 function channelSettingEnabled(row: AdminRecord | null | undefined) {
-  return Boolean(readBoolean(row, ["isEnabled", "is_enabled"]))
+  return Boolean(readBoolean(row, ["companyEnabled", "isEnabled", "is_enabled"]))
 }
 
 function channelSettingStatusLabel(row: AdminRecord | null | undefined) {
+  if (row?.platformEnabled === false && channelSettingEnabled(row)) return "Disabled by platform"
   return channelSettingEnabled(row) ? "Enabled" : "Disabled"
 }
 

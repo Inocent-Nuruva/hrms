@@ -234,9 +234,11 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
     if (!token || !id) return
     setBusyId(`retry-${id}`)
     try {
-      if (platform) await retryPlatformSmsLog(token, id)
-      else await retrySmsLog(token, id)
-      toast.success("Retry queued.")
+      const result = (platform ? await retryPlatformSmsLog(token,id) : await retrySmsLog(token,id)) as AdminRecord | null
+      const record = result?.data && typeof result.data === "object" ? result.data as AdminRecord : result
+      const status = readString(record, ["status"])
+      if (status === "FAILED" || status === "SKIPPED") toast.error(readString(record,["errorMessage","error_message"],"The retry did not send an SMS."))
+      else toast.success(status === "SENT" ? "SMS sent." : "Retry recorded.")
       await load()
     } catch (errorObject) {
       toast.error(errorObject instanceof Error ? errorObject.message : "Could not retry.")
