@@ -539,10 +539,7 @@ export function AccessControlActivityView({
 
   const canManageCredentials =
     actor.ready &&
-    canPerformPermission(actor.permissionLabels, {
-      permissions: ["attendance_devices:update", "employees:update", "company_data:read"],
-      mode: "any",
-    })
+    canPerformPermission(actor.permissionLabels, "employee_access_credentials:update")
 
   const loadRows = React.useCallback(async () => {
     const token = readStoredToken()

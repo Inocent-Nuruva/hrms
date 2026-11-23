@@ -74,6 +74,7 @@
   "attendance_policies:update",
   "attendance_processing:execute",
   "attendance_processing:read",
+  "attendance_processing:update",
   "attendance_recalculation:execute",
   "attendance_reports:read",
   "attendance_summaries:read",

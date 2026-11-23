@@ -3411,7 +3411,7 @@ export function DataTable({
                                 (canUpdateResource || canDeleteResource) ? (
                                   <DropdownMenuSeparator />
                                 ) : null}
-                                {isEditableResource(activeResource) &&
+                                {isEditableResource(activeResource) && !(activeResource === "roles" && isSystemGenerated(row)) &&
                                 canDeleteResource ? (
                                   <DropdownMenuItem
                                     variant="destructive"

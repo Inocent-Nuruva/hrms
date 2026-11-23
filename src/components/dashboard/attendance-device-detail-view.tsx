@@ -1041,6 +1041,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
   const [setupPreviewLoading, setSetupPreviewLoading] = React.useState(false);
   const canPreviewSetup = actor.ready && ["attendance_devices:read", "access_groups:read", "data_scope:company"].every((permission) => canPerformPermission(actor.permissionLabels, permission));
   const canViewDeviceFingerprints = actor.ready && ["employee_device_assignments:read", "data_scope:company"].every((permission) => canPerformPermission(actor.permissionLabels, permission));
+  const canManageDeviceCredentials = actor.ready && canPerformPermission(actor.permissionLabels, "employee_device_assignments:update");
   const [managingDevice, setManagingDevice] = React.useState(false);
   const [deviceAuditLogs, setDeviceAuditLogs] = React.useState<AdminRecord[]>(
     [],
@@ -3213,7 +3214,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                                   <span>Fingerprints</span>
                                 </button>
                               )}
-                              <button
+                              {canManageDeviceCredentials && <><button
                                 type="button"
                                 className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-primary hover:bg-[color:rgb(var(--primary-rgb)/0.08)] disabled:cursor-not-allowed disabled:opacity-40"
                                 disabled={!linked}
@@ -3260,7 +3261,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                               >
                                 <CreditCardIcon className="h-3.5 w-3.5" />
                                 <span className="hidden sm:inline">Card</span>
-                              </button>
+                              </button></>}
                               <button
                                 type="button"
                                 className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"

@@ -60,21 +60,21 @@ async function renderFor(role: string, permission: string | string[], accessMode
 
 describe("existing sidebar KPI integration", () => {
   it("shows KPI navigation to company and branch managers without phase flags", async () => {
-    const admin = await renderFor("COMPANY_ADMIN", "data_scope:company")
+    const admin = await renderFor("COMPANY_ADMIN", ["data_scope:company", "kpi_assignments:read"])
     expect(admin).toContain("/dashboard/kpi")
     expect(capture.items.find((item) => item.title === "KPI & Performance")?.items?.map((item) => item.title)).toEqual(["My KPI & Performance", "KPI Management"])
     await act(async () => root?.unmount())
     root = undefined
-    const branchManager = await renderFor("BRANCH_MANAGER", "data_scope:branch")
+    const branchManager = await renderFor("BRANCH_MANAGER", ["data_scope:branch", "kpi_assignments:read"])
     expect(branchManager).toContain("/dashboard/kpi")
   })
 
   it("shows the full KPI group to company HR and scoped review links to managers", async () => {
-    const admin = await renderFor("HR_MANAGER", "data_scope:company")
+    const admin = await renderFor("HR_MANAGER", ["data_scope:company", "kpi_assignments:read"])
     expect(admin).toEqual(["/dashboard/kpi"])
     await act(async () => root?.unmount())
     root = undefined
-    const manager = await renderFor("DEPARTMENT_MANAGER", "data_scope:department")
+    const manager = await renderFor("DEPARTMENT_MANAGER", ["data_scope:department", "kpi_assignments:read"])
     expect(manager).toContain("/dashboard/kpi")
   })
 
@@ -85,12 +85,12 @@ describe("existing sidebar KPI integration", () => {
   })
 
   it("keeps read-only management and employee navigation restrictive", async () => {
-    const management = await renderFor("MANAGEMENT", "data_scope:company")
+    const management = await renderFor("MANAGEMENT", ["data_scope:company", "kpi_assignments:read"])
     expect(management).toEqual(["/dashboard/kpi"])
     expect(capture.items.find((item) => item.title === "KPI & Performance")?.items?.map((item) => item.title)).toEqual(["KPI Management"])
     await act(async () => root?.unmount())
     root = undefined
-    const employee = await renderFor("EMPLOYEE", "data_scope:own", "employee")
+    const employee = await renderFor("EMPLOYEE", "data_scope:self", "employee")
     expect(employee).toEqual([])
     expect(capture.items.find((item) => item.title === "KPI & Performance")?.items?.map((item) => item.title)).toEqual(["My KPI & Performance"])
   })
