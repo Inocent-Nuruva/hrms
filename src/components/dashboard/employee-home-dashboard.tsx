@@ -671,21 +671,6 @@ const ONBOARDING_FORM_SCHEMAS: Record<string, OnboardingFormField[]> = {
   departments: [], // special cased - not user editable via section
 }
 
-const TANZANIA_ONBOARDING_BANKS = [
-  "Absa Bank Tanzania Limited", "Access Bank Tanzania Limited", "Akiba Commercial Bank Plc",
-  "Amana Bank Limited", "Azania Bank Limited", "Bank of Africa Tanzania Limited",
-  "Bank of Baroda Tanzania Limited", "Bank of India Tanzania Limited", "China Dasheng Bank Limited",
-  "Citibank Tanzania Limited", "Cooperative Bank of Tanzania Limited", "CRDB Bank Plc",
-  "DCB Commercial Bank Plc", "Diamond Trust Bank Tanzania Plc", "Ecobank Tanzania Limited",
-  "Equity Bank Tanzania Limited", "Exim Bank Tanzania Limited", "Guaranty Trust Bank Tanzania Limited",
-  "Habib African Bank Limited", "I&M Bank Tanzania Limited", "International Commercial Bank Tanzania Limited",
-  "KCB Bank Tanzania Limited", "Letshego Faidika Bank Tanzania Limited", "Mkombozi Commercial Bank Plc",
-  "Mwalimu Commercial Bank Plc", "Mwanga Hakika Bank Limited", "National Bank of Commerce Limited",
-  "NMB Bank Plc", "NCBA Bank Tanzania Limited", "People's Bank of Zanzibar Limited",
-  "Stanbic Bank Tanzania Limited", "Standard Chartered Bank Tanzania Limited", "Tanzania Commercial Bank Plc",
-  "United Bank for Africa Tanzania Limited",
-] as const
-
 function getApiSectionForKey(key: string): EmployeeProfileSection | "documents" | null {
   return SECTION_KEY_TO_API[key] ?? null
 }
@@ -3579,13 +3564,9 @@ export function EmployeeHomeDashboard() {
     : []
   const isRepeatableSection = fillingItemKey ? REPEATABLE_PROFILE_KEYS.has(fillingItemKey) : false
   const repeatableColumns = fillingItemKey ? REPEATABLE_PROFILE_COLUMNS[fillingItemKey] ?? [] : []
-  const companyBankNames = companyBankDirectory
+  const onboardingBankNames = companyBankDirectory
     .map((bank) => typeof bank.name === "string" ? bank.name.trim() : "")
-    .filter((name): name is string => Boolean(name))
-  const onboardingBankNames: string[] = Array.from(new Set<string>([
-    ...TANZANIA_ONBOARDING_BANKS,
-    ...companyBankNames,
-  ])).sort((left, right) => left.localeCompare(right))
+    .filter(Boolean)
 
   const missingRequiredFields = currentFormSchema.length > 0
     ? currentFormSchema

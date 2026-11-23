@@ -167,6 +167,16 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+      - name: Save verified Companies manual illustrations
+        if: success() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: company-manual-illustrations
+          path: |
+            test-results/**/company-bank-directory.png
+            test-results/**/company-deletion-confirmation.png
+          if-no-files-found: error
+          retention-days: 7
 
   deploy:
     name: Deploy HRMS frontend

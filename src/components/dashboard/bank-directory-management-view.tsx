@@ -274,6 +274,8 @@ function CompanyBankDirectory() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={logo}
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
                     alt=""
                     className="size-10 object-contain"
                   />

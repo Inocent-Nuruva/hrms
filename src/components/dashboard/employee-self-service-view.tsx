@@ -2133,89 +2133,13 @@ const SELF_SERVICE_SECTION_TAB_LABELS: Record<string, string> = {
   company_user: "User",
 }
 
-const TANZANIA_LICENSED_BANKS = [
-  "Absa Bank Tanzania Limited",
-  "Access Bank Tanzania Limited",
-  "Akiba Commercial Bank Plc",
-  "Amana Bank Limited",
-  "Azania Bank Limited",
-  "Bank of Africa Tanzania Limited",
-  "Bank of Baroda Tanzania Limited",
-  "Bank of India Tanzania Limited",
-  "China Dasheng Bank Limited",
-  "Citibank Tanzania Limited",
-  "Cooperative Bank of Tanzania Limited",
-  "CRDB Bank Plc",
-  "DCB Commercial Bank Plc",
-  "Diamond Trust Bank Tanzania Plc",
-  "Ecobank Tanzania Limited",
-  "Equity Bank Tanzania Limited",
-  "Exim Bank Tanzania Limited",
-  "Guaranty Trust Bank Tanzania Limited",
-  "Habib African Bank Limited",
-  "I&M Bank Tanzania Limited",
-  "International Commercial Bank Tanzania Limited",
-  "KCB Bank Tanzania Limited",
-  "Letshego Faidika Bank Tanzania Limited",
-  "Mkombozi Commercial Bank Plc",
-  "Mwalimu Commercial Bank Plc",
-  "Mwanga Hakika Bank Limited",
-  "National Bank of Commerce Limited",
-  "NMB Bank Plc",
-  "NCBA Bank Tanzania Limited",
-  "People's Bank of Zanzibar Limited",
-  "Stanbic Bank Tanzania Limited",
-  "Standard Chartered Bank Tanzania Limited",
-  "Tanzania Commercial Bank Plc",
-  "United Bank for Africa Tanzania Limited",
-] as const
-
-const TANZANIA_BANK_LOGO_DOMAINS: Record<(typeof TANZANIA_LICENSED_BANKS)[number], string> = {
-  "Absa Bank Tanzania Limited": "absa.co.tz",
-  "Access Bank Tanzania Limited": "accessbank.co.tz",
-  "Akiba Commercial Bank Plc": "acbtz.co.tz",
-  "Amana Bank Limited": "amanabank.co.tz",
-  "Azania Bank Limited": "azaniabank.co.tz",
-  "Bank of Africa Tanzania Limited": "boatanzania.co.tz",
-  "Bank of Baroda Tanzania Limited": "bankofbaroda.co.tz",
-  "Bank of India Tanzania Limited": "bankofindia.co.tz",
-  "China Dasheng Bank Limited": "chinadashengbank.co.tz",
-  "Citibank Tanzania Limited": "citi.com",
-  "Cooperative Bank of Tanzania Limited": "coopbank.co.tz",
-  "CRDB Bank Plc": "crdbbank.co.tz",
-  "DCB Commercial Bank Plc": "dcb.co.tz",
-  "Diamond Trust Bank Tanzania Plc": "diamondtrust.co.tz",
-  "Ecobank Tanzania Limited": "ecobank.com",
-  "Equity Bank Tanzania Limited": "equitybank.co.tz",
-  "Exim Bank Tanzania Limited": "eximbank.co.tz",
-  "Guaranty Trust Bank Tanzania Limited": "gtbank.co.tz",
-  "Habib African Bank Limited": "habibafricanbank.co.tz",
-  "I&M Bank Tanzania Limited": "imbank.co.tz",
-  "International Commercial Bank Tanzania Limited": "icbank.co.tz",
-  "KCB Bank Tanzania Limited": "kcbgroup.com",
-  "Letshego Faidika Bank Tanzania Limited": "letshego.co.tz",
-  "Mkombozi Commercial Bank Plc": "mkombozibank.co.tz",
-  "Mwalimu Commercial Bank Plc": "mwalimubank.co.tz",
-  "Mwanga Hakika Bank Limited": "mwangahakikabank.co.tz",
-  "National Bank of Commerce Limited": "nbc.co.tz",
-  "NMB Bank Plc": "nmbbank.co.tz",
-  "NCBA Bank Tanzania Limited": "ncbagroup.co.tz",
-  "People's Bank of Zanzibar Limited": "pbzbank.co.tz",
-  "Stanbic Bank Tanzania Limited": "stanbicbank.co.tz",
-  "Standard Chartered Bank Tanzania Limited": "sc.com",
-  "Tanzania Commercial Bank Plc": "tcbbank.co.tz",
-  "United Bank for Africa Tanzania Limited": "ubagroup.com",
-}
-
-function getTanzaniaBankLogoUrl(bank: (typeof TANZANIA_LICENSED_BANKS)[number]) {
-  return `https://${TANZANIA_BANK_LOGO_DOMAINS[bank]}/favicon.ico`
-}
-
-function TanzaniaBankLogo({
+function DirectoryBankLogo({
   bank,
+  url,
   className,
 }: {
-  bank: (typeof TANZANIA_LICENSED_BANKS)[number]
+  bank: string
+  url: string
   className?: string
 }) {
   const initials = bank
@@ -2238,7 +2162,8 @@ function TanzaniaBankLogo({
       {/* Institution favicons are decorative, externally hosted, and intentionally not image-optimized. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={getTanzaniaBankLogoUrl(bank)}
+        src={resolveBackendMediaUrl(url) ?? undefined}
+        referrerPolicy="no-referrer"
         alt=""
         className="absolute inset-0 size-full bg-white object-contain"
         onError={(event) => {
@@ -2932,13 +2857,10 @@ function ProfileRecordsTab({
   }, [token])
 
   const bankChoices = React.useMemo(() => {
-    const choices = TANZANIA_LICENSED_BANKS.map((name) => ({ name, logo_url: "" }))
-    for (const record of companyBanks) {
+    return companyBanks.flatMap(record => {
       const name = readString(record, ["name"], "").trim()
-      if (!name || choices.some((choice) => choice.name.toLowerCase() === name.toLowerCase())) continue
-      choices.push({ name: name as (typeof TANZANIA_LICENSED_BANKS)[number], logo_url: readString(record, ["logo_url"], "") })
-    }
-    return choices
+      return name ? [{ name, logo_url: readString(record, ["logo_url"], "") }] : []
+    })
   }, [companyBanks])
   const selectedBankChoice = bankChoices.find((choice) => choice.name === bankDraft.bank_name)
 
@@ -3349,23 +3271,14 @@ function ProfileRecordsTab({
                       </div>
                     ) : (
                       <>
-                    {bankDraft.bank_name && TANZANIA_LICENSED_BANKS.includes(bankDraft.bank_name as (typeof TANZANIA_LICENSED_BANKS)[number]) ? (
-                      <TanzaniaBankLogo
-                        bank={bankDraft.bank_name as (typeof TANZANIA_LICENSED_BANKS)[number]}
-                        className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2"
-                      />
-                    ) : selectedBankChoice?.logo_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={resolveBackendMediaUrl(selectedBankChoice.logo_url) ?? undefined}
-                        alt=""
-                        className="pointer-events-none absolute left-2.5 top-1/2 z-10 size-5 -translate-y-1/2 rounded-sm object-contain"
-                      />
-                    ) : null}
+                    {selectedBankChoice?.logo_url && (
+                      <DirectoryBankLogo bank={selectedBankChoice.name} url={selectedBankChoice.logo_url}
+                        className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2" />
+                    )}
                     <FluentDropdown
                       id="bank-bank_name"
                       aria-label="Bank name"
-                      placeholder="Select a Tanzanian bank"
+                      placeholder="Select a bank"
                       className="!w-full !min-w-0"
                       button={{ className: cn("!w-full !min-w-0", bankDraft.bank_name && "!pl-10") }}
                       value={bankDraft.bank_name}
@@ -3385,11 +3298,8 @@ function ProfileRecordsTab({
                       {bankChoices.map((choice) => (
                         <FluentOption key={choice.name} value={choice.name} text={choice.name}>
                           <span className="flex min-w-0 items-center gap-2.5">
-                            {TANZANIA_LICENSED_BANKS.includes(choice.name as (typeof TANZANIA_LICENSED_BANKS)[number]) ? (
-                              <TanzaniaBankLogo bank={choice.name as (typeof TANZANIA_LICENSED_BANKS)[number]} />
-                            ) : choice.logo_url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={resolveBackendMediaUrl(choice.logo_url) ?? undefined} alt="" className="size-5 shrink-0 rounded-sm object-contain" />
+                            {choice.logo_url ? (
+                              <DirectoryBankLogo bank={choice.name} url={choice.logo_url} />
                             ) : (
                               <BuildingBank20Regular className="size-5 shrink-0 text-primary" />
                             )}

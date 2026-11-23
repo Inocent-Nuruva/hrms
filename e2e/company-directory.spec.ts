@@ -13,23 +13,28 @@ async function workspace(
     email: "directory@example.test",
     scope,
     userType: platform ? "OWNER" : "COMPANY_USER",
-    roles: platform ? ["PLATFORM_ADMINISTRATOR"] : ["HR"],
-    permissions: ["data_scope:company", "company_dashboard:read", ...grants],
-    companyId: platform ? null : 17,
-    companyMembershipId: platform ? null : 33,
+    roles: platform
+      ? [
+          grants.includes("companies:delete")
+            ? "SUPER_ADMIN"
+            : "PLATFORM_ADMINISTRATOR",
+        ]
+      : ["HR"],
+    permissions: platform
+      ? grants
+      : ["data_scope:company", "company_dashboard:read", ...grants],
+    ...(platform ? {} : { companyId: 17, companyMembershipId: 33 }),
     dashboardType: "admin",
     accessContextResolved: true,
   }
   const token = `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({ ...user, sub: user.id, exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url")}.fixture`
-  await page
-    .context()
-    .addCookies([
-      {
-        name: DASHBOARD_AUTH_COOKIE,
-        value: "1",
-        url: test.info().project.use.baseURL!,
-      },
-    ])
+  await page.context().addCookies([
+    {
+      name: DASHBOARD_AUTH_COOKIE,
+      value: "1",
+      url: test.info().project.use.baseURL!,
+    },
+  ])
   await page.addInitScript(
     ({ user, token }) => {
       localStorage.setItem(
@@ -118,6 +123,20 @@ for (const [size, width, height] of [
     await page.getByRole("button", { name: "Save changes" }).click()
     await expect(page.getByText("Inactive", { exact: true })).toBeVisible()
     const remove = page.getByRole("button", { name: "Delete Renamed Bank" })
+    if (size === "desktop") {
+      await page
+        .locator("section")
+        .filter({
+          has: page.getByRole("heading", {
+            name: "Bank directory",
+            exact: true,
+          }),
+        })
+        .last()
+        .screenshot({
+          path: test.info().outputPath("company-bank-directory.png"),
+        })
+    }
     await remove.click()
     await page.getByRole("button", { name: "Cancel", exact: true }).click()
     expect(writes).not.toContain("DELETE /api/employees/bank-directory/21")
@@ -160,6 +179,11 @@ for (const [size, width, height] of [
     await remove.click()
     const confirmation = page.getByRole("alertdialog")
     await expect(confirmation).toContainText("Updated Company")
+    if (size === "desktop") {
+      await confirmation.screenshot({
+        path: test.info().outputPath("company-deletion-confirmation.png"),
+      })
+    }
     await confirmation.getByRole("button", { name: "Cancel" }).click()
     expect(writes).not.toContain("DELETE /api/companies/17")
     await remove.click()
