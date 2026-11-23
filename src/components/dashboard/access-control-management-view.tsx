@@ -37,6 +37,7 @@ import {
   listAttendanceDevices,
   listAccessControlResources,
   listAccessReconciliationOperations,
+  scheduleDeployment, type ScheduleDeploymentState,
   type AccessReconciliationOperation,
   listAccessScheduleTemplates,
   listBranches,
@@ -887,18 +888,41 @@ export function AccessControlManagementView({
   const [historyId, setHistoryId] = React.useState<string | null>(null)
   const [history, setHistory] = React.useState<AdminRecord[] | null>(null)
   const [historyError, setHistoryError] = React.useState("")
+  const [deployment, setDeployment] = React.useState<ScheduleDeploymentState | null>(null)
+  const [deploymentBusy, setDeploymentBusy] = React.useState(false)
+  const [deploymentError, setDeploymentError] = React.useState("")
+  const canDeploySchedule = actor.ready && ["access_control_sync:execute","data_scope:company",activeSection === "templates" ? "access_schedule_templates:update" : "access_week_plans:update"].every(permission => canPerformPermission(actor.permissionLabels, permission))
   React.useEffect(() => {
     const token = readStoredToken()
     if (!historyId || !token || (activeSection !== "templates" && activeSection !== "week-plans")) return
     let active = true
     setHistory(null)
     setHistoryError("")
+    setDeployment(null)
+    setDeploymentError("")
+    if (canDeploySchedule) {
+      scheduleDeployment(token, activeSection === "templates" ? "template" : "week-plan", historyId)
+        .then(state => { if (active && token === readStoredToken()) setDeployment(state) })
+        .catch((error: Error) => { if (active) setDeploymentError(error.message) })
+    }
     const detail = activeSection === "templates" ? getAccessScheduleTemplate(token, historyId) : getAccessControlResourceById(token, "week-plans", historyId)
     detail.then(record => {
       if (active && token === readStoredToken()) setHistory(Array.isArray(record?.revisions) ? record.revisions : [])
     }).catch((error: Error) => { if (active) setHistoryError(error.message) })
     return () => { active = false }
-  }, [historyId, activeSection])
+  }, [historyId, activeSection, canDeploySchedule])
+  async function toggleDeployment() {
+    const token = readStoredToken()
+    const revision = Number(history?.[0]?.revision)
+    if (!token || !historyId || !deployment || !canDeploySchedule || !revision) return
+    setDeploymentBusy(true)
+    setDeploymentError("")
+    try {
+      const state = await scheduleDeployment(token, activeSection === "templates" ? "template" : "week-plan", historyId, {enabled:!deployment.enabled,revision})
+      if (token === readStoredToken()) setDeployment(state)
+    } catch (error) { setDeploymentError(error instanceof Error ? error.message : "Could not change deployment settings.") }
+    finally { setDeploymentBusy(false) }
+  }
   const [impact, setImpact] = React.useState<AccessScheduleImpact | null>(null)
   const [impactLoading, setImpactLoading] = React.useState(false)
   const [impactError, setImpactError] = React.useState<string | null>(null)
@@ -1961,6 +1985,11 @@ export function AccessControlManagementView({
       <Dialog open={historyId !== null} onOpenChange={open => { if (!open) setHistoryId(null) }}>
         <DialogPopup className="max-h-[80dvh] overflow-auto sm:max-w-xl">
           <DialogHeader><DialogTitle>Schedule history</DialogTitle><DialogDescription>Latest 20 saved revisions, newest first.</DialogDescription></DialogHeader>
+          {deployment && canDeploySchedule && <div className="space-y-2 rounded border p-3 text-sm">
+            <p>Automatic deployment to the assigned device is {deployment.enabled ? "on" : "off"}. {deployment.result}{deployment.verified_revision > 0 ? ` · Last verified revision ${deployment.verified_revision}` : ""}</p>
+            <FluentButton disabled={deploymentBusy || !history?.length} onClick={() => void toggleDeployment()}>{deployment.enabled ? "Pause automatic deployment" : "Deploy this and future revisions automatically"}</FluentButton>
+          </div>}
+          {deploymentError && <p role="alert">{deploymentError}</p>}
           {historyError ? <p role="alert">{historyError}</p> : history === null ? <p>Loading history…</p> : history.length === 0 ? <p>No revisions recorded.</p> : history.map(row => (
             <details key={String(row.revision)} className="rounded border p-2">
               <summary className="cursor-pointer">Revision {String(row.revision)} · {new Date(String(row.recorded_at)).toLocaleString()}</summary>

@@ -7105,6 +7105,11 @@ export async function syncAccessScheduleTemplateToDevice(
   );
 }
 
+export type ScheduleDeploymentState = { enabled: boolean; verified_revision: number; result: string };
+export function scheduleDeployment(token: string, kind: "week-plan" | "template", id: string, change?: {enabled: boolean; revision: number}) {
+  return adminRequest<ScheduleDeploymentState>(`/api/access-control/schedule-deployments/${kind}/${encodeURIComponent(id)}`, {token, method:change?"PUT":"GET", ...(change?{body:change}:{})});
+}
+
 /** Pull schedule templates from a Hikvision device and upsert locally. */
 export async function syncAccessScheduleTemplatesFromDevice(
   token: string,
