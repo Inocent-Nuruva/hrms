@@ -16263,6 +16263,12 @@ const FORCE_TWO_FACTOR_KEYS = [
   "twoFactorRequired",
 ] as const;
 
+export const USER_TWO_FACTOR_FIELDS: readonly string[] = [
+  ...TWO_FACTOR_FLAG_KEYS,
+  ...TWO_FACTOR_STATUS_KEYS,
+  ...FORCE_TWO_FACTOR_KEYS,
+];
+
 /** Resolve whether 2FA is mandatory for a user, independent of current setup. */
 export function readForceTwoFactor(
   record: AdminRecord | null | undefined,

@@ -30,7 +30,7 @@ import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 import type {
   AdminRecord, AdminResourceKey, SortOrder, UsersQueryParams, } from "@/lib/admin-api";
 import {
-  RESOURCE_LABELS, assignPermissionToCurrentCompanyUser, assignPermissionToRole, assignUserToRole, assignUserAvatar, disableUserTwoFactor, enableUserTwoFactor, readForceTwoFactor, setUserForceTwoFactor, extractDefaultAvatarImageUrl, getPermissionById, getRoleById, isSelectableDefaultAvatar, listAllCurrentCompanyUsers, listDefaultAvatars, listResource, listRolePermissions, readDefaultAvatarId, listRoleUsers, readTwoFactorEnabled, revokePermissionFromCurrentCompanyUser, revokePermissionFromRole, revokeUserFromRole, } from "@/lib/admin-api";
+  RESOURCE_LABELS, USER_TWO_FACTOR_FIELDS, assignPermissionToCurrentCompanyUser, assignPermissionToRole, assignUserToRole, assignUserAvatar, disableUserTwoFactor, enableUserTwoFactor, readForceTwoFactor, setUserForceTwoFactor, extractDefaultAvatarImageUrl, getPermissionById, getRoleById, isSelectableDefaultAvatar, listAllCurrentCompanyUsers, listDefaultAvatars, listResource, listRolePermissions, readDefaultAvatarId, listRoleUsers, readTwoFactorEnabled, revokePermissionFromCurrentCompanyUser, revokePermissionFromRole, revokeUserFromRole, } from "@/lib/admin-api";
 import {
   PermissionPicker, canonicalizePermissionNames, isPermissionSelected, permissionGroupFromName, permissionTokenFromAssignment, toPermissionOptions, type PermissionOption, } from "@/components/dashboard/permission-picker";
 import { RoleSuggestionStrip } from "@/components/dashboard/role-suggestion-strip";
@@ -242,7 +242,7 @@ function stringifyValue(value: unknown): string {
   return String(value);
 }
 
-function getVisibleColumns(rows: AdminRecord[]) {
+function getVisibleColumns(rows: AdminRecord[], resource: AdminResourceKey) {
   if (rows.length === 0) {
     return ["id", "name", "email"];
   }
@@ -271,7 +271,7 @@ function getVisibleColumns(rows: AdminRecord[]) {
 
   // Always surface a normalized 2FA column for users when any 2FA-like flag exists
   // (or after listUsers normalization which always sets two_factor_enabled).
-  const twoFactorAliases = [
+  const twoFactorAliases = resource === "users" ? USER_TWO_FACTOR_FIELDS : [
     "two_factor_enabled",
     "is_two_factor_enabled",
     "twoFactorEnabled",
@@ -295,11 +295,11 @@ function getVisibleColumns(rows: AdminRecord[]) {
       (key) => !ordered.includes(key) && !twoFactorAliases.includes(key), // collapse aliases into two_factor_enabled
     )
     .sort((a, b) => a.localeCompare(b));
-  const columns = [...ordered, ...remaining];
-  if (hasTwoFactorSignal && !columns.includes("two_factor_enabled")) {
-    columns.splice(Math.min(columns.length, 7), 0, "two_factor_enabled");
+  const columns = [...ordered, ...remaining].slice(0, 8);
+  if (resource === "users" && hasTwoFactorSignal && !columns.includes("two_factor_enabled")) {
+    columns.splice(7, 1, "two_factor_enabled");
   }
-  return columns.slice(0, 8);
+  return columns;
 }
 
 function formatTwoFactorCell(row: AdminRecord): React.ReactNode {
@@ -1104,7 +1104,7 @@ export function DataTable({
   const permissionMutationNextAllowedAtRef = React.useRef(0);
 
   const columns = React.useMemo(() => {
-    const baseColumns = getVisibleColumns(rows);
+    const baseColumns = getVisibleColumns(rows, activeResource);
     if (activeResource === "roles") {
       return baseColumns.filter(
         (column) => column !== "company_id" && column !== "companyId",
@@ -1835,6 +1835,7 @@ export function DataTable({
 
   const sortOrder = usersQuery.sortOrder as SortOrder;
   const canPrevPage = usersQuery.page > 1;
+  const userCount = usersTotal ?? rows.length;
   const canNextPage = usersTotalPages
     ? usersQuery.page < usersTotalPages
     : rows.length >= usersQuery.limit;
@@ -3435,7 +3436,7 @@ export function DataTable({
             <div className="flex items-center justify-between px-1 text-sm text-muted-foreground">
               <div>
                 {activeResource === "users"
-                  ? `${usersTotal ?? rows.length} users found`
+                  ? `${userCount} ${userCount === 1 ? "user" : "users"} found`
                   : `${rows.length} ${RESOURCE_LABELS[activeResource].toLowerCase()} loaded`}
               </div>
               <Badge variant="outline">{activeResource}</Badge>

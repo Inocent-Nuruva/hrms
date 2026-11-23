@@ -23,7 +23,7 @@ async function workspace(page: Page, additionalPermissions: string[] = []) {
       json={id:6,...saved[path]}
     } else if (path==="/api/probation/policy-options") {
       json={targets:{branch_id:[{id:3,name:"Central branch"}],department_id:[],position_id:[],grade_id:[]},defaults:{probation_period_days:150,maximum_extensions:2,default_extension_days:60,maximum_extension_days:120,maximum_total_days:365,reminder_days:[14,3]}}
-    } else if (path==="/api/users") json={data:[{id:322,first_name:"Example",last_name:"Account",email:"example.account@example.test"}],total:1}
+    } else if (path==="/api/users") json={data:[{id:322,first_name:"Example",last_name:"Account",email:"example.account@example.test",force_two_factor:true}],total:1}
     else if (path==="/api/probation/cases") json=[sample]
     else if (path==="/api/probation/cases/42") json=sample
     else if (path==="/api/probation/letter-templates") json=saved[path]?[saved[path]]:[]
@@ -42,6 +42,10 @@ for (const [name,width,height] of [["desktop",1366,900],["mobile",390,844]] as c
     await expect(page).toHaveURL(/\/dashboard\/users$/)
     const account=page.getByText("example.account@example.test",{exact:true}).first()
     await expect(account).toBeVisible()
+    await expect(page.getByRole("columnheader",{name:"2FA",exact:true})).toHaveCount(1)
+    await expect(page.getByRole("columnheader",{name:/force.*factor/i})).toHaveCount(0)
+    await expect(page.getByText("Required",{exact:true})).toBeVisible()
+    await expect(page.getByText("1 user found",{exact:true})).toBeVisible()
     await expect(page.getByRole("button",{name:"Open search users"})).toBeVisible()
     await page.reload()
     await expect(account).toBeVisible()
@@ -82,6 +86,10 @@ for (const [name,width,height] of [["desktop",1366,900],["mobile",390,844]] as c
     await page.getByLabel("Signatory title").fill("People manager")
     await page.getByRole("button",{name:"Save template"}).click()
     await expect(page.getByRole("status").filter({hasText:"Template saved."})).toBeVisible()
-    expect(saved["/api/probation/letter-templates"]).toMatchObject({letter_type:"CONFIRMATION",signatory_name:"HR reviewer"})
+    expect(saved["/api/probation/letter-templates"]).toMatchObject({letter_type:"CONFIRMATION",letterhead:"People team",signatory_name:"HR reviewer"})
+    await page.getByLabel("Letter type").selectOption("EXTENSION")
+    await expect(page.getByLabel("Letterhead")).toHaveValue("")
+    await page.getByLabel("Letter type").selectOption("CONFIRMATION")
+    await expect(page.getByLabel("Letterhead")).toHaveValue("People team")
   })
 }

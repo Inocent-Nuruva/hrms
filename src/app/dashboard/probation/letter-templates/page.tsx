@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 
 const types = { CONFIRMATION: "Confirmation", EXTENSION: "Extension", NOT_CONFIRMED: "Non-confirmation" }
-const empty = { letterhead: "", body: "", signatory_name: "", signatory_title: "" }
 
 function fields(row?: AdminRecord) {
   return {
@@ -25,16 +24,18 @@ export default function ProbationLetterTemplates() {
   const allowed = actor.ready && canPerformPermission(actor.permissionLabels, "probation_letters:generate")
   const [kind, setKind] = React.useState("CONFIRMATION")
   const [templates, setTemplates] = React.useState<AdminRecord[]>([])
-  const [form, setForm] = React.useState(empty)
+  const [draft, setDraft] = React.useState<ReturnType<typeof fields> | null>(null)
   const [busy, setBusy] = React.useState(false)
   const [loaded, setLoaded] = React.useState(false)
   const [message, setMessage] = React.useState("")
   const token = actor.ready ? readStoredSessionTokens().accessToken : ""
+  const form = draft ?? fields(templates.find(row => (row.letterType ?? row.letter_type) === kind))
 
   React.useEffect(() => {
     let active = true
     setLoaded(false)
     setTemplates([])
+    setDraft(null)
     setMessage("")
     if (allowed && token) {
       listProbationLetterTemplates(token).then(rows => {
@@ -44,10 +45,6 @@ export default function ProbationLetterTemplates() {
     return () => { active = false }
   }, [allowed, token])
 
-  React.useEffect(() => {
-    setForm(fields(templates.find(row => (row.letterType ?? row.letter_type) === kind)))
-  }, [templates, kind])
-
   async function submit(event: React.FormEvent) {
     event.preventDefault()
     if (!allowed || !loaded || busy || token !== readStoredSessionTokens().accessToken) return
@@ -56,7 +53,7 @@ export default function ProbationLetterTemplates() {
     try {
       await saveProbationLetterTemplate(token, { ...form, letter_type: kind })
       const rows = await listProbationLetterTemplates(token)
-      if (token === readStoredSessionTokens().accessToken) { setTemplates(rows); setMessage("Template saved.") }
+      if (token === readStoredSessionTokens().accessToken) { setTemplates(rows); setDraft(null); setMessage("Template saved.") }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not save template.")
     } finally { setBusy(false) }
@@ -69,14 +66,18 @@ export default function ProbationLetterTemplates() {
     <form onSubmit={submit} className="grid gap-4">
       <fieldset disabled={busy || !loaded} className="grid gap-4">
         <label className="grid gap-1">Letter type
-          <select className="rounded border p-2" value={kind} onChange={event => setKind(event.target.value)}>
+          <select className="rounded border p-2" value={kind} onChange={event => {
+            setKind(event.target.value)
+            setDraft(null)
+            setMessage("")
+          }}>
             {Object.entries(types).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
           </select>
         </label>
-        <label className="grid gap-1">Letterhead<Input required maxLength={1000} value={form.letterhead} onChange={e => setForm({ ...form, letterhead:e.target.value })}/></label>
-        <label className="grid gap-1">Letter body<Textarea aria-label="Letter body" formatting={false} required rows={8} maxLength={10000} value={form.body} onChange={e => setForm({ ...form, body:e.target.value })}/></label>
-        <label className="grid gap-1">Signatory name<Input required maxLength={160} value={form.signatory_name} onChange={e => setForm({ ...form, signatory_name:e.target.value })}/></label>
-        <label className="grid gap-1">Signatory title<Input required maxLength={160} value={form.signatory_title} onChange={e => setForm({ ...form, signatory_title:e.target.value })}/></label>
+        <label className="grid gap-1">Letterhead<Input required maxLength={1000} value={form.letterhead} onChange={e => setDraft({ ...form, letterhead:e.target.value })}/></label>
+        <label className="grid gap-1">Letter body<Textarea aria-label="Letter body" formatting={false} required rows={8} maxLength={10000} value={form.body} onChange={e => setDraft({ ...form, body:e.target.value })}/></label>
+        <label className="grid gap-1">Signatory name<Input required maxLength={160} value={form.signatory_name} onChange={e => setDraft({ ...form, signatory_name:e.target.value })}/></label>
+        <label className="grid gap-1">Signatory title<Input required maxLength={160} value={form.signatory_title} onChange={e => setDraft({ ...form, signatory_title:e.target.value })}/></label>
         <Button className="justify-self-start" type="submit">{busy ? "Saving…" : "Save template"}</Button>
       </fieldset>
     </form>
