@@ -96,7 +96,9 @@ test("switches to a second membership from the account menu and loads its grants
         companies:companies.map(c=>({companyId:c.id,companyName:c.name})),user:second,
         access_token:token(3600,2),refresh_token:"second-refresh"}})
     }
-    if (["/api/auth/session","/api/users/me","/api/auth/me"].includes(path))
+    if (path === "/api/users/me")
+      return route.fulfill({json:{...(switched?second:first),companies}})
+    if (["/api/auth/session","/api/auth/me"].includes(path))
       return route.fulfill({json:switched?second:first})
     if (path === "/api/auth/session-policy") return route.fulfill({json:deadlines(300000)})
     return route.fulfill({json:{data:[]}})
