@@ -66,7 +66,8 @@ describe("authService foundation helpers", () => {
               browser: "Chrome",
               os: "macOS",
               ip_address: "10.0.0.7",
-              last_used_at: "2026-08-11T08:15:00.000Z",
+              last_activity_at: "2026-08-11T08:15:00.000Z",
+              refresh_expires_at: "2026-08-18T08:15:00.000Z",
             },
             {
               id: "sess-other",
@@ -99,6 +100,8 @@ describe("authService foundation helpers", () => {
         browser: "Chrome",
         os: "macOS",
         ipAddress: "10.0.0.7",
+        lastUsedAt: "2026-08-11T08:15:00.000Z",
+        expiresAt: "2026-08-18T08:15:00.000Z",
       }),
       expect.objectContaining({
         id: "sess-other",
@@ -106,6 +109,18 @@ describe("authService foundation helpers", () => {
         isCurrent: false,
       }),
     ])
+  })
+
+  it("reads the effective session policy from the server", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
+      access_token_lifetime: "20m",
+      refresh_token_lifetime: "7d",
+      refresh_token_lifetime_is_sliding: true,
+      absolute_session_lifetime_seconds: 604800,
+    })))
+    await expect(authService.getSessionPolicy("access-token")).resolves.toEqual({
+      access: "20m", refresh: "7d", sliding: true, maximumSeconds: 604800,
+    })
   })
 
   it("regenerates 2FA backup codes with the current token", async () => {
@@ -229,6 +244,7 @@ describe("authService foundation helpers", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
         access_token: "next-access-token",
+        refresh_token: "next-refresh-token",
         scope: "company",
         dashboard_type: "employee",
         company_id: 4,
@@ -251,6 +267,7 @@ describe("authService foundation helpers", () => {
     )
     expect(result).toEqual({
       accessToken: "next-access-token",
+      refreshToken: "next-refresh-token",
       scope: "company",
       dashboardType: "employee",
       companyId: 4,

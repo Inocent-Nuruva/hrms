@@ -6,11 +6,13 @@ import { Eye20Regular, EyeOff20Regular } from "@fluentui/react-icons";
 import { ShieldCheck } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
+import { startBrowserSso } from "@/services/sso";
 import { markDashboardFromLogin } from "@/lib/dashboard-login-flag";
 import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants";
 import type { AuthScope, DashboardType } from "@/types";
 
 interface LoginFlowProps {
+  initialChallenge?: string;
   defaultEmail?: string;
   nextPath?: string;
   onSuccess?: (redirectUrl: string) => void;
@@ -54,7 +56,7 @@ function readableAuthError(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowProps) {
+export function LoginFlow({ initialChallenge, defaultEmail = "", nextPath, onSuccess }: LoginFlowProps) {
   const homePath = safeNextPath(nextPath)
   const [email, setEmail] = useState(defaultEmail);
   const [password, setPassword] = useState("");
@@ -62,17 +64,21 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
   const [errorField, setErrorField] = useState<"email" | "password" | "code" | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [ssoOpen,setSsoOpen]=useState(false);
+  const [company,setCompany]=useState("");
+  const [ssoBusy,setSsoBusy]=useState(false);
+  const [ssoError,setSsoError]=useState("");
   const [isDone, setIsDone] = useState(false);
   const [inputsMounted, setInputsMounted] = useState(false);
-  const [step, setStep] = useState<LoginStep>("credentials");
-  const [tempToken, setTempToken] = useState<string | null>(null);
+  const [step, setStep] = useState<LoginStep>(initialChallenge ? "two-factor" : "credentials");
+  const [tempToken, setTempToken] = useState<string | null>(initialChallenge ?? null);
   /** Email bound to the current 2FA challenge — never reuse a previous account's email. */
   const [twoFactorAccountEmail, setTwoFactorAccountEmail] = useState("");
   const [twoFactorCode, setTwoFactorCode] = useState("");
   const { login, completeOtpLogin, isLoading, clearSession } = useAuth();
 
   useEffect(() => {
-    if (typeof window === "undefined") {
+    if (typeof window === "undefined" || initialChallenge) {
       return;
     }
 
@@ -85,7 +91,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
     if (!defaultEmail && shouldRemember && rememberedEmail.trim()) {
       setEmail(rememberedEmail);
     }
-  }, [defaultEmail]);
+  }, [defaultEmail, initialChallenge]);
 
   useEffect(() => {
     const t = setTimeout(() => setInputsMounted(true), 60);
@@ -497,6 +503,18 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
           {isLoading ? "Signing in..." : "Sign in"}
         </Button>
       </form>
+      {ssoOpen ? <form className="mt-3 space-y-2" onSubmit={async event=>{
+        event.preventDefault();setSsoBusy(true);setSsoError("");
+        try {await startBrowserSso("login",{company:company.trim()});}
+        catch(error){setSsoError(readableAuthError(error,"Could not start company sign-in."));setSsoBusy(false);}
+      }}>
+        <Field label="Company sign-in code" hint="Use the company code supplied by your administrator.">
+          <Input required maxLength={120} value={company} onChange={(_,data)=>setCompany(data.value)} />
+        </Field>
+        {ssoError && <p role="alert" className="text-sm text-destructive">{ssoError}</p>}
+        <Button type="submit" className="w-full" disabled={!company.trim()||ssoBusy}>Continue to identity provider</Button>
+      </form> : <Button type="button" className="mt-3 w-full" onClick={()=>setSsoOpen(true)}>Sign in with SSO</Button>}
+
     </div>
   );
 }

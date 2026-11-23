@@ -22,6 +22,8 @@ import { authService } from "@/services/authService";
 import { ApiError } from "@/services/api";
 import { ROUTES } from "@/utils/constants";
 import { env } from "@/lib/env";
+import { SessionDeadlineWarning } from "./session-deadline-warning";
+import { withAuthSessionLock } from "@/lib/auth-session-lock";
 
 const SESSION_CHECK_INTERVAL_MS = env.NEXT_PUBLIC_SESSION_CHECK_INTERVAL_MS;
 const ACCESS_TOKEN_REFRESH_WINDOW_MS = env.NEXT_PUBLIC_TOKEN_REFRESH_WINDOW_MS;
@@ -123,7 +125,7 @@ export function SessionExpiryGuard() {
 
       const pathname = window.location.pathname;
 
-      if (pathname === ROUTES.login) {
+      if (pathname === ROUTES.login || pathname === "/auth/sso/callback") {
         return;
       }
 
@@ -155,28 +157,31 @@ export function SessionExpiryGuard() {
       ) {
         refreshInFlightRef.current = (async () => {
           try {
-            const response = await authService.refresh(refreshToken);
-            const nextAccessToken = response.tokens.accessToken.trim();
-            const nextRefreshToken = response.tokens.refreshToken.trim();
+            await withAuthSessionLock(async () => {
+              if (readStoredSessionTokens().refreshToken !== refreshToken || readStoredSessionTokens().accessToken !== accessToken) return;
+              const response = await authService.refresh(refreshToken);
+              const nextAccessToken = response.tokens.accessToken.trim();
+              const nextRefreshToken = response.tokens.refreshToken.trim();
 
-            if (!nextAccessToken || !nextRefreshToken) {
-              expireSession();
-              return;
-            }
+              if (!nextAccessToken || !nextRefreshToken) {
+                expireSession();
+                return;
+              }
 
-            if (
-              readStoredSessionTokens().refreshToken !== refreshToken ||
-              readStoredSessionTokens().accessToken !== accessToken
-            )
-              return;
-            persistSessionTokens(
-              nextAccessToken,
-              nextRefreshToken,
-              response.user,
-            );
-            activeAccessToken = nextAccessToken;
-          } catch {
-            if (
+              if (
+                readStoredSessionTokens().refreshToken !== refreshToken ||
+                readStoredSessionTokens().accessToken !== accessToken
+              )
+                return;
+              persistSessionTokens(
+                nextAccessToken,
+                nextRefreshToken,
+                response.user,
+              );
+              activeAccessToken = nextAccessToken;
+            });
+          } catch (error) {
+            if (error instanceof ApiError && error.statusCode === 401 &&
               readStoredSessionTokens().accessToken === accessToken &&
               readStoredSessionTokens().refreshToken === refreshToken
             )
@@ -193,6 +198,7 @@ export function SessionExpiryGuard() {
           readStoredSessionTokens().accessToken || activeAccessToken;
       }
 
+      if ((readJwtExpiry(activeAccessToken) ?? Infinity) <= Date.now() && refreshToken) return;
       const accessSyncResult = await syncAccessContext(
         activeAccessToken,
         forceAccessSync,
@@ -243,5 +249,5 @@ export function SessionExpiryGuard() {
     };
   }, [ensureFreshSession]);
 
-  return null;
+  return <SessionDeadlineWarning onExpire={expireSession} />;
 }

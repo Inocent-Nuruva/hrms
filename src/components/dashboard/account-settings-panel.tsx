@@ -32,11 +32,14 @@ import { setMyProfilePhotoUrl } from "@/lib/my-profile-photo"
 import { clearStoredSession, persistSessionUser, readStoredSessionTokens } from "@/lib/session-client"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
+import { AuthenticationSettings } from "./authentication-settings"
+import { getSessionSnapshot } from "@/lib/auth-session-store"
 import { authService } from "@/services/authService"
 import type { AuthSessionRecord, TwoFactorSetupResponse } from "@/types"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
   canAccessDashboardRoute,
+  hasPermission,
   publishDashboardActorSnapshotFromBrowserStorage,
 } from "@/lib/dashboard-permissions"
 import {
@@ -341,6 +344,7 @@ function AccountSettingsPanelContent({
   const [accountEmail, setAccountEmail] = React.useState("")
   const [emailBusy, setEmailBusy] = React.useState(false)
   const [sessions, setSessions] = React.useState<AuthSessionRecord[]>([])
+  const [sessionPolicy, setSessionPolicy] = React.useState<Awaited<ReturnType<typeof authService.getSessionPolicy>> | null>(null)
   const [sessionsLoading, setSessionsLoading] = React.useState(false)
   const [sessionActionId, setSessionActionId] = React.useState<string | null>(null)
   const [sessionMessage, setSessionMessage] = React.useState<string | null>(null)
@@ -554,6 +558,7 @@ function AccountSettingsPanelContent({
     setSessionsLoading(true)
     setSessionError(null)
     setSessionMessage(null)
+    void authService.getSessionPolicy(accessToken).then(setSessionPolicy).catch(() => setSessionPolicy(null))
     try {
       const nextSessions = await authService.listSessions(accessToken)
       setSessions(nextSessions)
@@ -1518,6 +1523,19 @@ function AccountSettingsPanelContent({
                     </div>
                   ) : null}
 
+                  {activeTab === "devices" && actor.ready && <AuthenticationSettings key={String(getSessionSnapshot().subject)+"-"+String(getSessionSnapshot().companyId)} token={token}
+                    platform={actor.scope==="platform"} manage={hasPermission(actor.permissionLabels,"manage_company_users")}
+                    audit={hasPermission(actor.permissionLabels,"security_events:read")} />}
+                  {sessionPolicy ? (
+                    <p className="text-xs text-muted-foreground">
+                      Access token: {sessionPolicy.access}. Refresh token: {sessionPolicy.refresh}
+                      {sessionPolicy.sliding ? " from its most recent renewal." : "."}
+                      {sessionPolicy.maximumSeconds ? ` Maximum session lifetime: ${sessionPolicy.maximumSeconds / 3600} hours from sign-in.` : " No maximum session lifetime reported."}
+                      {sessionPolicy.idleSeconds ? ` Inactivity timeout: ${sessionPolicy.idleSeconds/60} minutes.` : ""}
+                      {sessionPolicy.maxSessions ? ` Device limit at sign-in: ${sessionPolicy.maxSessions}.` : ""}
+                    </p>
+                  ) : null}
+
                   {sessionsLoading ? (
                     <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
                       <FluentLoadingIndicator className="size-4 animate-spin" />
@@ -1559,7 +1577,7 @@ function AccountSettingsPanelContent({
                                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
                                   {createdAt ? <span>Created: {createdAt}</span> : null}
                                   {lastUsedAt ? <span>Last used: {lastUsedAt}</span> : null}
-                                  {expiresAt ? <span>Expires: {expiresAt}</span> : null}
+                                  {expiresAt ? <span>Refresh expires: {expiresAt}</span> : null}
                                 </div>
                               </div>
                               <Button

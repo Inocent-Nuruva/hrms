@@ -317,6 +317,10 @@ async function request<T>(path: string, options: {
 }
 
 export const api = {
+  sessionDeadlines(activity = false) {
+    return request<{server_time:number;idle_expires_at:number;absolute_expires_at:number;refresh_expires_at:number}>(
+      activity ? '/api/auth/sessions/activity' : '/api/auth/session-policy',{method:activity?'POST':'GET'});
+  },
   // --- AUTH (user specific) ---
   async login(email: string, password: string) {
     // Exact match for the LoginDto in the OpenAPI spec

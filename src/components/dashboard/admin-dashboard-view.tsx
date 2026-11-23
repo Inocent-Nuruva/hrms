@@ -1,4 +1,5 @@
 "use client";
+import { withAuthSessionLock } from "@/lib/auth-session-lock";
 import {
   clearStoredSession as clearSharedSession,
   persistSessionTokens as persistSharedTokens,
@@ -512,19 +513,22 @@ export default function AdminDashboardView({
     }
 
     try {
-      const response = await authService.refresh(refreshToken);
-      const nextAccessToken = response.tokens.accessToken.trim();
-      const nextRefreshToken = response.tokens.refreshToken.trim();
-      if (!nextAccessToken || !nextRefreshToken) {
-        return "";
-      }
-      if (
-        readSharedTokens().refreshToken !== refreshToken ||
-        readSharedTokens().accessToken !== previousAccessToken
-      )
-        return "";
-      persistSessionTokens(nextAccessToken, nextRefreshToken, response.user);
-      return nextAccessToken;
+      return await withAuthSessionLock(async () => {
+        if (readSharedTokens().refreshToken !== refreshToken) return readSharedTokens().accessToken;
+        const response = await authService.refresh(refreshToken);
+        const nextAccessToken = response.tokens.accessToken.trim();
+        const nextRefreshToken = response.tokens.refreshToken.trim();
+        if (!nextAccessToken || !nextRefreshToken) {
+          return "";
+        }
+        if (
+          readSharedTokens().refreshToken !== refreshToken ||
+          readSharedTokens().accessToken !== previousAccessToken
+        )
+          return "";
+        persistSessionTokens(nextAccessToken, nextRefreshToken, response.user);
+        return nextAccessToken;
+      });
     } catch {
       return "";
     }

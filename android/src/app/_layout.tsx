@@ -4,6 +4,7 @@ import { PaperProvider, MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
+import { MobileSessionBoundary } from '../components/mobile-session-boundary';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import {
@@ -146,7 +147,7 @@ function RootNavigator({ backgroundColor }: { backgroundColor: string }) {
   const auth = useAuth();
 
   return (
-    <>
+    <MobileSessionBoundary authenticated={auth.isAuthenticated} logout={auth.logout}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="login" />
         <Stack.Screen name="forgot-password" />
@@ -167,7 +168,7 @@ function RootNavigator({ backgroundColor }: { backgroundColor: string }) {
           <FluentActivityIndicator size="large" color={COLORS.primary} />
         </View>
       )}
-    </>
+    </MobileSessionBoundary>
   );
 }
 

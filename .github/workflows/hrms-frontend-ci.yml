@@ -155,7 +155,7 @@ jobs:
           npm run build
           cp -r public .next/standalone/
           cp -r .next/static .next/standalone/.next/
-      - run: npx playwright test e2e/onboarding-workspace.spec.ts e2e/forms-feedback.spec.ts
+      - run: npx playwright test e2e/onboarding-workspace.spec.ts e2e/forms-feedback.spec.ts e2e/auth-session-policy.spec.ts
       - name: Upload browser failure evidence
         if: failure()
         uses: actions/upload-artifact@v4

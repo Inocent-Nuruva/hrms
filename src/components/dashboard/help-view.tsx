@@ -87,9 +87,9 @@ export function HelpView() {
         <div className="space-y-3">
           <h2 className="text-sm font-semibold">Sign-in</h2>
           <p className="text-sm text-muted-foreground">
-            Use your work email and password. If your account uses two-factor authentication, you will
-            be asked for that code after you sign in.
+            Use your work email and password, or choose <strong>Sign in with SSO</strong> and enter your company code after linking your identity. Complete any authenticator challenge.
           </p>
+          <Link className="text-sm text-primary underline" href="/dashboard/settings?section=security&tab=devices">Manage sign-in and devices</Link>
         </div>
       </div>
 

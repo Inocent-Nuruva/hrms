@@ -178,8 +178,8 @@ function normalizeAuthSessions(payload: unknown): AuthSessionRecord[] {
         isCurrent:
           readBoolean(record, ["is_current", "isCurrent", "current"]) ?? false,
         createdAt: readString(record, ["created_at", "createdAt", "issued_at", "issuedAt"]),
-        lastUsedAt: readString(record, ["last_used_at", "lastUsedAt", "updated_at", "updatedAt"]),
-        expiresAt: readString(record, ["expires_at", "expiresAt"]),
+        lastUsedAt: readString(record, ["last_activity_at", "lastActivityAt", "last_used_at", "lastUsedAt", "updated_at", "updatedAt"]),
+        expiresAt: readString(record, ["refresh_expires_at", "refreshExpiresAt", "expires_at", "expiresAt"]),
         ipAddress: readString(record, ["ip_address", "ipAddress"]),
         userAgent: readString(record, ["user_agent", "userAgent"]),
         deviceName: readString(record, ["device_name", "deviceName"]),
@@ -470,7 +470,7 @@ function normalizeUser(payload: unknown): AuthUser | undefined {
   return undefined;
 }
 
-function normalizeLoginResponse(payload: unknown): LoginResponse {
+export function normalizeLoginResponse(payload: unknown): LoginResponse {
   const root = asRecord(payload);
   const rootData = asRecord(root?.data);
   const rootResult = asRecord(root?.result);
@@ -602,9 +602,12 @@ function normalizeSwitchCompanyResponse(payload: unknown): AuthSwitchCompanyResp
   // identity. Read context claims from that token so the UI changes shells
   // immediately even when `scope` and `dashboard_type` are omitted by the API.
   const tokenPayload = decodeJwtPayload(accessToken);
+  const refreshToken = readString(root, ["refresh_token", "refreshToken"]) ??
+    readString(rootData, ["refresh_token", "refreshToken"]);
 
   return {
     accessToken,
+    ...(refreshToken ? { refreshToken } : {}),
     scope: readAuthScope(payload) ?? readAuthScope(tokenPayload),
     dashboardType: readDashboardType(payload) ?? readDashboardType(tokenPayload),
     companyId:
@@ -794,6 +797,23 @@ export const authService = {
       token: accessToken,
     });
     return normalizeAuthSessions(response);
+  },
+
+  async getSessionPolicy(token: string): Promise<{ access: string; refresh: string; sliding: boolean; maximumSeconds: number | null; idleSeconds?:number; maxSessions?:number }> {
+    const response = await apiRequest("/api/auth/session-policy", ApiResponseSchema, {
+      method: "GET",
+      token: token.trim(),
+    });
+    const outer = asRecord(response);
+    const record = asRecord(outer?.data) ?? outer;
+    const access = readString(record, ["access_token_lifetime"]);
+    const refresh = readString(record, ["refresh_token_lifetime"]);
+    const sliding = readBoolean(record, ["refresh_token_lifetime_is_sliding"]);
+    if (!access || !refresh || sliding === undefined) {
+      throw new Error("Session policy is unavailable.");
+    }
+    const maximum = record?.absolute_session_lifetime_seconds;
+    return { access, refresh, sliding, ...(typeof record?.idle_seconds === "number" ? {idleSeconds: record.idle_seconds} : {}), ...(typeof record?.max_sessions === "number" ? {maxSessions: record.max_sessions} : {}), maximumSeconds: typeof maximum === "number" && Number.isFinite(maximum) && maximum > 0 ? maximum : null };
   },
 
   async revokeSession(token: string, sessionId: string): Promise<void> {

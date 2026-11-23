@@ -1,6 +1,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { ApiError } from "@/services/api";
 import { authService } from "@/services/authService";
+import { withAuthSessionLock } from "@/lib/auth-session-lock";
 import {
   getSessionSnapshot,
   getServerSessionSnapshot,
@@ -164,7 +165,7 @@ export function useAuth() {
     }
   };
 
-  const refreshSession = async () => {
+  const refreshSession = async () => withAuthSessionLock(async () => {
     const session = readStoredSessionTokens();
     const previous = getSessionSnapshot();
     const refreshToken = session.refreshToken;
@@ -174,17 +175,18 @@ export function useAuth() {
       );
     }
     const response = await authService.refresh(refreshToken);
-    if (getSessionSnapshot().credentialVersion !== previous.credentialVersion)
+    const latest = getSessionSnapshot();
+    if (latest.tokens?.accessToken !== previous.tokens?.accessToken || latest.tokens?.refreshToken !== previous.tokens?.refreshToken)
       throw new DOMException("Session changed during refresh.", "AbortError");
     saveSession(
       response.tokens,
-      response.user ?? storedUser ?? undefined,
-      response.user?.dashboardType ?? storedUser?.dashboardType,
-      response.user?.scope ?? storedUser?.scope,
+      response.user ?? latest.user ?? undefined,
+      response.user?.dashboardType ?? latest.user?.dashboardType,
+      response.user?.scope ?? latest.user?.scope,
     );
     requestDashboardAccessRefresh();
     return response;
-  };
+  });
 
   const acceptPasswordChangeTokens = (payload: unknown) => {
     const record =
@@ -277,13 +279,16 @@ export function useAuth() {
 
   const switchCompany = async (
     companyId: number,
-  ): Promise<AuthSwitchCompanyResponse> => {
-    if (!accessToken || !storedTokens) {
+  ): Promise<AuthSwitchCompanyResponse> => withAuthSessionLock(async () => {
+    const current = getSessionSnapshot();
+    const currentAccessToken = current.tokens?.accessToken;
+    if (!currentAccessToken || !current.tokens) {
       throw new Error("Authentication required. Please sign in again.");
     }
     const previous = getSessionSnapshot();
-    const response = await authService.switchCompany(accessToken, companyId);
-    if (getSessionSnapshot().credentialVersion !== previous.credentialVersion)
+    const response = await authService.switchCompany(currentAccessToken, companyId);
+    const latest = getSessionSnapshot();
+    if (latest.tokens?.accessToken !== previous.tokens?.accessToken || latest.tokens?.refreshToken !== previous.tokens?.refreshToken)
       throw new DOMException(
         "Session changed during company switch.",
         "AbortError",
@@ -291,13 +296,13 @@ export function useAuth() {
     saveSession(
       {
         accessToken: response.accessToken,
-        refreshToken: storedTokens.refreshToken,
+        refreshToken: response.refreshToken ?? current.tokens.refreshToken,
       },
-      storedUser
+      latest.user
         ? {
-            ...storedUser,
-            companyId: response.companyId ?? storedUser.companyId,
-            companyName: response.companyName ?? storedUser.companyName,
+            ...latest.user,
+            companyId: response.companyId ?? latest.user.companyId,
+            companyName: response.companyName ?? latest.user.companyName,
             // Dashboard type is company-membership specific. Never retain the
             // previous company's shell while the refreshed /users/me loads.
             dashboardType: response.dashboardType,
@@ -311,7 +316,7 @@ export function useAuth() {
     );
     requestDashboardAccessRefresh();
     return response;
-  };
+  });
 
   const state: AuthState = {
     user: storedUser,
@@ -323,6 +328,7 @@ export function useAuth() {
 
   return {
     ...state,
+    saveSession,
     login,
     completeOtpLogin,
     refreshCurrentUser,

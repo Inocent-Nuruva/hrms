@@ -105,6 +105,7 @@ export interface AuthSessionRecord {
 
 export interface AuthSwitchCompanyResponse {
   accessToken: string;
+  refreshToken?: string;
   scope?: AuthScope;
   dashboardType?: DashboardType;
   companyId?: number;
