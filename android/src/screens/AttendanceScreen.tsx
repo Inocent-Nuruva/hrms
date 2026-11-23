@@ -296,7 +296,7 @@ export function AttendanceScreen({ auth }: Props) {
     () => buildAttendanceSummary(punchesQuery.data, todayQuery.data),
     [punchesQuery.data, todayQuery.data]
   );
-  const primaryAction = attendanceSummary.nextAction;
+  const primaryAction = attendanceSummary.nextAction === 'out' ? 'out' : 'in';
   const busy = checkInMutation.isPending || checkOutMutation.isPending;
   React.useEffect(() => {
     if (!busy) {

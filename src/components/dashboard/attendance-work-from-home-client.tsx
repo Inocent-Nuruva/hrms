@@ -28,7 +28,8 @@ import {
   reviewAttendanceWorkFromHomeRequest,
 } from "@/lib/admin-api";
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
-import { AUTH_STORAGE_KEYS } from "@/utils/constants";
+import { getSessionSnapshot } from "@/lib/auth-session-store";
+import { readStoredSessionTokens } from "@/lib/session-client";
 import { DatePickerPresets } from "@/components/ui/date-picker-presets";
 import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
 
@@ -50,19 +51,7 @@ type WorkFromHomeRequest = {
   cancelled_at?: string | null;
 };
 
-function readToken() {
-  try {
-    const raw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens);
-    if (!raw) return "";
-    const tokens = JSON.parse(raw) as {
-      accessToken?: string;
-      access_token?: string;
-    };
-    return (tokens.accessToken ?? tokens.access_token ?? "").trim();
-  } catch {
-    return "";
-  }
-}
+
 
 function readRequests(value: unknown): WorkFromHomeRequest[] {
   if (Array.isArray(value)) return value as WorkFromHomeRequest[];
@@ -132,9 +121,8 @@ function requestUsage(request: WorkFromHomeRequest) {
 
 function linkedEmployeeId() {
   try {
-    const raw = window.localStorage.getItem(AUTH_STORAGE_KEYS.user);
-    if (!raw) return null;
-    const user = JSON.parse(raw) as Record<string, unknown>;
+    const user = getSessionSnapshot().user;
+    if (!user) return null;
     const employee =
       typeof user.employee === "object" && user.employee !== null
         ? (user.employee as Record<string, unknown>)
@@ -184,7 +172,7 @@ export function AttendanceWorkFromHomeClient() {
   ).length;
 
   React.useEffect(() => {
-    setToken(readToken());
+    setToken(readStoredSessionTokens().accessToken);
     const employeeId = linkedEmployeeId();
     setCurrentEmployeeId(employeeId);
     setCanRequest(actor.accessMode === "employee" || employeeId !== null);
