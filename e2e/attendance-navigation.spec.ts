@@ -66,3 +66,19 @@ test("attendance readers can inspect company requests and exceptions", async ({ 
   await expect(page.getByRole("dialog")).toBeVisible()
   await expect(page.getByRole("button", { name: "Save exception status" })).toHaveCount(0)
 })
+
+test("a linked employee with older session data sees the withdrawal action for their own remote-work request", async ({ page }) => {
+  const user = await installDashboardFixture(page, "employee", [])
+  const own = { id: 45, employee_id: 781, start_date: "2031-05-12", end_date: "2031-05-12", reason: "Own remote-work request", status: "PENDING" }
+  await page.route("**/api/**", async route => {
+    const path = new URL(route.request().url()).pathname
+    let json: unknown = { data: [] }
+    if (["/api/users/me", "/api/auth/me", "/api/auth/session"].includes(path)) json = { ...user, data: user }
+    if (path.endsWith("/work-from-home/requests/mine")) json = [own]
+    await route.fulfill({ json })
+  })
+  await page.goto("/dashboard/attendance/work-from-home-requests")
+  await expect(page.getByText(own.reason, { exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Withdraw request" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0)
+})

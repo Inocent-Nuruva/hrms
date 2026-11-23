@@ -3,15 +3,16 @@ import { DASHBOARD_AUTH_COOKIE } from "../../src/lib/dashboard-permissions"
 
 export async function installDashboardFixture(
   page: Page,
-  scope: "platform" | "company",
+  scope: "platform" | "company" | "employee",
   grants: string[]
 ) {
   const platform = scope === "platform"
+  const employee = scope === "employee"
   const user = {
     id: 31,
     fullName: "UAT tester",
     email: "tester@example.test",
-    scope,
+    scope: platform ? "platform" : "company",
     userType: platform ? "OWNER" : "COMPANY_USER",
     roles: platform
       ? [
@@ -19,12 +20,12 @@ export async function installDashboardFixture(
             ? "SUPER_ADMIN"
             : "PLATFORM_ADMINISTRATOR",
         ]
-      : ["HR"],
+      : [employee ? "EMPLOYEE" : "HR"],
     permissions: platform
       ? grants
-      : ["data_scope:company", "company_dashboard:read", ...grants],
+      : [...(employee ? ["data_scope:self"] : ["data_scope:company", "company_dashboard:read"]), ...grants],
     ...(platform ? {} : { companyId: 17, companyMembershipId: 33 }),
-    dashboardType: "admin",
+    dashboardType: employee ? "employee" : "admin",
     accessContextResolved: true,
   }
   const token = `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({ ...user, sub: user.id, exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url")}.fixture`

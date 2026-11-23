@@ -151,6 +151,7 @@ export function AttendanceWorkFromHomeClient() {
     number | null
   >(null);
   const [token, setToken] = React.useState("");
+  const [ownRequestIds, setOwnRequestIds] = React.useState<Set<number>>(new Set());
   const [reviewableTeamIds, setReviewableTeamIds] = React.useState<Set<number>>(new Set());
   const [requests, setRequests] = React.useState<WorkFromHomeRequest[]>([]);
   const [startDate, setStartDate] = React.useState("");
@@ -187,24 +188,26 @@ export function AttendanceWorkFromHomeClient() {
     setLoading(true);
     setError("");
     try {
-      const [visible, team] = await Promise.all([
-        canReadCompany
-          ? listAttendanceWorkFromHomeRequests(token, false)
-          : currentEmployeeId ? listAttendanceWorkFromHomeRequests(token, true) : [],
-        canReviewTeam && currentEmployeeId && (!canReadCompany || !canReview)
+      const needsOwnList = canRequest && (!canReadCompany || currentEmployeeId === null);
+      const [companyPayload, minePayload, teamPayload] = await Promise.all([
+        canReadCompany ? listAttendanceWorkFromHomeRequests(token, false) : [],
+        needsOwnList ? listAttendanceWorkFromHomeRequests(token, true) : [],
+        canReviewTeam && canRequest && (!canReadCompany || !canReview)
           ? listTeamAttendanceWorkFromHomeRequests(token)
           : [],
       ]);
-      const teamRequests = readRequests(team);
-      setReviewableTeamIds(new Set(teamRequests.map((request) => request.id)));
-      const combined = [...readRequests(visible), ...teamRequests];
+      const mine = readRequests(minePayload);
+      const team = readRequests(teamPayload);
+      setOwnRequestIds(new Set(mine.map((request) => request.id)));
+      setReviewableTeamIds(new Set(team.map((request) => request.id)));
+      const combined = [...readRequests(companyPayload), ...mine, ...team];
       setRequests(Array.from(new Map(combined.map((request) => [request.id, request])).values()));
     } catch (loadError) {
       setError(errorMessage(loadError));
     } finally {
       setLoading(false);
     }
-  }, [canReadCompany, canReview, canReviewTeam, currentEmployeeId, token]);
+  }, [canReadCompany, canRequest, canReview, canReviewTeam, currentEmployeeId, token]);
 
   React.useEffect(() => {
     if (actor.ready && token) void refresh();
@@ -279,7 +282,7 @@ export function AttendanceWorkFromHomeClient() {
     setError("");
     setMessage("");
     try {
-      if (canReview && currentEmployeeId !== request.employee_id) {
+      if (canReview && currentEmployeeId !== request.employee_id && !ownRequestIds.has(request.id)) {
         await cancelManagedAttendanceWorkFromHomeRequest(token, request.id);
       } else {
         await cancelAttendanceWorkFromHomeRequest(token, request.id);
@@ -465,7 +468,7 @@ export function AttendanceWorkFromHomeClient() {
         <div className="divide-y divide-border">
           {requests.map((request) => {
             const usage = requestUsage(request);
-            const isOwnRequest = currentEmployeeId === request.employee_id;
+            const isOwnRequest = currentEmployeeId === request.employee_id || ownRequestIds.has(request.id);
             return (
               <article
                 key={request.id}
