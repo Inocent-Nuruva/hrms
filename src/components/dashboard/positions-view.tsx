@@ -198,11 +198,15 @@ export function PositionsView() {
     return () => {active = false}
   }, [permissionsReady])
   async function changeStaffingPolicy(value: boolean) {
+    const previous = strictStaffing
     setChangingPolicy(true)
+    setStrictStaffing(value)
     setPolicyError("")
     try { setStrictStaffing(await getStaffingPolicy(readStoredToken(),value)) }
-    catch (error) { setPolicyError(error instanceof Error ? error.message : "Could not save the staffing policy.") }
-    finally { setChangingPolicy(false) }
+    catch (error) {
+      setStrictStaffing(previous)
+      setPolicyError(error instanceof Error ? error.message : "Could not save the staffing policy.")
+    } finally { setChangingPolicy(false) }
   }
   const canCreatePositions = React.useMemo(
     () => permissionsReady && canPerformPermission(actorPermissions, "positions:create"),
