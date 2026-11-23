@@ -5881,6 +5881,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
             rows={rows}
             section={activeSection}
             loading={loading}
+            onRowSelect={(_, row) => void openRecordDetails(row)}
             toolbarStart={sectionTitleBlock}
             toolbarActions={
               <>
