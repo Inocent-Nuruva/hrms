@@ -21490,11 +21490,12 @@ export async function updateSmsRegistryItem(
 }
 
 export async function sendTestSms(token: string, data: AdminRecord) {
-  return adminRequest<unknown>("/api/sms/test", {
+  const payload = await adminRequest<unknown>("/api/sms/test", {
     method: "POST",
     token,
     body: data,
   });
+  return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function getPlatformSmsGlobalSetting(token: string) {
@@ -21502,6 +21503,27 @@ export async function getPlatformSmsGlobalSetting(token: string) {
     token,
   });
   return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export type SmsGatewaySettings = {
+  enabled: boolean; endpoint: string; username: string; shortcode: string; channel: string;
+  approved_endpoints: string[]; password_configured: boolean; password_storage_ready: boolean;
+  source: "platform" | "installation";
+};
+
+export async function getSmsGateway(token: string) {
+  const payload = await adminRequest<unknown>("/api/sms/platform/gateway", { token });
+  return (normalizeSingle(payload) ?? asRecord(payload)) as SmsGatewaySettings;
+}
+
+export async function saveSmsGateway(token: string, body: AdminRecord) {
+  const payload = await adminRequest<unknown>("/api/sms/platform/gateway", { method: "PATCH", token, body });
+  return (normalizeSingle(payload) ?? asRecord(payload)) as SmsGatewaySettings;
+}
+
+export async function getMailRouting(token: string, platform: boolean) {
+  const payload = await adminRequest<unknown>(platform ? "/api/notifications/platform/mail-routing" : "/api/notifications/mail-routing", {token});
+  return (normalizeSingle(payload) ?? asRecord(payload)) as {mode: "redirected" | "normal" | "blocked"; environment: string; test_recipient_count: number};
 }
 
 export async function updatePlatformSmsGlobalSetting(

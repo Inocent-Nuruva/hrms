@@ -1,60 +1,12 @@
 import { expect, test, type Page } from "@playwright/test"
-import { DASHBOARD_AUTH_COOKIE } from "../src/lib/dashboard-permissions"
+import { installDashboardFixture } from "./helpers/dashboard-fixture"
 
 async function workspace(
   page: Page,
   scope: "platform" | "company",
   grants: string[]
 ) {
-  const platform = scope === "platform"
-  const user = {
-    id: 31,
-    fullName: "Directory tester",
-    email: "directory@example.test",
-    scope,
-    userType: platform ? "OWNER" : "COMPANY_USER",
-    roles: platform
-      ? [
-          grants.includes("companies:delete")
-            ? "SUPER_ADMIN"
-            : "PLATFORM_ADMINISTRATOR",
-        ]
-      : ["HR"],
-    permissions: platform
-      ? grants
-      : ["data_scope:company", "company_dashboard:read", ...grants],
-    ...(platform ? {} : { companyId: 17, companyMembershipId: 33 }),
-    dashboardType: "admin",
-    accessContextResolved: true,
-  }
-  const token = `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({ ...user, sub: user.id, exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url")}.fixture`
-  await page.context().addCookies([
-    {
-      name: DASHBOARD_AUTH_COOKIE,
-      value: "1",
-      url: test.info().project.use.baseURL!,
-    },
-  ])
-  await page.addInitScript(
-    ({ user, token }) => {
-      localStorage.setItem(
-        "hrms.auth.session.v1",
-        JSON.stringify({
-          tokens: { accessToken: token, refreshToken: "fixture" },
-          user,
-          credentialVersion: "directory-test",
-        })
-      )
-      localStorage.setItem("hrms.admin.accessToken", token)
-      localStorage.setItem("ess.auth.user", JSON.stringify(user))
-      sessionStorage.setItem(
-        "hrms.dashboard.actorPermissions",
-        JSON.stringify(user.permissions)
-      )
-    },
-    { user, token }
-  )
-
+  const user = await installDashboardFixture(page, scope, grants)
   let bank: {
     id: number
     name: string

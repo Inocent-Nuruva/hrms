@@ -1,5 +1,6 @@
 "use client"
 
+import { MailRoutingNotice } from "@/components/dashboard/mail-routing-notice"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { Textarea } from "@/components/ui/textarea"
@@ -2597,6 +2598,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         </div>
       </div>
 
+      {smtpOnly && <MailRoutingNotice />}
       {!smtpOnly ? (
         <div className="flex flex-wrap items-center gap-1 border-b border-border/80">
         {TABS.filter((entry) => entry.id !== "smtp").map((entry) => {

@@ -2,6 +2,7 @@
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
+import { SmsGatewaySettingsPanel } from "@/components/dashboard/sms-gateway-settings"
 import { Textarea } from "@/components/ui/textarea"
 import { RefreshCwIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
@@ -92,7 +93,7 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
   const leaveIfForbidden = useLeaveIfForbidden()
   useForbiddenRouteGuard(canAccess)
   const hasPlatformAccess =
-    actor.ready && canPerformPermission(actor.permissionLabels, COMPANY_MANAGEMENT_ROUTE_PERMISSION)
+    actor.ready && actor.scope === "platform" && canPerformPermission(actor.permissionLabels, COMPANY_MANAGEMENT_ROUTE_PERMISSION)
   const canUpdateSettings =
     actor.ready && canPerformPermission(actor.permissionLabels, SMS_SETTINGS_UPDATE_PERMISSION)
   const canRetryLogs =
@@ -217,7 +218,7 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
         setPlatformGlobal({ ...current, isEnabled: next, is_enabled: next })
       } else {
         await updateSmsGlobalSetting(token, { is_enabled: next })
-        setGlobal({ ...current, isEnabled: next, is_enabled: next })
+        setGlobal(await getSmsGlobalSetting(token))
       }
       toast.success(next ? "SMS enabled." : "SMS disabled.")
     } catch (errorObject) {
@@ -258,10 +259,11 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
         if (!recipientPhone || !form.message) {
           throw new Error("Enter a country code, 9-digit phone number, and message.")
         }
-        await sendTestSms(token, {
+        const result = await sendTestSms(token, {
           recipient_phone: recipientPhone,
           message: form.message,
         })
+        if (!["SENT", "DELIVERED"].includes(readString(result, ["delivery_status"]))) throw new Error(readString(result, ["error"], "The test SMS was not sent."))
       } else {
         if (!form.code) throw new Error("Registry code is missing.")
         const payload = {
@@ -272,7 +274,7 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
         if (form.platform === "true") await updatePlatformSmsRegistryItem(token, form.code, payload)
         else await updateSmsRegistryItem(token, form.code, payload)
       }
-      toast.success("Saved.")
+      toast.success(createMode === "test" ? "Test SMS sent." : "Registry item saved.")
       setCreateOpen(false)
       await load()
     } catch (errorObject) {
@@ -305,7 +307,7 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
                         code: registryCode(row),
                         sms_template: readString(row, ["smsTemplate", "sms_template"]),
                         description: readString(row, ["description"]),
-                        is_enabled: settingEnabled(row) ? "true" : "false",
+                        is_enabled: (typeof row.companyEnabled === "boolean" ? row.companyEnabled : settingEnabled(row)) ? "true" : "false",
                         platform: activeTab === "platform" ? "true" : "false",
                       })
                       setCreateOpen(true)
@@ -396,8 +398,9 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h2 className="text-sm font-semibold">Global setting</h2>
+                <h2 className="text-sm font-semibold">Company SMS settings</h2>
                 <p className="text-sm text-muted-foreground">{readString(global, ["description"], "Turns company SMS notifications on or off.")}</p>
+                {global && <p className="text-sm">Platform SMS is {global.platformEnabled ? "on" : "off"}. Company SMS is {settingEnabled(global) ? "on" : "off"}. {global.effectiveEnabled ? "Both switches allow delivery." : "Both switches must be on for this company to send SMS."}</p>}
               </div>
               {canUpdateSettings ? (
                 <button type="button" className={actionButtonClass} disabled={!global || busyId === "global"} onClick={() => void toggleGlobal(false)}>
@@ -457,6 +460,8 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
           </div>
         </div>
       ) : null}
+
+      {activeTab === "platform" && platformKind === "global" && hasPlatformAccess && canAccess && <SmsGatewaySettingsPanel canEdit={canUpdateSettings} />}
 
       {showTable ? (
         <div className="space-y-3">

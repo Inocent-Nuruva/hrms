@@ -56,7 +56,9 @@ import {
 import { DEFAULT_NOTIFICATION_QUERY, useNotifications } from "@/lib/notifications-store"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import { decodeJwtPayload } from "@/lib/dashboard-permissions"
+import { MailRoutingNotice } from "@/components/dashboard/mail-routing-notice"
+import { NotificationSettingsEditor } from "@/components/dashboard/notification-settings-editor"
+import { canPerformPermission, decodeJwtPayload } from "@/lib/dashboard-permissions"
 import { Badge } from "@/components/ui/badge"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
@@ -598,6 +600,7 @@ export function NotificationsView() {
   const [markingAllRead, setMarkingAllRead] = React.useState(false)
   const [sendingTestNotification, setSendingTestNotification] = React.useState(false)
   const loadRequestIdRef = React.useRef(0)
+  const canEditConfiguration = actor.ready && actor.scope === "company" && canPerformPermission(actor.permissionLabels, "notifications:settings-update")
   const isPlatformAdmin = actor.scope === "platform"
   const availableTabs = React.useMemo(
     () =>
@@ -1885,7 +1888,7 @@ export function NotificationsView() {
                 >
                   View
                 </button>
-                <button
+                {canEditConfiguration && <button
                   type="button"
                   className="admin-table-icon-button"
                   title={templateEnabled(row) ? "Deactivate" : "Activate"}
@@ -1898,7 +1901,7 @@ export function NotificationsView() {
                   ) : (
                     <ToggleLeftIcon className="h-3.5 w-3.5" />
                   )}
-                </button>
+                </button>}
               </div>
             )
           },
@@ -1970,7 +1973,7 @@ export function NotificationsView() {
                 >
                   View
                 </button>
-                <button
+                {canEditConfiguration && <button
                   type="button"
                   className="admin-table-icon-button"
                   title={ruleEnabled(row) ? "Disable" : "Enable"}
@@ -1983,7 +1986,7 @@ export function NotificationsView() {
                   ) : (
                     <ToggleLeftIcon className="h-3.5 w-3.5" />
                   )}
-                </button>
+                </button>}
               </div>
             )
           },
@@ -2085,6 +2088,7 @@ export function NotificationsView() {
     handleMarkRead,
     handleRetryPlatformMailLog,
     handleRetryMailLog,
+    canEditConfiguration,
     handleToggleTemplate,
     handleToggleRule,
     handleTogglePlatformChannelSetting,
@@ -2122,6 +2126,7 @@ export function NotificationsView() {
 
   return (
     <div className="w-full space-y-3">
+      {(tab === "mail-logs" || tab === "platform-mail-logs" || tab === "settings") && <MailRoutingNotice key={tab} platform={tab === "platform-mail-logs"} />}
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -2663,7 +2668,11 @@ export function NotificationsView() {
 
                 {tab === "templates" ? (
                   <>
-                    <div className="flex flex-wrap gap-2">
+                    {canEditConfiguration && <div className="flex flex-wrap gap-2">
+                      {readTemplateId(selectedRow) !== null && <NotificationSettingsEditor kind="template" key={selectedKey} id={readTemplateId(selectedRow)!} row={selectedRow} onSaved={updated => {
+                          updateRow("templates", selectedKey, updated)
+                          toast.success("Notification template saved.")
+                        }} />}
                       <button
                         type="button"
                         className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium disabled:opacity-60"
@@ -2673,7 +2682,7 @@ export function NotificationsView() {
                         {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <ToggleLeftIcon className="size-3.5" />}
                         {templateEnabled(selectedRow) ? "Deactivate template" : "Activate template"}
                       </button>
-                    </div>
+                    </div>}
                     {renderSummaryCards([
                       ["Code", readTemplateCode(selectedRow) || "—"],
                       ["Status", templateStatusLabel(selectedRow)],
@@ -2712,7 +2721,11 @@ export function NotificationsView() {
 
                 {tab === "rules" ? (
                   <>
-                    <div className="flex flex-wrap gap-2">
+                    {canEditConfiguration && <div className="flex flex-wrap gap-2">
+                      {readRuleId(selectedRow) !== null && <NotificationSettingsEditor kind="rule" key={selectedKey} id={readRuleId(selectedRow)!} row={selectedRow} onSaved={updated => {
+                          updateRow("rules", selectedKey, updated)
+                          toast.success("Notification rule saved.")
+                        }} />}
                       <button
                         type="button"
                         className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium disabled:opacity-60"
@@ -2722,7 +2735,7 @@ export function NotificationsView() {
                         {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <ToggleLeftIcon className="size-3.5" />}
                         {ruleEnabled(selectedRow) ? "Disable rule" : "Enable rule"}
                       </button>
-                    </div>
+                    </div>}
                     {renderSummaryCards([
                       ["Status", ruleStatusLabel(selectedRow)],
                       ["Type", formatLabel(readRuleType(selectedRow))],
