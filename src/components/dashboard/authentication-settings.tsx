@@ -133,7 +133,7 @@ function Policy({ token }: { token: string }) {
                   min={limits[k][1]}
                   max={limits[k][2]}
                   step={1}
-                  value={Number.isNaN(policy[k]) ? "" : policy[k]}
+                  value={Number.isNaN(policy[k]) ? "" : String(policy[k])}
                   onChange={(e) => {
                     setDraft({ ...policy, [k]: e.target.valueAsNumber });
                     setSaved(false);
