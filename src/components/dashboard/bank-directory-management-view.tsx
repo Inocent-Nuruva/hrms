@@ -266,14 +266,14 @@ function CompanyBankDirectory() {
       )}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {banks.map((bank) => {
-          const logo = bankLogo(bank)
+          const logo = resolveBackendMediaUrl(bankLogo(bank))
           return (
             <Card key={String(bank.id)} className="!gap-3 !p-4">
               <div className="flex items-center gap-3">
                 {logo ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={resolveBackendMediaUrl(logo)}
+                    src={logo}
                     alt=""
                     className="size-10 object-contain"
                   />
