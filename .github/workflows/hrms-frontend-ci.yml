@@ -7,6 +7,7 @@ on:
       - "src/**"
       - "e2e/onboarding-workspace.spec.ts"
       - "e2e/probation-access.spec.ts"
+      - "e2e/company-directory.spec.ts"
       - "playwright.config.ts"
       - "public/**"
       - "deploy/hrms-frontend/**"
@@ -156,7 +157,7 @@ jobs:
           npm run build
           cp -r public .next/standalone/
           cp -r .next/static .next/standalone/.next/
-      - run: npx playwright test e2e/onboarding-workspace.spec.ts e2e/forms-feedback.spec.ts e2e/public.spec.ts e2e/auth-session-policy.spec.ts e2e/probation-access.spec.ts
+      - run: npx playwright test e2e/onboarding-workspace.spec.ts e2e/forms-feedback.spec.ts e2e/public.spec.ts e2e/auth-session-policy.spec.ts e2e/probation-access.spec.ts e2e/company-directory.spec.ts
       - name: Upload browser failure evidence
         if: failure()
         uses: actions/upload-artifact@v4

@@ -13108,6 +13108,10 @@ export async function suspendCompany(token: string, id: string | number) {
   });
 }
 
+export function deleteCompany(token: string, id: number) {
+  return adminRequest<unknown>(`/api/companies/${id}`, { method: "DELETE", token });
+}
+
 export async function getCurrentCompanyOnboardingStatus(token: string) {
   const payload = await adminRequest<unknown>(
     "/api/companies/current/onboarding-status",
@@ -16772,19 +16776,28 @@ export async function createMyEmployeeSectionItem(
   });
 }
 
-export async function listCompanyBanks(token: string) {
-  const payload = await adminRequest<unknown>("/api/employees/bank-directory", {
+export async function listCompanyBanks(token: string, management = false) {
+  const path = "/api/employees/bank-directory" + (management ? "/management" : "");
+  const payload = await adminRequest<unknown>(path, {
     token,
   });
   return normalizeList(payload);
 }
 
 export async function createCompanyBank(token: string, data: AdminRecord) {
-  return adminRequest<unknown>("/api/employees/bank-directory", {
+  return adminRequest<AdminRecord>("/api/employees/bank-directory", {
     method: "POST",
     token,
     body: data,
   });
+}
+
+export function updateCompanyBank(token: string, id: number, data: AdminRecord) {
+  return adminRequest<AdminRecord>(`/api/employees/bank-directory/${id}`, { method: "PATCH", token, body: data });
+}
+
+export function deleteCompanyBank(token: string, id: number) {
+  return adminRequest<unknown>(`/api/employees/bank-directory/${id}`, { method: "DELETE", token });
 }
 
 export async function uploadCompanyBankLogo(
@@ -16794,7 +16807,7 @@ export async function uploadCompanyBankLogo(
 ) {
   const form = new FormData();
   form.append("file", file);
-  return adminRequest<unknown>(`/api/employees/bank-directory/${bankId}/logo`, {
+  return adminRequest<AdminRecord>(`/api/employees/bank-directory/${bankId}/logo`, {
     method: "POST",
     token,
     body: form,

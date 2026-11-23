@@ -28,6 +28,7 @@ import {
   assignRoleToCurrentCompanyUser,
   createCompany,
   createCurrentCompanyUser,
+  deleteCompany,
   deleteCurrentCompanyUser,
   getCompanyById,
   getCompanyModules,
@@ -577,7 +578,7 @@ export function CompaniesView() {
   });
   const [pendingStatusChange, setPendingStatusChange] = React.useState<{
     company: AdminRecord;
-    nextAction: "activate" | "suspend";
+    nextAction: "activate" | "suspend" | "delete";
   } | null>(null);
   const [showCreateCompany, setShowCreateCompany] = React.useState(false);
   const [createCompanyForm, setCreateCompanyForm] =
@@ -617,17 +618,13 @@ export function CompaniesView() {
   const canUpdateCompanies =
     permissionsReady &&
     isPlatformScope &&
-    canPerformPermission(actorPermissions, {
-      permissions: ["companies:update", "companies:update"],
-      mode: "any",
-    });
+    canPerformPermission(actorPermissions, "companies:update");
   const canCreateCompanies =
     permissionsReady &&
     isPlatformScope &&
-    canPerformPermission(actorPermissions, {
-      permissions: ["companies:create", "companies:create"],
-      mode: "any",
-    });
+    canPerformPermission(actorPermissions, "companies:create");
+  const canDeleteCompanies = permissionsReady && isPlatformScope &&
+    canPerformPermission(actorPermissions, "companies:delete");
   const canManageCompanyUsers =
     permissionsReady &&
     (canPerformPermission(actorPermissions, "company_users:create") ||
@@ -1046,6 +1043,13 @@ export function CompaniesView() {
                 )}
               </button>
             ) : null}
+            {canDeleteCompanies && (
+              <button type="button" className="admin-table-icon-button" data-variant="danger"
+                aria-label="Delete company" title="Delete company"
+                onClick={() => setPendingStatusChange({ company: row, nextAction: "delete" })}>
+                <Trash2 className="size-4" />
+              </button>
+            )}
           </div>
         );
       },
@@ -1347,7 +1351,10 @@ export function CompaniesView() {
     setSaving(true);
     setError(null);
     try {
-      if (pendingStatusChange.nextAction === "activate") {
+      if (pendingStatusChange.nextAction === "delete") {
+        await deleteCompany(token, companyId);
+        setSuccessMessage("Company deleted.");
+      } else if (pendingStatusChange.nextAction === "activate") {
         await activateCompany(token, companyId);
       } else {
         await suspendCompany(token, companyId);
@@ -2132,7 +2139,7 @@ export function CompaniesView() {
       <AlertDialog
         open={Boolean(pendingStatusChange)}
         onOpenChange={(open) => {
-          if (!open) {
+          if (!open && !saving) {
             setPendingStatusChange(null);
           }
         }}
@@ -2140,18 +2147,20 @@ export function CompaniesView() {
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {pendingStatusChange?.nextAction === "activate"
+              {pendingStatusChange?.nextAction === "delete" ? "Delete company?" : pendingStatusChange?.nextAction === "activate"
                 ? "Activate company?"
                 : "Suspend company?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {pendingStatusChange?.nextAction === "activate"
+              {pendingStatusChange?.nextAction === "delete"
+                ? `Delete ${companyName(pendingStatusChange.company)} and end its users’ access? Employee, payroll and audit records are retained. This company cannot be reactivated.`
+                : pendingStatusChange?.nextAction === "activate"
                 ? `Activate ${pendingStatusChange ? companyName(pendingStatusChange.company) : "this company"} so it can operate normally again.`
                 : `Suspend ${pendingStatusChange ? companyName(pendingStatusChange.company) : "this company"}.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
             <button
               type="button"
               disabled={saving || !pendingStatusChange}
@@ -2160,6 +2169,7 @@ export function CompaniesView() {
             >
               {saving
                 ? "Working..."
+                : pendingStatusChange?.nextAction === "delete" ? "Delete company"
                 : pendingStatusChange?.nextAction === "activate"
                   ? "Activate"
                   : "Suspend"}
