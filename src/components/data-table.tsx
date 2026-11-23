@@ -457,6 +457,17 @@ function isSystemGenerated(record: AdminRecord) {
   return value === true;
 }
 
+/** System roles with no company are platform roles; company admins can't edit them. */
+function isLockedSystemRole(record: AdminRecord) {
+  if (!isSystemGenerated(record)) return false;
+  const companyId = record.company_id ?? record.companyId;
+  return companyId === null || companyId === undefined;
+}
+
+function isProtectedCompanyAdminRole(record: AdminRecord) {
+  return isSystemGenerated(record) && record.name === "COMPANY_ADMIN";
+}
+
 function asRecordValue(value: unknown): AdminRecord | null {
   return typeof value === "object" && value !== null
     ? (value as AdminRecord)
@@ -1045,7 +1056,10 @@ export function DataTable({
     React.useState<CompanyForm>(EMPTY_COMPANY_FORM);
   const [editingEntity, setEditingEntity] = React.useState<{
     resource: EntityResource;
+    /** Platform-level system role: read-only for company admins. */
     systemRole: boolean;
+    /** Built-in (seeded) role: editable, but its internal key is fixed. */
+    builtInRole: boolean;
     id: string | number;
     label: string;
   } | null>(null);
@@ -1222,7 +1236,8 @@ export function DataTable({
       rolePermissionsDraftDirtyRef.current = false;
       setEditingEntity({
         resource: activeResource,
-        systemRole: activeResource === "roles" && isSystemGenerated(row),
+        systemRole: activeResource === "roles" && isLockedSystemRole(row),
+        builtInRole: activeResource === "roles" && isSystemGenerated(row),
         id: rowId,
         label: rowLabel,
       });
@@ -1589,7 +1604,7 @@ export function DataTable({
             >
               <FluentCopyIcon className="size-4" aria-hidden="true" />
             </button>
-            {isEditableResource(activeResource) && canDeleteResource && !(activeResource === "roles" && isSystemGenerated(row.__source)) ? (
+            {isEditableResource(activeResource) && canDeleteResource && !(activeResource === "roles" && (isLockedSystemRole(row.__source) || isProtectedCompanyAdminRole(row.__source))) ? (
               <button
                 type="button"
                 className="inline-flex size-8 items-center justify-center rounded-md text-rose-600 transition-colors hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -3902,6 +3917,12 @@ export function DataTable({
                             ...prev,
                             name: event.target.value,
                           }))
+                        }
+                        disabled={!!editingEntity?.builtInRole}
+                        title={
+                          editingEntity?.builtInRole
+                            ? "The key of a built-in role cannot be changed"
+                            : undefined
                         }
                         className="font-mono text-sm"
                       />
