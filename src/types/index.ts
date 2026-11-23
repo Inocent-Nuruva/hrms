@@ -13,6 +13,7 @@ export interface AuthUser {
   dashboardType?: DashboardType;
   companyId?: number;
   companyName?: string;
+  availableCompanies?: { id: number; name: string }[];
   requiresPasswordChange?: boolean;
   permissions?: string[];
   /** True when the API response explicitly included roles/permissions for this session. */
@@ -105,6 +106,7 @@ export interface AuthSessionRecord {
 
 export interface AuthSwitchCompanyResponse {
   accessToken: string;
+  user?: AuthUser;
   refreshToken?: string;
   scope?: AuthScope;
   dashboardType?: DashboardType;

@@ -25,6 +25,7 @@ export const AuthUserSchema = z
     dashboardType: z.enum(["admin", "employee"]).optional(),
     companyId: z.number().int().positive().optional(),
     companyName: z.string().optional(),
+    availableCompanies: z.array(z.object({ id: z.number().int().positive(), name: z.string() })).optional(),
     requiresPasswordChange: z.boolean().optional(),
     permissions: z.array(z.string()).optional(),
     accessContextResolved: z.boolean().optional(),

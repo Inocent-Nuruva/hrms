@@ -6,6 +6,8 @@ In a company workspace, open **Access Control → Users** with `users:read`. Boo
 
 HRMS combines the current company's role assignments and direct permissions. A protected employee operation requires the action and a scope covering that employee. Changes take effect on the next protected API request. Switching company loads that company's membership and grants. The seed appendix shows the permissions assigned to each default role. [Default role grants](default-role-grants.md)
 
+If you have several active company memberships, open the account menu and select a company under **Switch company**. The dashboard reloads in that workspace.
+
 ## Probation
 
 1. Open **Probation → Policies → New policy**. Set the period, score, effective dates, priority and target branch, department, position or grade. Leave a target at **Any** for a broader match. Specificity takes precedence over priority. For equal matches at the same priority, the default policy takes precedence, followed by the newest policy ID.

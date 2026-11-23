@@ -17,7 +17,7 @@ const user = {
   ],
   accessContextResolved: true,
 };
-function token(seconds: number) {
+function token(seconds: number, companyId = 1) {
   const b64 = (data: unknown) =>
     Buffer.from(JSON.stringify(data)).toString("base64url");
   return (
@@ -25,7 +25,7 @@ function token(seconds: number) {
     "." +
     b64({
       sub: 7,
-      companyId: 1,
+      companyId,
       scope: "company",
       userType: "COMPANY_USER",
       sessionId: sid,
@@ -38,6 +38,7 @@ async function signedIn(
   context: BrowserContext,
   baseURL: string,
   seconds: number,
+  account: typeof user & { availableCompanies?: { id: number; name: string }[] } = user,
 ) {
   const access = token(seconds);
   await context.addCookies([
@@ -61,7 +62,7 @@ async function signedIn(
         localStorage.setItem("hrms.admin.accessToken", access);
       }
     },
-    { access, user },
+    { access, user: account },
   );
 }
 function deadlines(idle: number) {
@@ -79,6 +80,35 @@ function deadlines(idle: number) {
     max_sessions: 2,
   };
 }
+
+test("switches to a second membership from the account menu and loads its grants", async ({ page, context, baseURL }) => {
+  const companies = [{id:1,name:"West office"},{id:2,name:"East office"}]
+  const first = {...user,availableCompanies:companies}
+  const second = {...first,companyId:2,dashboardType:"employee",roles:["EMPLOYEE"],permissions:["data_scope:self"]}
+  let switched = false
+  await signedIn(context,baseURL!,3600,first)
+  await context.route("**/api/**",async route => {
+    const path = new URL(route.request().url()).pathname
+    if (path === "/api/auth/switch-company") {
+      expect(route.request().postDataJSON()).toEqual({company_id:2})
+      switched = true
+      return route.fulfill({json:{scope:"company",dashboard_type:"employee",company:companies[1],
+        companies:companies.map(c=>({companyId:c.id,companyName:c.name})),user:second,
+        access_token:token(3600,2),refresh_token:"second-refresh"}})
+    }
+    if (["/api/auth/session","/api/users/me","/api/auth/me"].includes(path))
+      return route.fulfill({json:switched?second:first})
+    if (path === "/api/auth/session-policy") return route.fulfill({json:deadlines(300000)})
+    return route.fulfill({json:{data:[]}})
+  })
+  await page.goto("/dashboard/settings")
+  await page.getByRole("button",{name:/account menu/i}).click()
+  await expect(page.getByRole("menuitem",{name:"West office (current)"})).toBeDisabled()
+  await page.getByRole("menuitem",{name:"East office"}).click()
+  await expect.poll(()=>switched).toBe(true)
+  await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem("hrms.auth.session.v1")||"{}").user))
+    .toMatchObject({companyId:2,roles:["EMPLOYEE"],permissions:["data_scope:self"]})
+})
 
 test("linked company sign-in returns to HRMS for two-factor verification", async ({
   page,

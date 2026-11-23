@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+import { toast } from "@/components/ui/fluent-toast-store"
 import {
   ArrowExit16Regular,
   PersonCircle16Regular,
@@ -77,8 +78,10 @@ export function HeaderUserMenu({
   accountHref?: string
 }) {
   const router = useRouter()
-  const { logout } = useAuth()
+  const { logout, switchCompany, user: signedInUser } = useAuth()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [isSwitching, setIsSwitching] = useState(false)
+  const companies = signedInUser?.scope === "company" ? signedInUser.availableCompanies ?? [] : []
   const { url: liveProfilePhotoUrl, revision: photoRevision } = useMyProfilePhoto()
   const [storeTick, setStoreTick] = useState(0)
 
@@ -112,6 +115,18 @@ export function HeaderUserMenu({
     router.replace(ROUTES.login)
   }
 
+  const enterCompany = async (id: number) => {
+    if (isSwitching || id === signedInUser?.companyId) return
+    setIsSwitching(true)
+    try {
+      await switchCompany(id)
+      window.location.replace("/dashboard")
+    } catch (error) {
+      setIsSwitching(false)
+      toast.error(error instanceof Error ? error.message : "Could not switch company.")
+    }
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -139,6 +154,19 @@ export function HeaderUserMenu({
             </div>
           </DropdownMenuLabel>
         </DropdownMenuGroup>
+        {companies.length > 1 ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Switch company</DropdownMenuLabel>
+              {companies.map(company => (
+                <DropdownMenuItem key={company.id} disabled={isSwitching || company.id === signedInUser?.companyId} onClick={() => void enterCompany(company.id)}>
+                  {company.name}{company.id === signedInUser?.companyId ? " (current)" : ""}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+          </>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuItem onClick={() => router.push(accountHref)}>

@@ -293,24 +293,28 @@ export function useAuth() {
         "Session changed during company switch.",
         "AbortError",
       );
+    let nextUser = response.user;
+    if (!nextUser && latest.user) {
+      const selectedCompany = latest.user.availableCompanies?.find(company => company.id === companyId);
+      nextUser = {
+        ...latest.user,
+        companyId: response.companyId ?? companyId,
+        companyName: response.companyName ?? selectedCompany?.name,
+        employeeId: undefined,
+        role: undefined,
+        roles: undefined,
+        permissions: undefined,
+        dashboardType: response.dashboardType,
+        scope: response.scope,
+        accessContextResolved: false,
+      };
+    }
     saveSession(
       {
         accessToken: response.accessToken,
         refreshToken: response.refreshToken ?? current.tokens.refreshToken,
       },
-      latest.user
-        ? {
-            ...latest.user,
-            companyId: response.companyId ?? latest.user.companyId,
-            companyName: response.companyName ?? latest.user.companyName,
-            // Dashboard type is company-membership specific. Never retain the
-            // previous company's shell while the refreshed /users/me loads.
-            dashboardType: response.dashboardType,
-            scope: response.scope,
-            permissions: undefined,
-            accessContextResolved: false,
-          }
-        : undefined,
+      nextUser,
       response.dashboardType,
       response.scope,
     );

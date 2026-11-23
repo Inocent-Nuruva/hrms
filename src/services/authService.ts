@@ -376,6 +376,14 @@ function normalizeUser(payload: unknown): AuthUser | undefined {
   const rootCompanies = asRecordArray(root?.companies);
   const rootDataCompanies = asRecordArray(rootData?.companies);
   const rootResultCompanies = asRecordArray(rootResult?.companies);
+  const memberships = [...rootCompanies, ...rootDataCompanies, ...rootResultCompanies];
+  const availableCompanies = new Map<number, string>();
+  for (const membership of memberships) {
+    const companyId = readNumber(membership, ["companyId", "company_id", "id"]);
+    const companyName = readString(membership, ["companyName", "company_name", "name"]);
+    if (companyId && Number.isSafeInteger(companyId) && companyId > 0 && companyName)
+      availableCompanies.set(companyId, companyName);
+  }
   const userCandidates = [
     asRecord(root?.user),
     asRecord(rootData?.user),
@@ -401,18 +409,19 @@ function normalizeUser(payload: unknown): AuthUser | undefined {
       asRecord(rootData?.active_company),
       asRecord(rootResult?.company),
       asRecord(rootResult?.active_company),
-      rootCompanies[0] ?? null,
-      rootDataCompanies[0] ?? null,
-      rootResultCompanies[0] ?? null,
     ];
+    const activeCompanyId = readNumber(candidate, ["companyId", "company_id"]) ??
+      companyCandidates.map(entry => readNumber(entry, ["companyId", "company_id", "id"])).find(Boolean);
+    const activeMembership = activeCompanyId
+      ? memberships.find(entry => readNumber(entry, ["companyId", "company_id", "id"]) === activeCompanyId)
+      : memberships.length === 1 ? memberships[0] : undefined;
+    companyCandidates.push(activeMembership ?? null);
     const membershipCandidates = [
       asRecord(candidate.active_company_membership),
       asRecord(root?.active_company_membership),
       asRecord(rootData?.active_company_membership),
       asRecord(rootResult?.active_company_membership),
-      rootCompanies[0] ?? null,
-      rootDataCompanies[0] ?? null,
-      rootResultCompanies[0] ?? null,
+      activeMembership ?? null,
     ];
     const fullNameParts = [readString(candidate, ["first_name", "firstName"]), readString(candidate, ["last_name", "lastName"])]
       .filter(Boolean)
@@ -473,6 +482,7 @@ function normalizeUser(payload: unknown): AuthUser | undefined {
         companyName:
           readString(candidate, ["companyName", "company_name", "organization_name"]) ??
           readString(resolvedCompanyRecord, ["companyName", "company_name", "name", "display_name"]),
+        ...(availableCompanies.size ? { availableCompanies: Array.from(availableCompanies, ([id, name]) => ({ id, name })) } : {}),
         permissions: readPermissionLabelsFromUnknown(candidate, root, rootData, rootResult),
         accessContextResolved: hasExplicitAccessContext(payload),
       };
@@ -601,6 +611,7 @@ function normalizeVerifyOtpResponse(payload: unknown): VerifyOtpResponse {
 
 function normalizeSwitchCompanyResponse(payload: unknown): AuthSwitchCompanyResponse {
   const root = asRecord(payload);
+  const user = normalizeUser(payload);
   const rootData = asRecord(root?.data);
   const accessToken =
     readString(root, ["access_token", "accessToken", "token"]) ??
@@ -620,6 +631,7 @@ function normalizeSwitchCompanyResponse(payload: unknown): AuthSwitchCompanyResp
   return {
     accessToken,
     ...(refreshToken ? { refreshToken } : {}),
+    ...(user ? { user } : {}),
     scope: readAuthScope(payload) ?? readAuthScope(tokenPayload),
     dashboardType: readDashboardType(payload) ?? readDashboardType(tokenPayload),
     companyId:

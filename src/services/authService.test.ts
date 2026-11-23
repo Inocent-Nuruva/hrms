@@ -275,6 +275,21 @@ describe("authService foundation helpers", () => {
     })
   })
 
+  it("uses only the selected company's employee and grants when the default membership comes first", async () => {
+    const companies = [
+      { companyId: 1, companyName: "West", employeeId: 99, permissions: ["users:read"] },
+      { companyId: 2, companyName: "East", employeeId: 45, permissions: ["data_scope:self"] },
+    ]
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
+      access_token: "next-access-token", refresh_token: "next-refresh-token", scope: "company", dashboard_type: "employee",
+      company: { id: 2, name: "East" }, companies,
+      user: { id: 7, email: "member@example.test", first_name: "Member", roles: ["EMPLOYEE"], permissions: ["data_scope:self"] },
+    })))
+    const response = await authService.switchCompany("access-token", 2)
+    expect(response.user).toMatchObject({ companyId: 2, companyName: "East", employeeId: "45", permissions: ["data_scope:self"],
+      availableCompanies: [{id:1,name:"West"},{id:2,name:"East"}] })
+  })
+
   it("reads omitted switch context fields from the refreshed JWT", async () => {
     const encoded = btoa(
       JSON.stringify({
