@@ -106,10 +106,15 @@ test("switches to a second membership from the account menu and loads its grants
   await page.goto("/dashboard/settings")
   await page.getByRole("button",{name:/account menu/i}).click()
   await expect(page.getByRole("menuitem",{name:"West office (current)"})).toBeDisabled()
-  await page.getByRole("menuitem",{name:"East office"}).click()
-  await expect.poll(()=>switched).toBe(true)
-  await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem("hrms.auth.session.v1")||"{}").user))
-    .toMatchObject({companyId:2,roles:["EMPLOYEE"],permissions:["data_scope:self"]})
+  await Promise.all([
+    page.waitForURL(url=>url.pathname === "/dashboard",{waitUntil:"domcontentloaded"}),
+    page.getByRole("menuitem",{name:"East office"}).click(),
+  ])
+  expect(switched).toBe(true)
+  await expect(async () => {
+    const profile=await page.evaluate(()=>JSON.parse(localStorage.getItem("hrms.auth.session.v1")||"{}").user)
+    expect(profile).toMatchObject({companyId:2,roles:["EMPLOYEE"],permissions:["data_scope:self"]})
+  }).toPass({timeout:15000})
 })
 
 test("linked company sign-in returns to HRMS for two-factor verification", async ({
