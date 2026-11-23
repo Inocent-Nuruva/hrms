@@ -58,7 +58,7 @@ for (const [name,width,height] of [["desktop",1366,900],["mobile",390,844]] as c
     await page.getByLabel(/Quality rating/).fill("3")
     await page.getByRole("combobox",{name:"Recommendation"}).click()
     await page.getByRole("option",{name:/further review/i}).click()
-    await page.getByRole("dialog").last().locator("textarea").fill("HR to review the evidence")
+    await page.getByRole("textbox",{name:"Manager review comments"}).fill("HR to review the evidence")
     await page.getByRole("button",{name:"Save",exact:true}).click()
     await expect.poll(()=>saved["/api/probation/cases/42/manager-review"]).toMatchObject({ratings:[{criterion_code:"WORK",rating:3}],recommendation:"FURTHER_REVIEW"})
     await page.goto("/dashboard/probation/letter-templates")

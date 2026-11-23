@@ -74,7 +74,7 @@ export default function ProbationLetterTemplates() {
           </select>
         </label>
         <label className="grid gap-1">Letterhead<Input required maxLength={1000} value={form.letterhead} onChange={e => setForm({ ...form, letterhead:e.target.value })}/></label>
-        <label className="grid gap-1">Letter body<Textarea required rows={8} maxLength={10000} value={form.body} onChange={e => setForm({ ...form, body:e.target.value })}/></label>
+        <label className="grid gap-1">Letter body<Textarea aria-label="Letter body" formatting={false} required rows={8} maxLength={10000} value={form.body} onChange={e => setForm({ ...form, body:e.target.value })}/></label>
         <label className="grid gap-1">Signatory name<Input required maxLength={160} value={form.signatory_name} onChange={e => setForm({ ...form, signatory_name:e.target.value })}/></label>
         <label className="grid gap-1">Signatory title<Input required maxLength={160} value={form.signatory_title} onChange={e => setForm({ ...form, signatory_title:e.target.value })}/></label>
         <Button className="justify-self-start" type="submit">{busy ? "Saving…" : "Save template"}</Button>

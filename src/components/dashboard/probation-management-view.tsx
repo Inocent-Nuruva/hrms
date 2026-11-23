@@ -1715,6 +1715,7 @@ export function ProbationManagementView({
                   </Field>
                   <Field label="Comments">
                     <Textarea
+                      aria-label="Manager review comments"
                       className={textareaClass}
                       value={form.comments ?? ""}
                       onChange={(event) =>

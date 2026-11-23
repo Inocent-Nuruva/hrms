@@ -92,6 +92,7 @@ import {
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
 import { canSeeDashboardPage } from "@/lib/forbidden-routes";
 import { canPerformPermission } from "@/lib/dashboard-permissions";
+import { DeviceReconciliationSettings } from "./device-reconciliation-settings";
 import { cn } from "@/lib/utils";
 import { showErrorAlert } from "@/lib/error-alert";
 import { showSuccessAlert } from "@/lib/success-alert";
@@ -2916,6 +2917,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
 
         {activeTab === "details" ? (
           <div className="space-y-6">
+            {actor.ready && ["access_control_sync:execute","access_groups:update","employee_device_assignments:update","data_scope:company"].every(key=>canPerformPermission(actor.permissionLabels,key)) && <DeviceReconciliationSettings deviceId={deviceId} />}
             {canPreviewSetup ? <section className="space-y-2 rounded-lg border border-slate-200 p-4" aria-label="Device setup overview"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-sm font-semibold">Device setup overview</h3><p className="text-xs text-slate-500">Review linked groups and readiness before making configuration changes.</p></div><button type="button" className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50" onClick={() => void onPreviewSetup()} disabled={setupPreviewLoading}>{setupPreviewLoading ? "Loading…" : "Review setup"}</button></div>{setupPreviewError ? <p className="text-sm text-red-700">{setupPreviewError}</p> : null}{setupPreview && String(setupPreview.device.id) === String(deviceId) ? <><p className="text-sm">Connection: {setupPreview.device.health.status} · Groups: {setupPreview.groups.length} · Employees included: {setupPreview.included_employee_count}</p>{setupPreview.groups.length ? <ul className="space-y-1">{setupPreview.groups.map((group) => <li key={group.id} className="text-sm"><Link className="text-primary underline" href={`/dashboard/access-control/groups/${group.id}`}>{group.name}</Link> — {group.ready ? "ready for group sync" : "needs review"} ({group.included_employee_count} employees){!group.ready ? <ul className="list-disc pl-5 text-xs text-red-700">{group.issues.filter((issue) => issue.severity === "error").map((issue, index) => <li key={`${issue.message}-${index}`}>{issue.message}</li>)}</ul> : null}</li>)}</ul> : <p className="text-sm text-slate-500">No access groups are linked to this device.</p>}<ul className="list-disc space-y-1 pl-5 text-xs text-slate-500">{setupPreview.notes.map((note) => <li key={note}>{note}</li>)}</ul></> : null}</section> : null}
             {/* Properties as a clean 2-col definition list */}
             <dl className="grid gap-x-8 gap-y-0 border-t border-slate-100 sm:grid-cols-2">
