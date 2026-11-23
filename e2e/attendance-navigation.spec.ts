@@ -49,7 +49,7 @@ for (const [layout, width, height] of [["desktop", 1366, 900], ["mobile", 390, 8
     await page.getByText("Example employee", { exact: true }).first().click()
     const detail = page.getByRole("dialog")
     await expect(detail.getByText("Processing exception details", { exact: true })).toBeVisible()
-    await detail.getByPlaceholder("Explain how this exception was resolved or why it is being ignored.").fill("Reviewed test record")
+    await detail.getByRole("textbox", { name: "Resolution note", exact: true }).fill("Reviewed test record")
     const saved = page.waitForRequest(r => r.method() === "PATCH" && r.url().endsWith("/processing/exceptions/71"))
     await detail.getByRole("button", { name: "Save exception status" }).click()
     expect((await saved).postDataJSON()).toMatchObject({ resolution_note: "Reviewed test record" })
