@@ -113,7 +113,7 @@ export function EmployeeStatusHistorySection({ employeeId, token }: { employeeId
     <section aria-label="Status history" className="grid gap-3">
       <div>
         <h3 className="text-base font-semibold">Status History</h3>
-        <p className="text-xs text-muted-foreground">Status changes, activation, suspensions and exits, newest first.</p>
+        <p className="text-xs text-muted-foreground">Employment changes and applied movements, newest first.</p>
       </div>
       {loading && !events.length ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">

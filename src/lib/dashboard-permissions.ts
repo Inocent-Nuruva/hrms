@@ -1011,7 +1011,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/movements/overview": MOVEMENT_ROUTE_PERMISSION,
   "/dashboard/movements/cases": MOVEMENT_ROUTE_PERMISSION,
   "/dashboard/movements/operations": MOVEMENT_OPERATIONS_PERMISSION,
-  "/dashboard/team/movements": MANAGER_ROUTE_PERMISSION,
+  "/dashboard/team/movements": { permissions: ["manager_team:read", "manager_self_service:read", "manager:read"], mode: "any" },
   "/dashboard/sms": SMS_ROUTE_PERMISSION,
   "/dashboard/sms/overview": SMS_ROUTE_PERMISSION,
   "/dashboard/sms/registry": SMS_SETTINGS_READ_PERMISSION,
