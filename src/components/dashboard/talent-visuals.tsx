@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { AdminRecord } from "@/lib/admin-api"
 import { fadeUp, useDashboardMotion } from "@/lib/dashboard-motion"
+import { SharedDashboardHeroBackground } from "@/components/dashboard/welcome-card-background"
 
 export const inputClass =
   "h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background"
@@ -254,46 +255,14 @@ export function HeroBand({
     <motion.div
       className={cn(
         dashboardStyle
-          ? "relative min-w-0 overflow-hidden border-b border-border/70 bg-card px-4 py-4 text-foreground sm:px-5 sm:py-5"
-          : cn(heroPanelClass, pageBleedClass),
+          ? "relative isolate min-w-0 overflow-hidden border-b border-border/70 bg-card px-4 py-4 text-foreground sm:px-5 sm:py-5"
+          : cn(heroPanelClass, pageBleedClass, "isolate border-y border-border bg-card text-foreground"),
       )}
-      style={dashboardStyle ? undefined : { backgroundColor: "var(--primary)" }}
       variants={motionPreset.rise}
       initial="hidden"
       animate="show"
     >
-      {dashboardStyle ? (
-        <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden text-sky-500/60 dark:text-sky-300/50">
-          <span className="absolute left-[29%] top-4 text-xs text-blue-400/60 dark:text-blue-200/45">✧</span>
-          <span className="absolute left-[43%] bottom-3 text-sm">✦</span>
-          <span className="absolute right-[42%] top-3 text-[10px] text-blue-400/60 dark:text-blue-200/45">✧</span>
-          <span className="absolute right-[34%] top-9 text-xs text-blue-400/70 dark:text-blue-200/50">✧</span>
-          <span className="absolute right-[26%] bottom-3 text-[10px] text-sky-400/60 dark:text-sky-200/45">✧</span>
-          <span className="absolute right-[18%] top-3 text-lg">✦</span>
-          <span className="absolute right-[8%] bottom-2 text-sm">✦</span>
-        </div>
-      ) : (
-        <>
-          <TalentDoodleSprites />
-          <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-            <motion.div
-              className="absolute -left-8 top-1/2 h-28 w-44 -translate-y-1/2 bg-white/12"
-              style={{ clipPath: "polygon(0% 18%, 78% 0%, 100% 42%, 22% 100%)" }}
-              animate={motionPreset.reduce ? undefined : { x: [0, 8, 0], y: [0, -6, 0] }}
-              transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-            />
-            <motion.div
-              className="absolute right-[22%] -top-6 h-24 w-36 bg-white/10"
-              style={{ clipPath: "polygon(18% 0%, 100% 22%, 72% 100%, 0% 68%)" }}
-              animate={motionPreset.reduce ? undefined : { x: [0, -6, 0], y: [0, 8, 0] }}
-              transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-            />
-            <div className="absolute inset-y-0 left-0 w-[68%] text-white/35">
-              <TalentDoodle />
-            </div>
-          </div>
-        </>
-      )}
+      <SharedDashboardHeroBackground />
       <div className="relative z-10 flex w-full min-w-0 flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className={cn("min-w-0 flex-1", identityInline && "flex items-start gap-3 sm:gap-4")}>
           {identity ? <div className={identityInline ? "shrink-0 pt-1" : "mb-3"}>{identity}</div> : null}
@@ -301,7 +270,7 @@ export function HeroBand({
             <motion.p
               className={cn(
                 "text-[11px] font-semibold uppercase tracking-[0.18em]",
-                dashboardStyle ? "text-muted-foreground" : "text-white/70",
+                "text-muted-foreground",
               )}
               initial={motionPreset.reduce ? false : { opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
@@ -312,7 +281,7 @@ export function HeroBand({
             <motion.h1
               className={cn(
                 "flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight sm:text-3xl",
-                dashboardStyle ? "text-foreground" : "text-white",
+                "text-foreground",
               )}
               initial={motionPreset.reduce ? false : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -322,7 +291,7 @@ export function HeroBand({
             </motion.h1>
             {description ? (
               <motion.p
-                className={cn("text-sm", dashboardStyle ? "text-muted-foreground" : "text-white/75")}
+                className="text-sm text-muted-foreground"
                 initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.38, delay: 0.12 }}
@@ -336,7 +305,7 @@ export function HeroBand({
           <motion.div
             className={cn(
               "relative z-10 flex flex-wrap gap-2 [&_button.bg-white]:!text-slate-900",
-              dashboardStyle && "[&_a]:!border-border [&_a]:!bg-background [&_a]:!text-foreground [&_a]:hover:!bg-muted [&_button]:!border-border [&_button]:!bg-background [&_button]:!text-foreground [&_button]:hover:!bg-muted",
+              "[&_a]:!border-border [&_a]:!bg-background [&_a]:!text-foreground [&_a]:hover:!bg-muted [&_button]:!border-border [&_button]:!bg-background [&_button]:!text-foreground [&_button]:hover:!bg-muted",
             )}
             initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}

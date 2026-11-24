@@ -1,4 +1,14 @@
+"use client"
+
+import { useDashboardHeroBackground } from "@/hooks/use-dashboard-hero-background"
+
 export type WelcomeBackground = "aurora" | "geometric" | "glow" | "plain"
+
+/** The account's dashboard choice is shared by page heroes and welcome cards. */
+export function SharedDashboardHeroBackground() {
+  const [background] = useDashboardHeroBackground()
+  return <WelcomeCardBackground background={background} />
+}
 
 export function WelcomeCardBackground({ background }: { background: WelcomeBackground }) {
   if (background === "plain") return null

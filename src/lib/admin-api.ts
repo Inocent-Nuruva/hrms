@@ -21386,7 +21386,11 @@ export async function getManagerDashboard(
   token: string,
   params: Record<string, string | number | undefined> = {},
 ) {
-  return getHrDashboard(token, "manager", params);
+  const payload = await adminRequest<unknown>(
+    `/api/manager/dashboard${buildRecordQuery(params)}`,
+    { token },
+  );
+  return unwrapRoleDashboardPayload(payload);
 }
 
 export async function getManagerActivitySummary(

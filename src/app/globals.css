@@ -200,6 +200,19 @@ input:focus {
   background-color: var(--colorNeutralBackground1, #292929);
 }
 
+/* Dialogs share Fluent's neutral surface and keep a straight-edged silhouette,
+ * including legacy role-based dialogs and sheet/drawer variants. */
+.fui-DialogSurface {
+  border: 1px solid var(--colorNeutralStroke2, #e0e0e0) !important;
+  border-radius: 0 !important;
+  background: var(--colorNeutralBackground1, #ffffff) !important;
+  box-shadow: var(--shadow64, 0 0 32px rgba(0, 0, 0, 0.2)) !important;
+}
+
+:where([role="dialog"], [role="alertdialog"], [data-slot="sheet-content"], [data-slot="drawer-content"]) {
+  border-radius: 0 !important;
+}
+
 .fui-DialogSurface[data-size="wide"] {
   max-width: min(96vw, 1100px) !important;
 }
@@ -290,7 +303,7 @@ body[data-app-text-scale="compact"]
     [role="tooltip"],
     [role="status"]
   )
-  :where(*:not(svg):not(path):not(.fui-Switch__indicator)) {
+  :where(*:not(svg):not(path):not(.fui-Switch__indicator):not(.kpi-hero-metric):not(.kpi-hero-emphasis)) {
   font-size: 11px !important;
   line-height: 16px !important;
 }
@@ -1597,7 +1610,7 @@ main.relative.flex table:not(.fui-Table):not([role="grid"]) > tbody > tr > td {
  */
 @media (max-width: 767px) {
   [data-slot="sidebar-wrapper"] {
-    --header-height: calc(var(--spacing) * 18);
+    --header-height: calc(var(--spacing) * 14);
   }
 
   .site-header,

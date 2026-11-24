@@ -30,7 +30,14 @@ export function KpiModeSelector({ title, description, onSelect, guidedLabel, man
   </div>
 }
 
-export function KpiWizardProgress({ steps, step }: { steps: KpiFlowStep[]; step: number }) {
+export function KpiWizardProgress({ steps, step, compact = false }: { steps: KpiFlowStep[]; step: number; compact?: boolean }) {
+  if (compact) return <div className="border-b border-border pb-4" aria-label="Workflow progress">
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+      <div className="min-w-0"><h2 className="font-semibold">{steps[step]?.title}</h2><p className="text-sm" style={{ color: tokens.colorNeutralForeground2 }}>{steps[step]?.description}</p></div>
+      <Badge color="brand">Step {step + 1} of {steps.length}</Badge>
+    </div>
+    <ol className="mt-3 flex gap-2 overflow-x-auto pb-1 text-xs" aria-label="Report steps">{steps.map((item, index) => <li key={`${index}-${item.title}`} aria-current={step === index ? "step" : undefined} className="flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1" style={{ backgroundColor: step === index ? tokens.colorBrandBackground2 : undefined, color: step === index ? tokens.colorBrandForeground1 : tokens.colorNeutralForeground2 }}><span className="font-semibold">{index + 1}.</span>{item.title}</li>)}</ol>
+  </div>
   return <Card appearance="filled-alternative" className="space-y-4 p-4" aria-label="Workflow progress">
     <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-semibold">{steps[step]?.title}</h2><p className="text-sm" style={{ color: tokens.colorNeutralForeground2 }}>{steps[step]?.description}</p></div><Badge color="brand">Step {step + 1} of {steps.length}</Badge></div>
     <ProgressBar value={(step + 1) / steps.length} aria-label={`Step ${step + 1} of ${steps.length}`} />
@@ -47,7 +54,7 @@ export function KpiWizardControls({ step, steps, busy = false, finishDisabled = 
   const [confirmSubmit, setConfirmSubmit] = React.useState(false)
   return <>
     {error && <MessageBar intent="error" role="alert"><MessageBarBody>{error}</MessageBarBody></MessageBar>}
-    <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="flex w-full flex-wrap items-center justify-between gap-2">
       <Button appearance="subtle" disabled={busy} onClick={() => setConfirmDiscard(true)}>Cancel</Button>
       <div className="flex flex-wrap gap-2">{step > 0 && <Button appearance="secondary" disabled={busy} onClick={onBack}>Back</Button>}{step < steps.length - 1 ? <Button appearance="primary" disabled={busy} onClick={onNext}>Continue</Button> : !hideFinish && <Button appearance="primary" disabled={busy || finishDisabled} onClick={() => confirmFinish ? setConfirmSubmit(true) : onFinish()}>{busy ? "Saving…" : finishLabel}</Button>}</div>
     </div>

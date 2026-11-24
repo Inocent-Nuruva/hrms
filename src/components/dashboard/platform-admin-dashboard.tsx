@@ -17,6 +17,7 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { DashboardIdentitySummary } from "@/components/dashboard/dashboard-identity"
+import { SharedDashboardHeroBackground } from "@/components/dashboard/welcome-card-background"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
   listPlatformNotificationChannelSettings,
@@ -295,21 +296,20 @@ export function PlatformAdminDashboard() {
 
   return (
     <div className="w-full pb-6">
-      <section className="relative overflow-hidden border-b border-primary/20 bg-primary px-4 py-5 text-white md:px-6 md:py-6">
-        <div aria-hidden className="absolute -right-16 -top-20 size-56 rounded-full border-[28px] border-white/10" />
-        <div aria-hidden className="absolute bottom-0 right-32 h-20 w-40 -skew-x-12 bg-white/[0.06]" />
+      <section className="relative isolate overflow-hidden border-b border-primary/20 bg-card px-4 py-5 text-foreground md:px-6 md:py-6">
+        <SharedDashboardHeroBackground />
         <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
-            <DashboardIdentitySummary className="mb-4" />
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/70">Platform administration</p>
+            <DashboardIdentitySummary className="mb-4" tone="default" />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Platform administration</p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Platform Control Center</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/75">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
               Manage tenant companies, platform access governance, and shared communication services.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-medium">Platform scope</span>
-            <span className="border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-medium">
+            <span className="border border-border bg-background/75 px-3 py-1.5 text-xs font-medium">Platform scope</span>
+            <span className="border border-border bg-background/75 px-3 py-1.5 text-xs font-medium">
               {actor.permissionLabels.length} permissions
             </span>
             <Button

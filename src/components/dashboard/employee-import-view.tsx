@@ -1,5 +1,6 @@
 "use client";
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react";
 import { ArrowDownIcon, ArrowRightIcon, CheckCircle2Icon, CircleAlertIcon, DownloadIcon, FileSpreadsheetIcon, FileSearchIcon, InfoIcon, RefreshCcwIcon, SendIcon, UploadIcon, XIcon } from "lucide-react";
@@ -3300,30 +3301,30 @@ export function EmployeeImportView() {
                           </div>
 
                           <div className="max-h-[min(40vh,16rem)] overflow-auto rounded-lg border border-border/60">
-                            <table className="min-w-full text-[11px]">
-                              <thead className="sticky top-0 z-[1] bg-muted/90 backdrop-blur">
-                                <tr className="border-b border-border/60 text-left text-muted-foreground">
-                                  <th className="w-8 px-2 py-1.5 font-medium">
+                            <StandardTable className="min-w-full text-[11px]">
+                              <StandardTableHeader className="sticky top-0 z-[1] bg-muted/90 backdrop-blur">
+                                <StandardTableRow className="border-b border-border/60 text-left text-muted-foreground">
+                                  <StandardTableHead className="w-8 px-2 py-1.5 font-medium">
                                     {" "}
-                                  </th>
-                                  <th className="w-10 px-1.5 py-1.5 font-medium">
+                                  </StandardTableHead>
+                                  <StandardTableHead className="w-10 px-1.5 py-1.5 font-medium">
                                     #
-                                  </th>
-                                  <th className="px-1.5 py-1.5 font-medium">
+                                  </StandardTableHead>
+                                  <StandardTableHead className="px-1.5 py-1.5 font-medium">
                                     Employee
-                                  </th>
-                                  <th className="hidden px-1.5 py-1.5 font-medium sm:table-cell">
+                                  </StandardTableHead>
+                                  <StandardTableHead className="hidden px-1.5 py-1.5 font-medium sm:table-cell">
                                     Number
-                                  </th>
-                                  <th className="px-1.5 py-1.5 font-medium">
+                                  </StandardTableHead>
+                                  <StandardTableHead className="px-1.5 py-1.5 font-medium">
                                     Status
-                                  </th>
-                                  <th className="hidden px-1.5 py-1.5 font-medium md:table-cell">
+                                  </StandardTableHead>
+                                  <StandardTableHead className="hidden px-1.5 py-1.5 font-medium md:table-cell">
                                     Details
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody>
+                                  </StandardTableHead>
+                                </StandardTableRow>
+                              </StandardTableHeader>
+                              <StandardTableBody>
                                 {filteredPreviewRows.map((row) => {
                                   const checked =
                                     row.rowId !== null &&
@@ -3333,11 +3334,11 @@ export function EmployeeImportView() {
                                     previewRowDeviceSummary(row);
 
                                   return (
-                                    <tr
+                                    <StandardTableRow
                                       key={`${row.rowId ?? "row"}-${row.rowNumber}`}
                                       className="border-b border-border/40 last:border-0"
                                     >
-                                      <td className="px-2 py-1 align-middle">
+                                      <StandardTableCell className="px-2 py-1 align-middle">
                                         <Checkbox
                                           checked={checked}
                                           disabled={
@@ -3368,11 +3369,11 @@ export function EmployeeImportView() {
                                           }}
                                           aria-label={`Select preview row ${row.rowNumber}`}
                                         />
-                                      </td>
-                                      <td className="px-1.5 py-1 align-middle tabular-nums text-muted-foreground">
+                                      </StandardTableCell>
+                                      <StandardTableCell className="px-1.5 py-1 align-middle tabular-nums text-muted-foreground">
                                         {row.rowNumber}
-                                      </td>
-                                      <td className="max-w-[10rem] px-1.5 py-1 align-middle">
+                                      </StandardTableCell>
+                                      <StandardTableCell className="max-w-[10rem] px-1.5 py-1 align-middle">
                                         <div className="min-w-0">
                                           <p
                                             className="truncate font-medium text-foreground"
@@ -3389,24 +3390,24 @@ export function EmployeeImportView() {
                                             </p>
                                           ) : null}
                                         </div>
-                                      </td>
-                                      <td className="hidden px-1.5 py-1 align-middle tabular-nums sm:table-cell">
+                                      </StandardTableCell>
+                                      <StandardTableCell className="hidden px-1.5 py-1 align-middle tabular-nums sm:table-cell">
                                         {row.employeeNumber || "—"}
-                                      </td>
-                                      <td className="px-1.5 py-1 align-middle">
+                                      </StandardTableCell>
+                                      <StandardTableCell className="px-1.5 py-1 align-middle">
                                         <StatusText value={row.status} />
-                                      </td>
-                                      <td
+                                      </StandardTableCell>
+                                      <StandardTableCell
                                         className="hidden max-w-[12rem] truncate px-1.5 py-1 align-middle text-muted-foreground md:table-cell"
                                         title={detailText}
                                       >
                                         {detailText}
-                                      </td>
-                                    </tr>
+                                      </StandardTableCell>
+                                    </StandardTableRow>
                                   );
                                 })}
-                              </tbody>
-                            </table>
+                              </StandardTableBody>
+                            </StandardTable>
                           </div>
                         </div>
                       </div>
@@ -3675,34 +3676,34 @@ export function EmployeeImportView() {
                           />
 
                           <div className="max-h-64 overflow-auto rounded-xl border border-border/60">
-                            <table className="min-w-full text-xs">
-                              <thead className="sticky top-0 bg-background/95 backdrop-blur">
-                                <tr className="border-b border-border/60 text-left text-muted-foreground">
-                                  <th className="px-3 py-2 font-medium">Row</th>
-                                  <th className="px-3 py-2 font-medium">
+                            <StandardTable className="min-w-full text-xs">
+                              <StandardTableHeader className="sticky top-0 bg-background/95 backdrop-blur">
+                                <StandardTableRow className="border-b border-border/60 text-left text-muted-foreground">
+                                  <StandardTableHead className="px-3 py-2 font-medium">Row</StandardTableHead>
+                                  <StandardTableHead className="px-3 py-2 font-medium">
                                     Employee
-                                  </th>
-                                  <th className="px-3 py-2 font-medium">
+                                  </StandardTableHead>
+                                  <StandardTableHead className="px-3 py-2 font-medium">
                                     Number
-                                  </th>
-                                  <th className="px-3 py-2 font-medium">
+                                  </StandardTableHead>
+                                  <StandardTableHead className="px-3 py-2 font-medium">
                                     Status
-                                  </th>
-                                  <th className="px-3 py-2 font-medium">
+                                  </StandardTableHead>
+                                  <StandardTableHead className="px-3 py-2 font-medium">
                                     Details
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody>
+                                  </StandardTableHead>
+                                </StandardTableRow>
+                              </StandardTableHeader>
+                              <StandardTableBody>
                                 {filteredHistoryPreviewRows.map((row) => (
-                                  <tr
+                                  <StandardTableRow
                                     key={`${row.rowId ?? "row"}-${row.rowNumber}`}
                                     className="border-b border-border/40 align-top"
                                   >
-                                    <td className="px-3 py-2 tabular-nums">
+                                    <StandardTableCell className="px-3 py-2 tabular-nums">
                                       {row.rowNumber}
-                                    </td>
-                                    <td className="px-3 py-2">
+                                    </StandardTableCell>
+                                    <StandardTableCell className="px-3 py-2">
                                       <div className="min-w-0">
                                         <p className="truncate font-medium text-foreground">
                                           {row.identifier}
@@ -3719,20 +3720,20 @@ export function EmployeeImportView() {
                                           </p>
                                         ) : null}
                                       </div>
-                                    </td>
-                                    <td className="px-3 py-2">
+                                    </StandardTableCell>
+                                    <StandardTableCell className="px-3 py-2">
                                       {row.employeeNumber || "—"}
-                                    </td>
-                                    <td className="px-3 py-2">
+                                    </StandardTableCell>
+                                    <StandardTableCell className="px-3 py-2">
                                       <StatusText value={row.status} />
-                                    </td>
-                                    <td className="px-3 py-2 text-muted-foreground">
+                                    </StandardTableCell>
+                                    <StandardTableCell className="px-3 py-2 text-muted-foreground">
                                       {previewRowDetailText(row)}
-                                    </td>
-                                  </tr>
+                                    </StandardTableCell>
+                                  </StandardTableRow>
                                 ))}
-                              </tbody>
-                            </table>
+                              </StandardTableBody>
+                            </StandardTable>
                           </div>
                         </>
                       ) : null}

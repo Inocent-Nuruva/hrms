@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import * as React from "react"
 import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 
@@ -169,46 +170,46 @@ export function LeaveRolloverView() {
       <LeaveCycleSchedulePanel canManage={canManage} />
 
       <section className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full min-w-[640px] text-sm">
-          <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2">Run</th>
-              <th className="px-3 py-2">Year</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Mode</th>
-              <th className="px-3 py-2 text-right">Lines</th>
-              <th className="px-3 py-2 text-right">Exceptions</th>
+        <StandardTable className="w-full min-w-[640px] text-sm">
+          <StandardTableHeader className="bg-muted/40 text-left text-xs text-muted-foreground">
+            <StandardTableRow>
+              <StandardTableHead className="px-3 py-2">Run</StandardTableHead>
+              <StandardTableHead className="px-3 py-2">Year</StandardTableHead>
+              <StandardTableHead className="px-3 py-2">Status</StandardTableHead>
+              <StandardTableHead className="px-3 py-2">Mode</StandardTableHead>
+              <StandardTableHead className="px-3 py-2 text-right">Lines</StandardTableHead>
+              <StandardTableHead className="px-3 py-2 text-right">Exceptions</StandardTableHead>
               <th className="px-3 py-2" />
-            </tr>
-          </thead>
-          <tbody>
+            </StandardTableRow>
+          </StandardTableHeader>
+          <StandardTableBody>
             {runs.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
+              <StandardTableRow>
+                <StandardTableCell colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
                   {loaded ? "No rollover runs yet." : "Loading runs…"}
-                </td>
-              </tr>
+                </StandardTableCell>
+              </StandardTableRow>
             ) : (
               runs.map((run) => (
-                <tr key={run.id} className={cn("border-t border-border", selected?.id === run.id && "bg-muted/30")}>
-                  <td className="px-3 py-2">#{run.id}</td>
-                  <td className="px-3 py-2">{run.from_leave_year}</td>
-                  <td className="px-3 py-2">
+                <StandardTableRow key={run.id} className={cn("border-t border-border", selected?.id === run.id && "bg-muted/30")}>
+                  <StandardTableCell className="px-3 py-2">#{run.id}</StandardTableCell>
+                  <StandardTableCell className="px-3 py-2">{run.from_leave_year}</StandardTableCell>
+                  <StandardTableCell className="px-3 py-2">
                     <StatusChip status={run.status} label={ROLLOVER_STATUS_LABEL[run.status]} />
-                  </td>
-                  <td className="px-3 py-2">{run.execution_mode === "automatic" ? "Automatic" : "HR approval"}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{run.totals?.lines ?? "-"}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{run.exception_count}</td>
-                  <td className="px-3 py-2 text-right">
+                  </StandardTableCell>
+                  <StandardTableCell className="px-3 py-2">{run.execution_mode === "automatic" ? "Automatic" : "HR approval"}</StandardTableCell>
+                  <StandardTableCell className="px-3 py-2 text-right tabular-nums">{run.totals?.lines ?? "-"}</StandardTableCell>
+                  <StandardTableCell className="px-3 py-2 text-right tabular-nums">{run.exception_count}</StandardTableCell>
+                  <StandardTableCell className="px-3 py-2 text-right">
                     <Button size="sm" variant="outline" onClick={() => void open(run)}>
                       Open
                     </Button>
-                  </td>
-                </tr>
+                  </StandardTableCell>
+                </StandardTableRow>
               ))
             )}
-          </tbody>
-        </table>
+          </StandardTableBody>
+        </StandardTable>
       </section>
 
       {selected ? (
@@ -298,46 +299,46 @@ export function LeaveRolloverView() {
           </div>
 
           <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full min-w-[960px] text-sm" data-testid="rollover-lines">
-              <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2">Employee</th>
-                  <th className="px-3 py-2">Leave type</th>
-                  <th className="px-3 py-2 text-right">Opening</th>
-                  <th className="px-3 py-2 text-right">Accrued</th>
-                  <th className="px-3 py-2 text-right">Used</th>
-                  <th className="px-3 py-2 text-right">Unused</th>
-                  <th className="px-3 py-2 text-right">Carry</th>
-                  <th className="px-3 py-2 text-right">Encash</th>
-                  <th className="px-3 py-2 text-right">Lapse</th>
-                  <th className="px-3 py-2 text-right">Retained</th>
-                  <th className="px-3 py-2 text-right">Closing</th>
-                  <th className="px-3 py-2">Status / exceptions</th>
-                </tr>
-              </thead>
-              <tbody>
+            <StandardTable className="w-full min-w-[960px] text-sm" data-testid="rollover-lines">
+              <StandardTableHeader className="bg-muted/40 text-left text-xs text-muted-foreground">
+                <StandardTableRow>
+                  <StandardTableHead className="px-3 py-2">Employee</StandardTableHead>
+                  <StandardTableHead className="px-3 py-2">Leave type</StandardTableHead>
+                  <StandardTableHead className="px-3 py-2 text-right">Opening</StandardTableHead>
+                  <StandardTableHead className="px-3 py-2 text-right">Accrued</StandardTableHead>
+                  <StandardTableHead className="px-3 py-2 text-right">Used</StandardTableHead>
+                  <StandardTableHead className="px-3 py-2 text-right">Unused</StandardTableHead>
+                  <StandardTableHead className="px-3 py-2 text-right">Carry</StandardTableHead>
+                  <StandardTableHead className="px-3 py-2 text-right">Encash</StandardTableHead>
+                  <StandardTableHead className="px-3 py-2 text-right">Lapse</StandardTableHead>
+                  <StandardTableHead className="px-3 py-2 text-right">Retained</StandardTableHead>
+                  <StandardTableHead className="px-3 py-2 text-right">Closing</StandardTableHead>
+                  <StandardTableHead className="px-3 py-2">Status / exceptions</StandardTableHead>
+                </StandardTableRow>
+              </StandardTableHeader>
+              <StandardTableBody>
                 {lines.map((line: RolloverLine) => (
-                  <tr key={line.id} className="border-t border-border align-top">
-                    <td className="px-3 py-2">
+                  <StandardTableRow key={line.id} className="border-t border-border align-top">
+                    <StandardTableCell className="px-3 py-2">
                       <div className="font-medium">{line.employee_name ?? `#${line.employee_id}`}</div>
                       <div className="text-xs text-muted-foreground">
                         {line.employee_no ?? ""} {line.policy_version_no ? `· policy v${line.policy_version_no}` : ""}
                       </div>
-                    </td>
-                    <td className="px-3 py-2">{line.leave_type_name ?? line.leave_type_id}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{days(line.opening_days)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{days(line.accrued_days)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{days(line.used_days)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{days(line.unused_days)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{days(line.carry_forward_days)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">
+                    </StandardTableCell>
+                    <StandardTableCell className="px-3 py-2">{line.leave_type_name ?? line.leave_type_id}</StandardTableCell>
+                    <StandardTableCell className="px-3 py-2 text-right tabular-nums">{days(line.opening_days)}</StandardTableCell>
+                    <StandardTableCell className="px-3 py-2 text-right tabular-nums">{days(line.accrued_days)}</StandardTableCell>
+                    <StandardTableCell className="px-3 py-2 text-right tabular-nums">{days(line.used_days)}</StandardTableCell>
+                    <StandardTableCell className="px-3 py-2 text-right tabular-nums">{days(line.unused_days)}</StandardTableCell>
+                    <StandardTableCell className="px-3 py-2 text-right tabular-nums">{days(line.carry_forward_days)}</StandardTableCell>
+                    <StandardTableCell className="px-3 py-2 text-right tabular-nums">
                       {days(line.encash_days)}
                       {line.encash_amount ? <div className="text-xs text-muted-foreground">{line.encash_amount} {line.currency}</div> : null}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums">{days(line.lapse_days)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{days(line.retained_days)}</td>
-                    <td className="px-3 py-2 text-right font-medium tabular-nums">{days(line.closing_days)}</td>
-                    <td className="px-3 py-2">
+                    </StandardTableCell>
+                    <StandardTableCell className="px-3 py-2 text-right tabular-nums">{days(line.lapse_days)}</StandardTableCell>
+                    <StandardTableCell className="px-3 py-2 text-right tabular-nums">{days(line.retained_days)}</StandardTableCell>
+                    <StandardTableCell className="px-3 py-2 text-right font-medium tabular-nums">{days(line.closing_days)}</StandardTableCell>
+                    <StandardTableCell className="px-3 py-2">
                       <StatusChip status={line.status} />
                       {line.error ? <p className="mt-1 text-xs text-rose-600">{line.error}</p> : null}
                       {line.exceptions.map((item) => (
@@ -351,18 +352,18 @@ export function LeaveRolloverView() {
                           {item.message}
                         </p>
                       ))}
-                    </td>
-                  </tr>
+                    </StandardTableCell>
+                  </StandardTableRow>
                 ))}
                 {lines.length === 0 ? (
-                  <tr>
-                    <td colSpan={12} className="px-3 py-6 text-center text-muted-foreground">
+                  <StandardTableRow>
+                    <StandardTableCell colSpan={12} className="px-3 py-6 text-center text-muted-foreground">
                       No lines match.
-                    </td>
-                  </tr>
+                    </StandardTableCell>
+                  </StandardTableRow>
                 ) : null}
-              </tbody>
-            </table>
+              </StandardTableBody>
+            </StandardTable>
           </div>
           <p className="text-xs text-muted-foreground">
             Lines with blocking exceptions (for example leave still awaiting approval) are skipped when posting; their year stays open. Days that cannot lawfully lapse are retained, never removed.

@@ -1,2 +1,2 @@
-import { KpiReportsWorkspace } from "@/components/dashboard/kpi/kpi-reports-workspace";
-export default function Page() { return <KpiReportsWorkspace personal />; }
+import { redirect } from "next/navigation";
+export default function Page() { redirect("/dashboard/operations/reports?tab=kpi"); }

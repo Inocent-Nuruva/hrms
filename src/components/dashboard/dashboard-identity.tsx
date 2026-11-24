@@ -54,10 +54,12 @@ export function DashboardIdentitySummary({
   className,
   compact = false,
   showName = true,
+  tone = "onBrand",
 }: {
   className?: string
   compact?: boolean
   showName?: boolean
+  tone?: "onBrand" | "default"
 }) {
   const identity = useDashboardIdentity()
 
@@ -65,23 +67,23 @@ export function DashboardIdentitySummary({
     <div className={cn("flex min-w-0 items-center gap-3", className)}>
       <Avatar
         className={cn(
-          "shrink-0 border-2 border-white/30 bg-white/15 shadow-sm",
+          tone === "default" ? "shrink-0 border-2 border-primary/15 bg-primary/10 shadow-sm" : "shrink-0 border-2 border-white/30 bg-white/15 shadow-sm",
           compact ? "size-10" : "size-12",
         )}
       >
         {identity.photoUrl ? (
           <AvatarImage src={identity.photoUrl} alt={identity.name || "Profile"} />
         ) : null}
-        <AvatarFallback className="bg-white/15 text-sm font-semibold text-white">
+        <AvatarFallback className={cn("text-sm font-semibold", tone === "default" ? "bg-primary/10 text-primary" : "bg-white/15 text-white")}>
           {initialsFor(identity.name)}
         </AvatarFallback>
       </Avatar>
       <div className="min-w-0">
         {showName && identity.name ? (
-          <p className="truncate text-sm font-semibold text-white">{identity.name}</p>
+          <p className={cn("truncate text-sm font-semibold", tone === "default" ? "text-foreground" : "text-white")}>{identity.name}</p>
         ) : null}
         {identity.rolesLabel ? (
-          <p className="text-[10px] font-semibold uppercase leading-4 tracking-[0.15em] text-white/75">
+          <p className={cn("text-[10px] font-semibold uppercase leading-4 tracking-[0.15em]", tone === "default" ? "text-muted-foreground" : "text-white/75")}>
             {identity.rolesLabel}
           </p>
         ) : null}

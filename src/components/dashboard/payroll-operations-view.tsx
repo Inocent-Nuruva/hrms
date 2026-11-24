@@ -1,5 +1,6 @@
 "use client";
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10671,45 +10672,45 @@ export function PayrollOperationsView() {
                             </Badge>
                           </div>
                           <div className="mt-3 max-h-72 overflow-auto rounded-md border border-border bg-background">
-                            <table className="w-full text-left text-xs">
-                              <thead className="sticky top-0 bg-muted text-muted-foreground">
-                                <tr>
-                                  <th className="px-3 py-2">Employee</th>
-                                  <th className="px-3 py-2">Component</th>
-                                  <th className="px-3 py-2">Requested</th>
-                                  <th className="px-3 py-2">Reserved</th>
-                                  <th className="px-3 py-2">Status</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-border">
+                            <StandardTable className="w-full text-left text-xs">
+                              <StandardTableHeader className="sticky top-0 bg-muted text-muted-foreground">
+                                <StandardTableRow>
+                                  <StandardTableHead className="px-3 py-2">Employee</StandardTableHead>
+                                  <StandardTableHead className="px-3 py-2">Component</StandardTableHead>
+                                  <StandardTableHead className="px-3 py-2">Requested</StandardTableHead>
+                                  <StandardTableHead className="px-3 py-2">Reserved</StandardTableHead>
+                                  <StandardTableHead className="px-3 py-2">Status</StandardTableHead>
+                                </StandardTableRow>
+                              </StandardTableHeader>
+                              <StandardTableBody className="divide-y divide-border">
                                 {asRecordArray(reportResult.rows).map(
                                   (row, index) => (
-                                    <tr key={`deduction-preview-${index}`}>
-                                      <td className="px-3 py-2">
+                                    <StandardTableRow key={`deduction-preview-${index}`}>
+                                      <StandardTableCell className="px-3 py-2">
                                         {readNumber(row, [
                                           "employee_id",
                                           "employeeId",
                                         ]) ?? "-"}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </StandardTableCell>
+                                      <StandardTableCell className="px-3 py-2">
                                         {readString(row, [
                                           "component_code",
                                           "componentCode",
                                         ])}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </StandardTableCell>
+                                      <StandardTableCell className="px-3 py-2">
                                         {readString(row, [
                                           "requested_amount",
                                           "requestedAmount",
                                         ])}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </StandardTableCell>
+                                      <StandardTableCell className="px-3 py-2">
                                         {readString(row, [
                                           "reserved_amount",
                                           "reservedAmount",
                                         ])}
-                                      </td>
-                                      <td className="px-3 py-2">
+                                      </StandardTableCell>
+                                      <StandardTableCell className="px-3 py-2">
                                         <Badge
                                           variant="outline"
                                           className={statusTone(
@@ -10720,12 +10721,12 @@ export function PayrollOperationsView() {
                                             readString(row, ["status"], "-"),
                                           )}
                                         </Badge>
-                                      </td>
-                                    </tr>
+                                      </StandardTableCell>
+                                    </StandardTableRow>
                                   ),
                                 )}
-                              </tbody>
-                            </table>
+                              </StandardTableBody>
+                            </StandardTable>
                           </div>
                         </div>
                         <div className="rounded-lg border border-border bg-muted/20 p-3">
@@ -10965,41 +10966,41 @@ export function PayrollOperationsView() {
                           </button>
                         </div>
                         <div className="overflow-x-auto rounded-lg border border-border">
-                          <table className="min-w-full divide-y divide-border text-xs">
-                            <thead className="bg-muted/40 text-muted-foreground">
-                              <tr>
+                          <StandardTable className="min-w-full divide-y divide-border text-xs">
+                            <StandardTableHeader className="bg-muted/40 text-muted-foreground">
+                              <StandardTableRow>
                                 {Object.keys(reportRows[0])
                                   .slice(0, 8)
                                   .map((key) => (
-                                    <th
+                                    <StandardTableHead
                                       key={key}
                                       className="px-3 py-2 text-left font-semibold"
                                     >
                                       {prettify(key)}
-                                    </th>
+                                    </StandardTableHead>
                                   ))}
                                 {reportKind === "variance" ? (
-                                  <th className="px-3 py-2 text-left font-semibold">
+                                  <StandardTableHead className="px-3 py-2 text-left font-semibold">
                                     Review explanation
-                                  </th>
+                                  </StandardTableHead>
                                 ) : null}
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border">
+                              </StandardTableRow>
+                            </StandardTableHeader>
+                            <StandardTableBody className="divide-y divide-border">
                               {reportRows.slice(0, 50).map((row, index) => (
-                                <tr key={`report-row-${index}`}>
+                                <StandardTableRow key={`report-row-${index}`}>
                                   {Object.keys(reportRows[0])
                                     .slice(0, 8)
                                     .map((key) => (
-                                      <td
+                                      <StandardTableCell
                                         key={`${key}-${index}`}
                                         className="px-3 py-2 text-muted-foreground"
                                       >
                                         {formatAdminValue(row[key])}
-                                      </td>
+                                      </StandardTableCell>
                                     ))}
                                   {reportKind === "variance" ? (
-                                    <td className="min-w-64 px-3 py-2">
+                                    <StandardTableCell className="min-w-64 px-3 py-2">
                                       <div className="flex min-w-64 items-center gap-2">
                                         <Textarea
                                           value={
@@ -11058,12 +11059,12 @@ export function PayrollOperationsView() {
                                             : "Save review"}
                                         </button>
                                       </div>
-                                    </td>
+                                    </StandardTableCell>
                                   ) : null}
-                                </tr>
+                                </StandardTableRow>
                               ))}
-                            </tbody>
-                          </table>
+                            </StandardTableBody>
+                          </StandardTable>
                         </div>
                       </div>
                     ) : null}

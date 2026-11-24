@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
@@ -696,38 +697,38 @@ export function AccessOrganizationDetailView({ organizationId }: { organizationI
             </div>
 
             <TableScrollContainer>
-              <table className="w-full min-w-[720px] text-sm">
-                <thead className="bg-slate-50/90">
-                  <tr>
+              <StandardTable className="w-full min-w-[720px] text-sm">
+                <StandardTableHeader className="bg-slate-50/90">
+                  <StandardTableRow>
                     {employeeColumns.map((column) => (
-                      <th
+                      <StandardTableHead
                         key={column}
                         className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap"
                       >
                         {prettifyLabel(column)}
-                      </th>
+                      </StandardTableHead>
                     ))}
-                    <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">
+                    <StandardTableHead className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">
                       Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
+                    </StandardTableHead>
+                  </StandardTableRow>
+                </StandardTableHeader>
+                <StandardTableBody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
                   {!loading && filteredEmployeeRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={Math.max(employeeColumns.length + 1, 1)} className="px-4 py-10 text-sm text-slate-500">
+                    <StandardTableRow>
+                      <StandardTableCell colSpan={Math.max(employeeColumns.length + 1, 1)} className="px-4 py-10 text-sm text-slate-500">
                         {employeeSearch.trim()
                           ? "No assigned employees matched your search."
                           : "No employees assigned to this organization yet."}
-                      </td>
-                    </tr>
+                      </StandardTableCell>
+                    </StandardTableRow>
                   ) : null}
                   {filteredEmployeeRows.map((employee, index) => {
                     const rowId =
                       readNumberFromRecord(employee, ["resolved_employee_id", "employee_id", "employeeId", "id"]) ??
                       `employee-${index}`
                     return (
-                      <tr
+                      <StandardTableRow
                         key={String(rowId)}
                         style={
                           employeeSearchActive
@@ -739,16 +740,16 @@ export function AccessOrganizationDetailView({ organizationId }: { organizationI
                         }
                       >
                         {employeeColumns.map((column) => (
-                          <td
+                          <StandardTableCell
                             key={`${rowId}-${column}`}
                             className={`px-4 py-4 text-sm text-slate-700 whitespace-nowrap ${
                               column === "employee_name" && employeeSearchActive ? "font-medium" : ""
                             }`}
                           >
                             {stringifyValue((employee as Record<string, unknown>)[column])}
-                          </td>
+                          </StandardTableCell>
                         ))}
-                        <td className="px-4 py-4">
+                        <StandardTableCell className="px-4 py-4">
                           <div className="flex justify-end">
                             <button
                               type="button"
@@ -768,12 +769,12 @@ export function AccessOrganizationDetailView({ organizationId }: { organizationI
                               <Trash2Icon className="h-4 w-4" />
                             </button>
                           </div>
-                        </td>
-                      </tr>
+                        </StandardTableCell>
+                      </StandardTableRow>
                     )
                   })}
-                </tbody>
-              </table>
+                </StandardTableBody>
+              </StandardTable>
             </TableScrollContainer>
           </div>
         ) : null}

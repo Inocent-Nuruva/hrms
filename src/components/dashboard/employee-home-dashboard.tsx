@@ -1,6 +1,7 @@
 "use client"
 
-import { useAccountAppearance } from "@/hooks/use-account-appearance"
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
+import { useDashboardHeroBackground } from "@/hooks/use-dashboard-hero-background"
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
@@ -2169,9 +2170,14 @@ export function EmployeeDashboardView({
   const actor = useDashboardActor()
   const dashboardIdentity = useDashboardIdentity()
   useForbiddenPrefixes()
+  const [sharedBackground, saveSharedBackground] = useDashboardHeroBackground()
   const [cardBackground, setCardBackground] = React.useState<WelcomeBackground | "original">("aurora")
-  const selectCardBackground = useAccountAppearance("employeeBackground", "aurora", setCardBackground)
-  const nextBackground = cardBackground === "aurora" ? "geometric" : cardBackground === "geometric" ? "glow" : cardBackground === "glow" ? "plain" : "aurora"
+  React.useEffect(() => setCardBackground(sharedBackground), [sharedBackground])
+  const selectCardBackground = (value: WelcomeBackground | "original") => {
+    if (value === "aurora" || value === "geometric" || value === "glow") saveSharedBackground(value)
+    setCardBackground(value)
+  }
+  const nextBackground = sharedBackground === "aurora" ? "geometric" : sharedBackground === "geometric" ? "glow" : "aurora"
   const [dashboardCardLook, setDashboardCardLook] = React.useState<DashboardCardLook>(defaultDashboardCardLook)
   const [dashboardCardLookSaveState, setDashboardCardLookSaveState] = React.useState<"idle" | "saving" | "error">("idle")
   const dashboardCardLookKey = dashboardData?.user?.id
@@ -2495,12 +2501,7 @@ export function EmployeeDashboardView({
         className={cn(heroPanelClass, pageBleedClass, "overflow-visible !pt-3")}
         style={{ backgroundColor: dashboardCardBackground }}
       >
-        {cardBackground === "original" ? (
-          <CardDoodleArtwork
-            pattern={dashboardCardLook.artwork}
-            className={cn("absolute inset-0 h-full w-full", isDynamicDashboardCard ? "text-foreground/15" : "text-white/20")}
-          />
-        ) : <WelcomeCardBackground background={cardBackground} />}
+        <WelcomeCardBackground background={sharedBackground} />
         <div className="relative z-10 flex flex-col gap-4">
           <div className="absolute -right-2 -top-1 z-20 flex items-center gap-2">
             <FluentButton
@@ -4084,26 +4085,26 @@ export function EmployeeHomeDashboard() {
                       </div>
                       {currentSectionItems.length > 0 ? (
                         <div className="overflow-x-auto rounded-md border border-border">
-                          <table className="w-full min-w-[520px] border-collapse text-left text-xs">
-                            <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
-                              <tr>
+                          <StandardTable className="w-full min-w-[520px] border-collapse text-left text-xs">
+                            <StandardTableHeader className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
+                              <StandardTableRow>
                                 {repeatableColumns.map((column) => (
-                                  <th key={column.label} className="px-3 py-2 font-semibold">{column.label}</th>
+                                  <StandardTableHead key={column.label} className="px-3 py-2 font-semibold">{column.label}</StandardTableHead>
                                 ))}
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border">
+                              </StandardTableRow>
+                            </StandardTableHeader>
+                            <StandardTableBody className="divide-y divide-border">
                               {currentSectionItems.map((row, index) => (
-                                <tr key={String(row.id ?? `${fillingItemKey}-${index}`)} className="bg-background">
+                                <StandardTableRow key={String(row.id ?? `${fillingItemKey}-${index}`)} className="bg-background">
                                   {repeatableColumns.map((column, columnIndex) => (
-                                    <td key={column.label} className={cn("px-3 py-2 text-muted-foreground", columnIndex === 0 && "font-medium text-foreground")}>
+                                    <StandardTableCell key={column.label} className={cn("px-3 py-2 text-muted-foreground", columnIndex === 0 && "font-medium text-foreground")}>
                                       {repeatableCellValue(row, column.keys)}
-                                    </td>
+                                    </StandardTableCell>
                                   ))}
-                                </tr>
+                                </StandardTableRow>
                               ))}
-                            </tbody>
-                          </table>
+                            </StandardTableBody>
+                          </StandardTable>
                         </div>
                       ) : (
                         <div className="flex min-h-24 flex-col items-center justify-center rounded-md border border-dashed border-border bg-muted/20 px-4 py-5 text-center">

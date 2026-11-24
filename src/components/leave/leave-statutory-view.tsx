@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import * as React from "react"
 import { PlusIcon, RefreshCwIcon, TrashIcon } from "lucide-react"
 
@@ -585,22 +586,22 @@ export function LeaveStatutoryView() {
               <p className="text-sm">
                 Total {holidayResult.total_amount.toLocaleString()} · {holidayResult.posted_inputs} input(s) posted
               </p>
-              <table className="mt-2 w-full min-w-[560px] text-xs">
-                <thead className="text-left text-muted-foreground">
-                  <tr><th className="py-1">Employee</th><th>Date</th><th className="text-right">Hours</th><th className="text-right">Amount</th><th>Status</th></tr>
-                </thead>
-                <tbody>
+              <StandardTable className="mt-2 w-full min-w-[560px] text-xs">
+                <StandardTableHeader className="text-left text-muted-foreground">
+                  <StandardTableRow><StandardTableHead className="py-1">Employee</StandardTableHead><StandardTableHead>Date</StandardTableHead><StandardTableHead className="text-right">Hours</StandardTableHead><StandardTableHead className="text-right">Amount</StandardTableHead><StandardTableHead>Status</StandardTableHead></StandardTableRow>
+                </StandardTableHeader>
+                <StandardTableBody>
                   {holidayResult.data.map((line, index) => (
-                    <tr key={index} className="border-t border-border">
-                      <td className="py-1">{String(line.employee_no ?? line.employee_id)}</td>
-                      <td>{String(line.date)}</td>
-                      <td className="text-right">{String(line.hours)}</td>
-                      <td className="text-right">{line.amount !== undefined ? `${String(line.amount)} ${String(line.currency ?? "")}` : "-"}</td>
-                      <td>{String(line.message ?? line.status)}</td>
-                    </tr>
+                    <StandardTableRow key={index} className="border-t border-border">
+                      <StandardTableCell className="py-1">{String(line.employee_no ?? line.employee_id)}</StandardTableCell>
+                      <StandardTableCell>{String(line.date)}</StandardTableCell>
+                      <StandardTableCell className="text-right">{String(line.hours)}</StandardTableCell>
+                      <StandardTableCell className="text-right">{line.amount !== undefined ? `${String(line.amount)} ${String(line.currency ?? "")}` : "-"}</StandardTableCell>
+                      <StandardTableCell>{String(line.message ?? line.status)}</StandardTableCell>
+                    </StandardTableRow>
                   ))}
-                </tbody>
-              </table>
+                </StandardTableBody>
+              </StandardTable>
             </div>
           ) : null}
         </section>

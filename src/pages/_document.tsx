@@ -1,15 +1,15 @@
 import { Html, Head, Main, NextScript } from "next/document";
 
 /**
- * Apply saved / system theme before paint so login and other pages
- * don't flash light mode when dark is preferred.
+ * Apply a saved theme before paint. Users without a saved choice start in
+ * light mode rather than inheriting a device-wide dark preference.
  */
 const themeInitScript = `
 (function () {
   try {
     var key = "hrms.theme";
     var stored = (localStorage.getItem(key) || "").trim();
-    var theme = stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+    var theme = stored === "light" || stored === "dark" || stored === "system" ? stored : "light";
     var resolved = theme === "system"
       ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
       : theme;

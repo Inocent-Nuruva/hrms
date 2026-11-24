@@ -1,4 +1,5 @@
 "use client"
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { RecalculateLeaveBalanceButton } from "@/components/leave/leave-recalculation-dialog"
 
 import * as React from "react"
@@ -152,31 +153,31 @@ function ReadinessTab() {
         </div>
       ) : null}
       <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full min-w-[720px] text-sm">
-          <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2">Severity</th>
-              <th className="px-3 py-2">Area</th>
-              <th className="px-3 py-2">Finding</th>
-              <th className="px-3 py-2">Owner</th>
-            </tr>
-          </thead>
-          <tbody>
+        <StandardTable className="w-full min-w-[720px] text-sm">
+          <StandardTableHeader className="bg-muted/40 text-left text-xs text-muted-foreground">
+            <StandardTableRow>
+              <StandardTableHead className="px-3 py-2">Severity</StandardTableHead>
+              <StandardTableHead className="px-3 py-2">Area</StandardTableHead>
+              <StandardTableHead className="px-3 py-2">Finding</StandardTableHead>
+              <StandardTableHead className="px-3 py-2">Owner</StandardTableHead>
+            </StandardTableRow>
+          </StandardTableHeader>
+          <StandardTableBody>
             {[...(report?.findings ?? [])]
               .sort((a, b) => order[a.severity] - order[b.severity])
               .map((f, i) => (
-                <tr key={`${f.code}-${i}`} className="border-t border-border align-top">
-                  <td className="px-3 py-2">{chip(f.severity)}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{f.area.replace(/_/g, " ")}</td>
-                  <td className="px-3 py-2">
+                <StandardTableRow key={`${f.code}-${i}`} className="border-t border-border align-top">
+                  <StandardTableCell className="px-3 py-2">{chip(f.severity)}</StandardTableCell>
+                  <StandardTableCell className="px-3 py-2 whitespace-nowrap">{f.area.replace(/_/g, " ")}</StandardTableCell>
+                  <StandardTableCell className="px-3 py-2">
                     {f.subject ? <span className="font-medium">{f.subject}: </span> : null}
                     {f.message}
-                  </td>
-                  <td className="px-3 py-2">{f.owner}</td>
-                </tr>
+                  </StandardTableCell>
+                  <StandardTableCell className="px-3 py-2">{f.owner}</StandardTableCell>
+                </StandardTableRow>
               ))}
-          </tbody>
-        </table>
+          </StandardTableBody>
+        </StandardTable>
       </div>
     </section>
   )
@@ -299,39 +300,39 @@ function ReconTable({
         {title} <span className="font-normal text-muted-foreground">({rows.length})</span>
       </h3>
       <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full min-w-[820px] text-xs">
-          <thead className="bg-muted/40 text-left text-muted-foreground">
-            <tr>
+        <StandardTable className="w-full min-w-[820px] text-xs">
+          <StandardTableHeader className="bg-muted/40 text-left text-muted-foreground">
+            <StandardTableRow>
               {columns.map(([, label]) => (
-                <th key={label} className="px-2 py-1.5">
+                <StandardTableHead key={label} className="px-2 py-1.5">
                   {label}
-                </th>
+                </StandardTableHead>
               ))}
-              <th className="px-2 py-1.5">Status</th>
-              <th className="px-2 py-1.5">Notes</th>
-            </tr>
-          </thead>
-          <tbody>
+              <StandardTableHead className="px-2 py-1.5">Status</StandardTableHead>
+              <StandardTableHead className="px-2 py-1.5">Notes</StandardTableHead>
+            </StandardTableRow>
+          </StandardTableHeader>
+          <StandardTableBody>
             {rows.map((r, i) => (
-              <tr key={i} className="border-t border-border align-top">
+              <StandardTableRow key={i} className="border-t border-border align-top">
                 {columns.map(([key]) => (
-                  <td key={key} className="px-2 py-1.5 whitespace-nowrap">
+                  <StandardTableCell key={key} className="px-2 py-1.5 whitespace-nowrap">
                     {r[key] == null || r[key] === "" ? "—" : String(r[key])}
-                  </td>
+                  </StandardTableCell>
                 ))}
-                <td className="px-2 py-1.5">{chip(r.status)}</td>
-                <td className="max-w-sm px-2 py-1.5">{r.notes}</td>
-              </tr>
+                <StandardTableCell className="px-2 py-1.5">{chip(r.status)}</StandardTableCell>
+                <StandardTableCell className="max-w-sm px-2 py-1.5">{r.notes}</StandardTableCell>
+              </StandardTableRow>
             ))}
             {!rows.length ? (
-              <tr>
-                <td colSpan={columns.length + 2} className="px-2 py-4 text-center text-muted-foreground">
+              <StandardTableRow>
+                <StandardTableCell colSpan={columns.length + 2} className="px-2 py-4 text-center text-muted-foreground">
                   Nothing to show.
-                </td>
-              </tr>
+                </StandardTableCell>
+              </StandardTableRow>
             ) : null}
-          </tbody>
-        </table>
+          </StandardTableBody>
+        </StandardTable>
       </div>
     </div>
   )
@@ -429,28 +430,28 @@ function BackfillTab({ canExecute }: { canExecute: boolean }) {
             Scanned {plan.scanned} · <strong>{plan.proposed}</strong> can be rebuilt · {plan.needsReview} need manual review
           </p>
           <div className="max-h-96 overflow-auto rounded-lg border border-border">
-            <table className="w-full min-w-[640px] text-xs">
-              <thead className="sticky top-0 bg-muted text-left text-muted-foreground">
-                <tr>
-                  <th className="px-2 py-1.5">Leave no.</th>
-                  <th className="px-2 py-1.5">Employee</th>
-                  <th className="px-2 py-1.5">Days</th>
-                  <th className="px-2 py-1.5">Result</th>
-                  <th className="px-2 py-1.5">Method / reason</th>
-                </tr>
-              </thead>
-              <tbody>
+            <StandardTable className="w-full min-w-[640px] text-xs">
+              <StandardTableHeader className="sticky top-0 bg-muted text-left text-muted-foreground">
+                <StandardTableRow>
+                  <StandardTableHead className="px-2 py-1.5">Leave no.</StandardTableHead>
+                  <StandardTableHead className="px-2 py-1.5">Employee</StandardTableHead>
+                  <StandardTableHead className="px-2 py-1.5">Days</StandardTableHead>
+                  <StandardTableHead className="px-2 py-1.5">Result</StandardTableHead>
+                  <StandardTableHead className="px-2 py-1.5">Method / reason</StandardTableHead>
+                </StandardTableRow>
+              </StandardTableHeader>
+              <StandardTableBody>
                 {plan.candidates.map((c) => (
-                  <tr key={c.leaveRequestId} className="border-t border-border">
-                    <td className="px-2 py-1.5">{c.leaveNo}</td>
-                    <td className="px-2 py-1.5">{c.employeeId}</td>
-                    <td className="px-2 py-1.5">{c.totalDays}</td>
-                    <td className="px-2 py-1.5">{chip(c.status === "PROPOSED" ? "ok" : "warning")}</td>
-                    <td className="px-2 py-1.5">{c.method ?? c.reason ?? "—"}</td>
-                  </tr>
+                  <StandardTableRow key={c.leaveRequestId} className="border-t border-border">
+                    <StandardTableCell className="px-2 py-1.5">{c.leaveNo}</StandardTableCell>
+                    <StandardTableCell className="px-2 py-1.5">{c.employeeId}</StandardTableCell>
+                    <StandardTableCell className="px-2 py-1.5">{c.totalDays}</StandardTableCell>
+                    <StandardTableCell className="px-2 py-1.5">{chip(c.status === "PROPOSED" ? "ok" : "warning")}</StandardTableCell>
+                    <StandardTableCell className="px-2 py-1.5">{c.method ?? c.reason ?? "—"}</StandardTableCell>
+                  </StandardTableRow>
                 ))}
-              </tbody>
-            </table>
+              </StandardTableBody>
+            </StandardTable>
           </div>
         </div>
       ) : null}
@@ -458,26 +459,26 @@ function BackfillTab({ canExecute }: { canExecute: boolean }) {
       <div className="space-y-1">
         <h3 className="text-sm font-semibold">Applied batches</h3>
         <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full min-w-[640px] text-xs">
-            <thead className="bg-muted/40 text-left text-muted-foreground">
-              <tr>
-                <th className="px-2 py-1.5">Batch</th>
-                <th className="px-2 py-1.5">By</th>
-                <th className="px-2 py-1.5">Applied</th>
-                <th className="px-2 py-1.5">Reverted</th>
-                <th className="px-2 py-1.5">When</th>
+          <StandardTable className="w-full min-w-[640px] text-xs">
+            <StandardTableHeader className="bg-muted/40 text-left text-muted-foreground">
+              <StandardTableRow>
+                <StandardTableHead className="px-2 py-1.5">Batch</StandardTableHead>
+                <StandardTableHead className="px-2 py-1.5">By</StandardTableHead>
+                <StandardTableHead className="px-2 py-1.5">Applied</StandardTableHead>
+                <StandardTableHead className="px-2 py-1.5">Reverted</StandardTableHead>
+                <StandardTableHead className="px-2 py-1.5">When</StandardTableHead>
                 <th className="px-2 py-1.5" />
-              </tr>
-            </thead>
-            <tbody>
+              </StandardTableRow>
+            </StandardTableHeader>
+            <StandardTableBody>
               {batches.map((b) => (
-                <tr key={b.batch_id} className="border-t border-border">
-                  <td className="px-2 py-1.5 font-mono">{b.batch_id.slice(0, 8)}</td>
-                  <td className="px-2 py-1.5">{b.actor}</td>
-                  <td className="px-2 py-1.5">{b.applied}</td>
-                  <td className="px-2 py-1.5">{b.reverted}</td>
-                  <td className="px-2 py-1.5">{new Date(b.applied_at ?? b.created_at).toLocaleString()}</td>
-                  <td className="px-2 py-1.5">
+                <StandardTableRow key={b.batch_id} className="border-t border-border">
+                  <StandardTableCell className="px-2 py-1.5 font-mono">{b.batch_id.slice(0, 8)}</StandardTableCell>
+                  <StandardTableCell className="px-2 py-1.5">{b.actor}</StandardTableCell>
+                  <StandardTableCell className="px-2 py-1.5">{b.applied}</StandardTableCell>
+                  <StandardTableCell className="px-2 py-1.5">{b.reverted}</StandardTableCell>
+                  <StandardTableCell className="px-2 py-1.5">{new Date(b.applied_at ?? b.created_at).toLocaleString()}</StandardTableCell>
+                  <StandardTableCell className="px-2 py-1.5">
                     {canExecute && b.applied > 0 ? (
                       <Button
                         size="sm"
@@ -495,18 +496,18 @@ function BackfillTab({ canExecute }: { canExecute: boolean }) {
                         Revert
                       </Button>
                     ) : null}
-                  </td>
-                </tr>
+                  </StandardTableCell>
+                </StandardTableRow>
               ))}
               {!batches.length ? (
-                <tr>
-                  <td colSpan={6} className="px-2 py-4 text-center text-muted-foreground">
+                <StandardTableRow>
+                  <StandardTableCell colSpan={6} className="px-2 py-4 text-center text-muted-foreground">
                     No backfill has been applied.
-                  </td>
-                </tr>
+                  </StandardTableCell>
+                </StandardTableRow>
               ) : null}
-            </tbody>
-          </table>
+            </StandardTableBody>
+          </StandardTable>
         </div>
       </div>
     </section>
@@ -522,33 +523,33 @@ function HistoryTab() {
   }, [])
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
-      <table className="w-full min-w-[640px] text-xs">
-        <thead className="bg-muted/40 text-left text-muted-foreground">
-          <tr>
-            <th className="px-2 py-1.5">When</th>
-            <th className="px-2 py-1.5">Action</th>
-            <th className="px-2 py-1.5">By (company user)</th>
-            <th className="px-2 py-1.5">Details</th>
-          </tr>
-        </thead>
-        <tbody>
+      <StandardTable className="w-full min-w-[640px] text-xs">
+        <StandardTableHeader className="bg-muted/40 text-left text-muted-foreground">
+          <StandardTableRow>
+            <StandardTableHead className="px-2 py-1.5">When</StandardTableHead>
+            <StandardTableHead className="px-2 py-1.5">Action</StandardTableHead>
+            <StandardTableHead className="px-2 py-1.5">By (company user)</StandardTableHead>
+            <StandardTableHead className="px-2 py-1.5">Details</StandardTableHead>
+          </StandardTableRow>
+        </StandardTableHeader>
+        <StandardTableBody>
           {rows.map((r) => (
-            <tr key={r.id} className="border-t border-border align-top">
-              <td className="px-2 py-1.5 whitespace-nowrap">{new Date(r.created_at).toLocaleString()}</td>
-              <td className="px-2 py-1.5">{r.action.replace("leave_operations.", "").replace(/_/g, " ")}</td>
-              <td className="px-2 py-1.5">{r.actor_company_user_id ?? "—"}</td>
-              <td className="max-w-md px-2 py-1.5 font-mono break-all">{JSON.stringify(r.payload)}</td>
-            </tr>
+            <StandardTableRow key={r.id} className="border-t border-border align-top">
+              <StandardTableCell className="px-2 py-1.5 whitespace-nowrap">{new Date(r.created_at).toLocaleString()}</StandardTableCell>
+              <StandardTableCell className="px-2 py-1.5">{r.action.replace("leave_operations.", "").replace(/_/g, " ")}</StandardTableCell>
+              <StandardTableCell className="px-2 py-1.5">{r.actor_company_user_id ?? "—"}</StandardTableCell>
+              <StandardTableCell className="max-w-md px-2 py-1.5 font-mono break-all">{JSON.stringify(r.payload)}</StandardTableCell>
+            </StandardTableRow>
           ))}
           {!rows.length ? (
-            <tr>
-              <td colSpan={4} className="px-2 py-4 text-center text-muted-foreground">
+            <StandardTableRow>
+              <StandardTableCell colSpan={4} className="px-2 py-4 text-center text-muted-foreground">
                 No operations recorded yet.
-              </td>
-            </tr>
+              </StandardTableCell>
+            </StandardTableRow>
           ) : null}
-        </tbody>
-      </table>
+        </StandardTableBody>
+      </StandardTable>
     </div>
   )
 }

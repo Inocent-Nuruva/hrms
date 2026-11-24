@@ -53,7 +53,8 @@ export function useAccountAppearance<K extends keyof Appearance>(
         applyRef.current(next)
         writeCache(cacheKey, next)
       } catch {
-        if (!cancelled) toast.error("Could not load your saved appearance. Reconnect and return to this window to retry.")
+        // Loading preferences is best-effort. Keep the account-scoped cache or
+        // the safe default instead of alarming the user during sign-in.
       }
     }
     void refresh()

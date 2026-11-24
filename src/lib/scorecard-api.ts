@@ -7,7 +7,7 @@ export type ScorecardEntry = {
 }
 export type ScorecardVersion = { id: number; version: number; name: string; description: string | null; mode: "weighted" | "strategic"; policyVersionId: number | null; entries: ScorecardEntry[]; publishedAt: string | null }
 export type Scorecard = { id: number; code: string; subjectType: string; subjectId: number; periodId: number; managerEmployeeId: number | null; status: string;
-  currentVersion: ScorecardVersion; versions: ScorecardVersion[]; entries: ScorecardEntry[]; period: { label: string; startDate: string; endDate: string }; overallScore: string | null; rating?: string | null; completenessPercent?: string; performanceStatus: "awaiting_data" | "partial" | "scored" }
+  currentVersion: ScorecardVersion; versions: ScorecardVersion[]; entries: ScorecardEntry[]; missingAssignmentIds?: number[]; period: { label: string; startDate: string; endDate: string }; overallScore: string | null; rating?: string | null; completenessPercent?: string; performanceStatus: "awaiting_data" | "partial" | "scored" | "status_only" | "needs_revision" }
 export type ScoringConfig = { minScore: number; maxScore: number; scoreCap: number; displayDecimals: number; missingTreatment: "block" | "exclude_optional"; notApplicableTreatment: "block" | "redistribute"; exactTolerance: number; qualitativeRubric: Array<{ label: string; score: number }> }
 export type RatingBand = { label: string; from: number; to: number }
 export type ScoringPolicyVersion = { id: number; version: number; name: string; method: "weighted" | "strategic"; config: ScoringConfig; ratingBands: RatingBand[]; publishedAt: string | null }

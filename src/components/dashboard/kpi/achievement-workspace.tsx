@@ -21,7 +21,11 @@ import {
   DialogSurface,
   DialogTitle,
   Divider,
+  DrawerBody,
+  DrawerHeader,
+  DrawerHeaderTitle,
   Field,
+  OverlayDrawer,
   Table,
   TableBody,
   TableCell,
@@ -34,6 +38,7 @@ import {
   tokens,
 } from "@fluentui/react-components";
 import * as React from "react";
+import { numericActivityTotal } from "@/lib/kpi-activity-total";
 import { useRouter } from "next/navigation";
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
 import { achievementApi, type Achievement, type AchievementActivity } from "@/lib/achievement-api";
@@ -42,7 +47,7 @@ import { achievementsEnabled, readKpiToken } from "@/lib/kpi-session";
 import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
 import { KpiFluentInput, KpiFluentTextarea } from "./kpi-fluent-fields";
 import { KpiFeedback, KpiStatusBadge } from "./kpi-page-elements";
-import { ArrowUpload20Regular, Attach20Regular, Delete20Regular, Document20Regular, DocumentBulletList20Regular, Edit20Regular, History20Regular, Target20Regular } from "@fluentui/react-icons";
+import { ArrowLeft20Regular, ArrowUpload20Regular, Attach20Regular, Delete20Regular, Dismiss20Regular, Document20Regular, DocumentBulletList20Regular, Edit20Regular, Target20Regular } from "@fluentui/react-icons";
 
 type AchievementFlowStep = "mode" | "quick" | "activities";
 type ActivityForm = {
@@ -98,6 +103,10 @@ function formatTarget(target: Record<string, unknown> | null, unit?: string | nu
     return `${String(entries[0][1])}${unit ? ` ${unit}` : ""}`;
   }
   return entries.map(([key, value]) => `${key}: ${String(value)}`).join(" · ");
+}
+function isNumericValue(value: unknown): value is number | string {
+  return typeof value === "number" && Number.isFinite(value) ||
+    typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value));
 }
 function displayPeriodDate(value?: string | null) {
   if (!value) return "—";
@@ -174,6 +183,8 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
   const actor = useDashboardActor();
   const token = readKpiToken();
   const [assignment, setAssignment] = React.useState<KpiAssignment | null>(null);
+  const [availableAssignments, setAvailableAssignments] = React.useState<KpiAssignment[]>([]);
+  const [switcherOpen, setSwitcherOpen] = React.useState(false);
   const [record, setRecord] = React.useState<Achievement | null>(null);
   const [actual, setActual] = React.useState("");
   const [comments, setComments] = React.useState("");
@@ -202,6 +213,7 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
       if (!item) throw new Error("This KPI is not directly assigned to you");
       if (sequence !== loadSequence.current) return;
       setAssignment(item);
+      setAvailableAssignments(assignments);
       const found = records.find((row) => row.assignmentId === assignmentId) ?? null;
       setRecord(found);
       setActual(initialActual(found?.current?.actual));
@@ -241,8 +253,14 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
   const canEditDraft = draft && !blockedAchievement;
   const measurementType = assignment?.definitionVersion?.measurementType ?? "numeric";
   const activities = record?.current?.activities ?? [];
+  const activityTotal = measurementType === "numeric" ? numericActivityTotal(activities.map((activity) => activity.measurableResult)) : null;
+  const previousRevisions = record?.revisions.filter((revision) => revision.id !== record.current.id) ?? [];
   const selectedActivity = activities.find((activity) => activity.id === selectedActivityId) ?? null;
   const hasFinalResult = record?.current.actual !== null && record?.current.actual !== undefined;
+  const targetValue = assignment?.currentTarget?.target?.value;
+  const actualValue = record?.current.actual;
+  const simpleTarget = isNumericValue(targetValue);
+  const simpleActual = isNumericValue(actualValue);
   const achievementStatus = record?.current.status ?? assignment?.status ?? "draft";
   const nextStepTitle = canEditDraft
     ? record ? "Finish your draft" : "Record your first activity"
@@ -414,35 +432,31 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
 
   return (
     <div className="space-y-4">
-      <section className="relative -mx-3 w-[calc(100%+1.5rem)] min-w-0 overflow-hidden bg-gradient-to-r from-primary via-primary to-primary/90 px-5 py-5 text-primary-foreground sm:-mx-4 sm:w-[calc(100%+2rem)] sm:px-8" aria-label="KPI achievement overview">
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="finance-hero-drift absolute -right-16 -top-24 size-80 rounded-full border-[42px] border-primary-foreground/[0.12]" />
-          <div className="finance-hero-orbit absolute right-16 top-[calc(50%-4.5rem)] size-36 rounded-full border border-primary-foreground/15" />
-          <div className="finance-hero-band absolute bottom-0 right-28 h-32 w-56 bg-primary-foreground/[0.08]" />
-          <div className="finance-hero-line absolute left-[46%] top-5 h-24 w-px bg-primary-foreground/15" />
-          <div className="finance-hero-dot absolute left-[49%] top-9 size-2 rounded-full bg-primary-foreground/25" />
-          <div className="finance-hero-dot finance-hero-dot-delayed absolute left-[51%] top-16 size-1.5 rounded-full bg-primary-foreground/20" />
+      <header className="-mx-3 border-b border-border bg-background px-3 pb-4 sm:-mx-4 sm:px-4" aria-label="KPI achievement overview">
+        <div className="flex items-center gap-2 py-2">
+          <Button type="button" appearance="subtle" size="small" icon={<ArrowLeft20Regular />} aria-label="Back to KPI listings" title="Back to KPI listings" className="!size-8 !min-w-8 !rounded-full !p-0" onClick={() => router.push("/dashboard/me/kpi")} />
+          <Text size={200} weight="semibold" style={{ color: tokens.colorNeutralForeground2 }}>My KPIs</Text>
         </div>
-        <div className="relative z-10">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-foreground/75">My KPIs</p>
-            <h1 className="mt-1 break-words text-xl font-semibold leading-tight sm:text-2xl" style={{ fontFamily: "var(--font-fredoka)" }}>{assignment?.definitionVersion?.name ?? "KPI achievement"}</h1>
-            {assignment?.definitionVersion?.description && <p className="mt-1 max-w-2xl text-sm leading-relaxed text-primary-foreground/80">{assignment.definitionVersion.description}</p>}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2"><h1 className="break-words text-xl font-semibold tracking-tight text-foreground sm:text-2xl">{assignment?.definitionVersion?.name ?? "KPI achievement"}</h1><KpiStatusBadge status={achievementStatus} /></div>
+            {assignment?.definitionVersion?.description && <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">{assignment.definitionVersion.description}</p>}
+            <p className="mt-2 text-sm font-medium text-foreground">{nextStepTitle}</p>
           </div>
-          <Button type="button" appearance="subtle" size="small" className="!shrink-0 !text-primary-foreground hover:!bg-white/10" onClick={() => router.push("/dashboard/me/kpi")}>Back to My KPIs</Button>
+          <Button type="button" appearance="secondary" className="!shrink-0" onClick={() => setSwitcherOpen(true)}>Switch to other KPIs</Button>
         </div>
-        {assignment && <div className="mt-5 grid gap-x-5 gap-y-4 border-t border-primary-foreground/20 pt-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1fr)]">
-          <div className="min-w-0"><p className="text-xs text-primary-foreground/70">Reporting period</p><p className="mt-1 break-words text-sm font-semibold">{displayPeriodDate(assignment.period?.startDate)} – {displayPeriodDate(assignment.period?.endDate)}</p></div>
-          <div className="min-w-0"><p className="text-xs text-primary-foreground/70">Goal</p><p className="mt-1 break-words text-3xl font-semibold leading-none tracking-tight sm:text-4xl">{formatTarget(assignment.currentTarget?.target ?? null, assignment.definitionVersion?.measurementUnit)}</p></div>
-          <div className="min-w-0"><p className="text-xs text-primary-foreground/70">Final result</p><p className={hasFinalResult ? "mt-1 break-words text-3xl font-semibold leading-none tracking-tight sm:text-4xl" : "mt-2 text-sm text-primary-foreground/75"}>{hasFinalResult ? formatActivityResult(record.current.actual, assignment.definitionVersion?.measurementUnit) : "Not entered"}</p></div>
-          <div className="min-w-0"><p className="text-xs text-primary-foreground/70">Status · {friendlyStatus(achievementStatus)}</p><p className="mt-1 break-words text-sm font-semibold">{nextStepTitle}</p></div>
+        {assignment && <dl className="mt-4 grid grid-cols-2 border-y border-border/70 sm:grid-cols-4">
+          <div className="min-w-0 px-3 py-3 sm:border-r sm:border-border/70"><dt className="text-xs text-muted-foreground">Reporting period</dt><dd className="mt-1 break-words text-sm font-semibold">{displayPeriodDate(assignment.period?.startDate)} – {displayPeriodDate(assignment.period?.endDate)}</dd></div>
+          <div className="min-w-0 border-l border-border/70 px-3 py-3 sm:border-l-0 sm:border-r"><dt className="text-xs text-muted-foreground">Target</dt><dd className="mt-1 break-words text-lg font-semibold text-primary">{simpleTarget ? formatActivityResult(targetValue, assignment.definitionVersion?.measurementUnit) : formatTarget(assignment.currentTarget?.target ?? null, assignment.definitionVersion?.measurementUnit)}</dd></div>
+          <div className="min-w-0 border-t border-border/70 px-3 py-3 sm:border-r sm:border-t-0"><dt className="text-xs text-muted-foreground">Final result</dt><dd className="mt-1 break-words text-lg font-semibold">{simpleActual ? formatActivityResult(actualValue, assignment.definitionVersion?.measurementUnit) : hasFinalResult ? formatActivityResult(actualValue, assignment.definitionVersion?.measurementUnit) : "Not entered"}</dd></div>
+          <div className="min-w-0 border-l border-t border-border/70 px-3 py-3 sm:border-l-0 sm:border-t-0"><dt className="text-xs text-muted-foreground">Activities</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{activities.length}</dd></div>
+        </dl>}
+        {(canEditDraft || (record && ["returned", "rejected"].includes(record.current.status))) && <div className="mt-4 flex flex-wrap justify-end gap-2">
+          {canEditDraft && <><Button type="button" appearance="secondary" onClick={openActivityForm}>Add activity</Button><Button type="button" appearance="primary" disabled={busy} onClick={() => { setFlowStep("quick"); setModePickerOpen(true); }}>Submit achievement</Button></>}
+          {record && ["returned", "rejected"].includes(record.current.status) && <Button type="button" appearance="primary" disabled={busy} onClick={() => void action(() => achievementApi.create(token, assignmentId), "Correction draft created")}>Start a correction</Button>}
         </div>}
-        {record?.current.reviewComment && <div className="mt-4 border-t border-primary-foreground/20 pt-3"><p className="text-xs font-semibold text-primary-foreground/75">Manager feedback</p><p className="mt-1 whitespace-pre-wrap text-sm">{record.current.reviewComment}</p></div>}
-        {canEditDraft && <div className="mt-4 flex flex-wrap gap-2"><Button type="button" appearance="secondary" size="small" onClick={openActivityForm}>Add activity</Button><Button type="button" appearance="secondary" size="small" disabled={busy} onClick={() => { setFlowStep("quick"); setModePickerOpen(true); }}>Submit achievement</Button></div>}
-        {record && ["returned", "rejected"].includes(record.current.status) && <Button type="button" className="mt-4" appearance="secondary" size="small" disabled={busy} onClick={() => void action(() => achievementApi.create(token, assignmentId), "Correction draft created")}>Start a correction</Button>}
-        </div>
-      </section>
+      </header>
+      {record?.current.reviewComment && <Card appearance="outline" className="p-4 sm:p-5" aria-label="Manager feedback"><Text as="h2" size={400} weight="semibold">Manager feedback</Text><Text as="p" size={300} className="whitespace-pre-wrap">{record.current.reviewComment}</Text></Card>}
       {!!record?.current.evidence.length && <div className="flex flex-wrap items-center gap-2"><Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>Supporting files</Text>{record.current.evidence.map((evidence) => <Button key={evidence.id} size="small" appearance="subtle" icon={<Document20Regular />} onClick={() => void achievementApi.download(token, record.id, evidence).catch((e: unknown) => setError(e instanceof Error ? e.message : "Download failed"))}>{evidence.fileName}</Button>)}</div>}
       {loading && <p>Loading achievement…</p>}
       {error && <KpiFeedback intent="error">{error}</KpiFeedback>}
@@ -468,14 +482,31 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
         onRemove={(activity) => { void removeActivity(activity).then((removed) => { if (removed) setSelectedActivityId(null); }); }}
       />
 
-      {record && <Card appearance="outline" className="p-2 sm:p-3" aria-label="Submission history">
-        <Accordion collapsible><AccordionItem value="history"><AccordionHeader icon={<History20Regular />}><Text weight="semibold">Previous submissions and change history</Text></AccordionHeader><AccordionPanel>
-          <Text as="p" size={200} style={{ color: tokens.colorNeutralForeground2 }}>Your current work is shown above. Earlier submissions and system changes are kept here for reference.</Text>
-          <Accordion collapsible multiple className="mt-3">
-            {record.revisions.filter((revision) => revision.id !== record.current.id).map((revision) => <AccordionItem value={`revision-${revision.id}`} key={revision.id}><AccordionHeader>Previous submission {revision.revision} · {friendlyStatus(revision.effectiveStatus)}</AccordionHeader><AccordionPanel><Text as="p" size={300}>Final result: {formatActivityResult(revision.actual, assignment?.definitionVersion?.measurementUnit)}</Text>{revision.reviewComment && <Text as="p" size={300} className="mt-2 block">Manager feedback: {revision.reviewComment}</Text>}<ActivityReadOnlyList activities={revision.activities ?? []} achievementId={record.id} token={token} onError={setError} />{revision.evidence.map((evidence) => <Button key={evidence.id} appearance="subtle" size="small" onClick={() => void achievementApi.download(token, record.id, evidence).catch((e: unknown) => setError(e instanceof Error ? e.message : "Download failed"))}>{evidence.fileName}</Button>)}</AccordionPanel></AccordionItem>)}
-            {!!record.history.length && <AccordionItem value="events"><AccordionHeader>System activity log</AccordionHeader><AccordionPanel><ol className="space-y-3">{record.history.map((event) => <li key={event.id}><Text as="p" size={300} weight="semibold">{friendlyStatus(event.action)}</Text><Text as="p" size={200} style={{ color: tokens.colorNeutralForeground2 }}>{displayDateTime(event.createdAt)} · User #{event.actorId}</Text></li>)}</ol></AccordionPanel></AccordionItem>}
-          </Accordion>
-        </AccordionPanel></AccordionItem></Accordion>
+      <OverlayDrawer open={switcherOpen} onOpenChange={(_, data) => setSwitcherOpen(data.open)} position="end" size="small" style={{ width: "min(24rem, 100vw)" }}>
+        <DrawerHeader>
+          <DrawerHeaderTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close KPI switcher" onClick={() => setSwitcherOpen(false)} />}>Switch KPI</DrawerHeaderTitle>
+        </DrawerHeader>
+        <DrawerBody className="flex flex-col gap-3 !px-0 !pb-5">
+          <Text as="p" size={300} className="px-4" style={{ color: tokens.colorNeutralForeground2 }}>Choose another KPI to open its activities and progress.</Text>
+          {!!availableAssignments.length && <Table aria-label="Available KPI assignments" size="small" className="w-full table-fixed">
+            <TableHeader><TableRow><TableHeaderCell className="w-auto !px-4">KPI</TableHeaderCell><TableHeaderCell className="w-24 !px-2">Status</TableHeaderCell></TableRow></TableHeader>
+            <TableBody>{availableAssignments.map((item) => {
+              const current = item.id === assignmentId;
+              return <TableRow key={item.id} aria-current={current ? "page" : undefined} className={current ? "bg-primary/10" : "cursor-pointer hover:bg-muted/50"} onClick={() => { if (current) return; setSwitcherOpen(false); router.push(`/dashboard/me/kpi/${item.id}`); }}>
+                <TableCell className="!px-4 !py-3"><button type="button" className="block w-full text-left" disabled={current} onClick={(event) => { event.stopPropagation(); setSwitcherOpen(false); router.push(`/dashboard/me/kpi/${item.id}`); }}><span className="block truncate text-sm font-semibold">{item.definitionVersion?.name ?? `KPI #${item.id}`}</span><span className="mt-0.5 block truncate text-xs text-muted-foreground">{item.period?.label ?? "Reporting period unavailable"}{current ? " · Current KPI" : ""}</span></button></TableCell>
+                <TableCell className="!px-2 !py-3"><KpiStatusBadge status={item.status} /></TableCell>
+              </TableRow>;
+            })}</TableBody>
+          </Table>}
+          {!availableAssignments.length && <Text as="p" size={300}>No KPI assignments are available.</Text>}
+        </DrawerBody>
+      </OverlayDrawer>
+
+      {record && previousRevisions.length > 0 && <Card appearance="outline" className="p-3 sm:p-4" aria-label="Previous submissions">
+        <Text as="h2" size={400} weight="semibold">Previous submissions</Text>
+        <Accordion collapsible multiple className="mt-2">
+          {previousRevisions.map((revision) => <AccordionItem value={`revision-${revision.id}`} key={revision.id}><AccordionHeader>Submission {revision.revision} · {friendlyStatus(revision.effectiveStatus)}</AccordionHeader><AccordionPanel><Text as="p" size={300}>Final result: {formatActivityResult(revision.actual, assignment?.definitionVersion?.measurementUnit)}</Text>{revision.reviewComment && <Text as="p" size={300} className="mt-2 block">Manager feedback: {revision.reviewComment}</Text>}<ActivityReadOnlyList activities={revision.activities ?? []} achievementId={record.id} token={token} onError={setError} />{revision.evidence.map((evidence) => <Button key={evidence.id} appearance="subtle" size="small" onClick={() => void achievementApi.download(token, record.id, evidence).catch((e: unknown) => setError(e instanceof Error ? e.message : "Download failed"))}>{evidence.fileName}</Button>)}</AccordionPanel></AccordionItem>)}
+        </Accordion>
       </Card>}
 
       <Dialog open={modePickerOpen} onOpenChange={(_, data) => { if (!busy) setModePickerOpen(data.open); }}>
@@ -496,6 +527,7 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
               <p className="text-sm text-muted-foreground">{assignment!.definitionVersion?.name} · {assignment!.period?.label}</p>
               <KpiFeedback intent="info">Your {activities.length === 1 ? "activity is" : `${activities.length} activities are`} saved as supporting work. Enter the final result, then submit the complete achievement to your manager.</KpiFeedback>
               <div className="grid gap-3 sm:grid-cols-2"><Field label={`Final actual achievement${assignment!.definitionVersion?.measurementUnit ? ` (${assignment!.definitionVersion.measurementUnit})` : ""}`} required><KpiFluentInput value={actual} onChange={(event) => setActual(event.target.value)} placeholder="Enter the reporting-period result" /></Field><Field label="Supporting comments"><KpiFluentTextarea value={comments} onChange={(event) => setComments(event.target.value)} maxLength={4000} rows={3} /></Field></div>
+              {activityTotal && <div className="flex flex-wrap items-center gap-3"><Button type="button" appearance="secondary" onClick={() => setActual(activityTotal.total)}>Use activity total</Button><span className="text-sm text-muted-foreground">Adds {activityTotal.count} numeric {activityTotal.count === 1 ? "activity result" : "activity results"}. You can edit the total before submitting.</span></div>}
             </DialogContent>
             <DialogActions><Button appearance="secondary" onClick={() => setModePickerOpen(false)}>Cancel</Button><Button appearance="secondary" disabled={busy} onClick={() => { setModePickerOpen(false); void action(() => record ? achievementApi.update(token, record.id, record.current.rowVersion, enteredActual(), comments) : achievementApi.create(token, assignmentId, enteredActual(), comments), "Draft saved"); }}>Save for later</Button><Button appearance="primary" disabled={busy || !actual.trim()} onClick={() => void submitAchievement()}>{busy ? "Submitting…" : "Submit to manager"}</Button></DialogActions>
           </>}

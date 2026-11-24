@@ -1,5 +1,6 @@
 "use client";
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import * as React from "react";
 import { ArrowClockwise20Regular as Refresh } from "@fluentui/react-icons";
 
@@ -225,36 +226,36 @@ export function NotificationPreferencesMatrix() {
               </span>
             </div>
             <div className="overflow-x-auto rounded-lg border">
-              <table className="min-w-[42rem] w-full text-sm">
-                <thead className="bg-muted/30">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-medium">
+              <StandardTable className="min-w-[42rem] w-full text-sm">
+                <StandardTableHeader className="bg-muted/30">
+                  <StandardTableRow>
+                    <StandardTableHead className="px-3 py-2 text-left font-medium">
                       Notification
-                    </th>
+                    </StandardTableHead>
                     {CHANNELS.map((channel) => (
-                      <th
+                      <StandardTableHead
                         key={channel}
                         className="px-3 py-2 text-center font-medium"
                       >
                         {label(channel)}
-                      </th>
+                      </StandardTableHead>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
+                  </StandardTableRow>
+                </StandardTableHeader>
+                <StandardTableBody>
                   {group.types.map((type) => (
-                    <tr key={type} className="border-t">
-                      <td className="px-3 py-3">
+                    <StandardTableRow key={type} className="border-t">
+                      <StandardTableCell className="px-3 py-3">
                         <p className="font-medium">{label(type)}</p>
                         <p className="text-[11px] text-muted-foreground">
                           {type}
                         </p>
-                      </td>
+                      </StandardTableCell>
                       {CHANNELS.map((channel) => {
                         const preference = byKey.get(key(type, channel));
                         const busy = busyKey === key(type, channel);
                         return (
-                          <td key={channel} className="px-3 py-3">
+                          <StandardTableCell key={channel} className="px-3 py-3">
                             <div className="flex justify-center">
                               <Switch
                                 checked={preference ? enabled(preference) : type !== "KPI_PERIOD_CREATED" || (channel === "IN_APP" && !CHANNELS.some((candidate) => enabled(byKey.get(key(type, candidate))) && byKey.has(key(type, candidate))))}
@@ -265,13 +266,13 @@ export function NotificationPreferencesMatrix() {
                                 }
                               />
                             </div>
-                          </td>
+                          </StandardTableCell>
                         );
                       })}
-                    </tr>
+                    </StandardTableRow>
                   ))}
-                </tbody>
-              </table>
+                </StandardTableBody>
+              </StandardTable>
             </div>
           </section>
         ))}

@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
@@ -239,7 +240,7 @@ function Surface({
   )
 }
 
-export function ReportsAnalyticsView() {
+export function ReportsAnalyticsView({ embedded = false }: { embedded?: boolean }) {
   const [token, setToken] = React.useState("")
   const [loading, setLoading] = React.useState(true)
   const [loadIssues, setLoadIssues] = React.useState<string[]>([])
@@ -609,7 +610,7 @@ export function ReportsAnalyticsView() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <Surface className="pt-6">
+      {!embedded && <Surface className="pt-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -631,7 +632,7 @@ export function ReportsAnalyticsView() {
             </Button>
           </div>
         </div>
-      </Surface>
+      </Surface>}
 
       {loadIssues.length > 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:px-6" role="status">
@@ -1124,42 +1125,42 @@ export function ReportsAnalyticsView() {
           </div>
         ) : null}
         <div className="mt-4 overflow-x-auto rounded-md border border-border">
-          <table className="min-w-full text-sm">
-            <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
+          <StandardTable className="min-w-full text-sm">
+            <StandardTableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <StandardTableRow>
                 {(previewColumns.length ? previewColumns : ["No preview"]).map((column) => (
-                  <th key={column} className="px-3 py-2 font-medium">
+                  <StandardTableHead key={column} className="px-3 py-2 font-medium">
                     {column.replace(/_/g, " ")}
-                  </th>
+                  </StandardTableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+              </StandardTableRow>
+            </StandardTableHeader>
+            <StandardTableBody className="divide-y divide-border">
               {previewRows.length > 0 ? (
                 previewRows.slice(0, 20).map((row, index) => (
-                  <tr key={`preview-${index}`}>
+                  <StandardTableRow key={`preview-${index}`}>
                     {previewColumns.map((column) => (
-                      <td key={`${index}-${column}`} className="px-3 py-2 text-xs">
+                      <StandardTableCell key={`${index}-${column}`} className="px-3 py-2 text-xs">
                         {typeof row[column] === "object" && row[column] !== null
                           ? JSON.stringify(row[column])
                           : String(row[column] ?? "-")}
-                      </td>
+                      </StandardTableCell>
                     ))}
-                  </tr>
+                  </StandardTableRow>
                 ))
               ) : (
-                <tr>
-                  <td className="px-3 py-6 text-sm text-muted-foreground">
+                <StandardTableRow>
+                  <StandardTableCell className="px-3 py-6 text-sm text-muted-foreground">
                     {loading
                       ? "Loading report data and checking access…"
                       : loadIssues.length
                         ? "A preview is unavailable because one or more report sources could not be loaded."
                         : "No report preview yet. Choose a report and run it to see results."}
-                  </td>
-                </tr>
+                  </StandardTableCell>
+                </StandardTableRow>
               )}
-            </tbody>
-          </table>
+            </StandardTableBody>
+          </StandardTable>
         </div>
       </Surface>
     </div>

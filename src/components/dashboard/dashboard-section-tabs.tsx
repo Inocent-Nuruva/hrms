@@ -40,7 +40,7 @@ export function DashboardSectionTabs({
   // Solid bg-card so content never shows through the sticky rail on mobile.
   // Negative margins match parent content padding (px-3 / sm:px-4 / md:px-4).
   const stickyClassName =
-    "sticky top-0 z-40 -mx-3 min-w-0 border-b border-border/80 bg-card px-3 py-1 sm:-mx-4 sm:px-4 md:-mx-4 md:px-4"
+    "sticky top-0 z-40 -mx-3 min-w-0 border-b border-border/80 bg-card px-3 pt-1 sm:-mx-4 sm:px-4 md:-mx-4 md:px-4"
 
   const filteredGroups = React.useMemo(() => {
     if (!mounted || !actor.ready) {

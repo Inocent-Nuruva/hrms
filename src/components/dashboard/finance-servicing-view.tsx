@@ -1,5 +1,6 @@
 "use client";
 
+import { SharedDashboardHeroBackground } from "@/components/dashboard/welcome-card-background"
 import * as React from "react";
 import { Button, Card, Input, Field, Textarea as FluentTextarea, Table, TableHeader, TableBody, TableRow, TableHeaderCell, TableCell, TeachingPopover, TeachingPopoverTrigger, TeachingPopoverSurface, TeachingPopoverHeader, TeachingPopoverBody, TeachingPopoverTitle, TeachingPopoverFooter } from "@fluentui/react-components";
 import { Info20Regular, ArrowClockwise20Regular, ReceiptMoney24Regular } from "@fluentui/react-icons";
@@ -412,28 +413,21 @@ export function FinanceServicingView({
     <section className="space-y-4">
       <TalentDoodleSprites />
       {activeTab === "payroll" ? (
-        <header className={`${pageBleedClass} relative overflow-hidden bg-primary px-5 py-7 text-primary-foreground sm:px-8 sm:py-8`}>
-          <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden bg-gradient-to-r from-primary via-primary to-primary/90">
-            <div className="finance-hero-drift absolute -right-16 -top-24 size-80 rounded-full border-[42px] border-primary-foreground/[0.12]" />
-            <div className="finance-hero-orbit absolute right-16 top-[calc(50%-4.5rem)] size-36 rounded-full border border-primary-foreground/15" />
-            <div className="finance-hero-band absolute bottom-0 right-28 h-32 w-56 bg-primary-foreground/[0.08]" />
-            <div className="finance-hero-line absolute left-[46%] top-5 h-24 w-px bg-primary-foreground/15" />
-            <div className="finance-hero-dot absolute left-[49%] top-9 size-2 rounded-full bg-primary-foreground/25" />
-            <div className="finance-hero-dot finance-hero-dot-delayed absolute left-[51%] top-16 size-1.5 rounded-full bg-primary-foreground/20" />
-          </div>
+        <header className={`${pageBleedClass} relative overflow-hidden bg-card px-5 py-7 text-foreground sm:px-8 sm:py-8`}>
+          <SharedDashboardHeroBackground />
           <div className="relative flex items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-5">
-              <ReceiptMoney24Regular aria-hidden="true" className="size-9 shrink-0 text-primary-foreground/90" />
-              <div aria-hidden="true" className="h-12 w-px bg-primary-foreground/25" />
+              <ReceiptMoney24Regular aria-hidden="true" className="size-9 shrink-0 text-muted-foreground" />
+              <div aria-hidden="true" className="h-12 w-px bg-border" />
               <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary-foreground/70">Finance workspace</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">Finance workspace</p>
                 <div className="mt-1.5 flex flex-wrap items-center gap-2">
                   <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Payroll deductions</h1>
-                  <PayrollGuide title="Payroll deductions" inverse>Check loan deductions before and after each payroll run, and decide how shortfalls are recovered.</PayrollGuide>
+                  <PayrollGuide title="Payroll deductions">Check loan deductions before and after each payroll run, and decide how shortfalls are recovered.</PayrollGuide>
                 </div>
               </div>
             </div>
-            <Button appearance="subtle" size="large" className="!size-11 !min-w-11 !shrink-0 !text-primary-foreground hover:!bg-primary-foreground/10 disabled:!opacity-50"
+            <Button appearance="subtle" size="large" className="!size-11 !min-w-11 !shrink-0 !text-foreground hover:!bg-primary/10 disabled:!opacity-50"
               aria-label="Refresh payroll deductions" title="Refresh payroll deductions" disabled={loading}
               icon={loading ? <FluentLoadingIndicator /> : <ArrowClockwise20Regular className="!size-6" />}
               onClick={() => void loadShortfalls()} />

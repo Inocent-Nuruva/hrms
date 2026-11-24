@@ -31,7 +31,7 @@ function useEvaluationAccess() {
 }
 function Frame({ children, title, description, back }: { children: React.ReactNode; title: string; description: string; back?: string }) {
   const router = useRouter();
-  return <div className="space-y-5 pt-3">
+  return <div className="space-y-5">
     <KpiPageHeader title={title} description={description} actions={back ? <Button type="button" onClick={() => router.push(back)} appearance="secondary">Back to my KPIs</Button> : undefined} />
     {children}
   </div>;

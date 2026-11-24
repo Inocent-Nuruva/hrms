@@ -1,7 +1,7 @@
 "use client"
 
 import { Badge, Button, Card, Checkbox, Dialog, DialogBody, DialogContent, DialogSurface, DialogTitle, Dropdown, Option, ProgressBar, Spinner, Table, TableHeader, TableBody, TableRow, TableHeaderCell, TableCell, Text, Tooltip } from "@fluentui/react-components";
-import { Info16Regular } from "@fluentui/react-icons";
+import { Dismiss16Regular, Info16Regular } from "@fluentui/react-icons";
 import { KpiFluentInput } from "./kpi-fluent-fields";
 import * as React from "react"
 import { KpiFluentButton } from "./kpi-fluent-button"
@@ -12,6 +12,8 @@ import { listBranches, listDepartments, listEmployees, type AdminRecord } from "
 import { kpiApi, type KpiAssignment, type KpiPeriod } from "@/lib/kpi-api"
 import { readKpiToken, scorecardsEnabled } from "@/lib/kpi-session"
 import { scorecardApi, type Scorecard, type ScorecardCreate, type ScorecardDraft, type ScoringPolicy } from "@/lib/scorecard-api"
+import { scorecardEmployeeNames } from "./scorecard-subject-names"
+import { ScorecardDetail } from "./scorecard-detail"
 
 const input = "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
 const selectInput = "w-full min-w-0"
@@ -42,17 +44,29 @@ function weightTotal(rows: Array<{ weight: string }>) { return rows.reduce((sum,
 export function ScorecardList() {
   const actor = useDashboardActor(), router = useRouter()
   const [rows, setRows] = React.useState<Scorecard[]>([])
+  const [employeeNames, setEmployeeNames] = React.useState<Record<number, string>>({})
+  const [selectedScorecardId, setSelectedScorecardId] = React.useState<number | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState("")
   React.useEffect(() => {
     if (!scorecardsEnabled || !actor.ready) return
     const token = readKpiToken()
     if (!token) { setError("Sign in to view scorecards"); setLoading(false); return }
-    void scorecardApi.list(token).then(setRows).catch((e: unknown) => setError(errorText(e))).finally(() => setLoading(false))
+    void scorecardApi.list(token).then(async (scorecards) => {
+      const names = await scorecardEmployeeNames(token, scorecards.filter((row) => row.subjectType === "employee").map((row) => row.subjectId))
+      setEmployeeNames(names)
+      setRows(scorecards)
+    }).catch((e: unknown) => setError(errorText(e))).finally(() => setLoading(false))
   }, [actor.ready])
   if (!scorecardsEnabled) return <p className="p-6">Scorecards are disabled in this environment.</p>
   const canCreate = actor.roleNames.some((r) => roles.includes(r))
-  return <div className="space-y-4 pt-3">
+  const selectedScorecard = rows.find((row) => row.id === selectedScorecardId)
+  function closeScorecard() {
+    setSelectedScorecardId(null)
+    const token = readKpiToken()
+    if (token) void scorecardApi.list(token).then(setRows).catch((cause: unknown) => setError(errorText(cause)))
+  }
+  return <div className="space-y-4">
     <KpiPageHeader title="Scorecards" description="Review a person’s KPIs together for a reporting period." actions={canCreate ? <Button appearance="subtle" onClick={() => router.push("/dashboard/kpi/scorecards/new")}>New scorecard</Button> : undefined} />
     {loading && <div className="py-4"><Spinner size="small" label="Loading scorecards" /></div>}
     {error && <KpiFeedback intent="error">{error}</KpiFeedback>}
@@ -62,10 +76,23 @@ export function ScorecardList() {
     </Card>}
     {!loading && !error && rows.length > 0 && <Card appearance="outline" className="overflow-hidden rounded-xl p-0 shadow-sm">
       <div className="overflow-x-auto"><Table aria-label="KPI scorecards" size="small" className="w-full text-left text-sm">
-        <TableHeader><TableRow><TableHeaderCell className="p-3">Scorecard</TableHeaderCell><TableHeaderCell className="p-3">Type / owner</TableHeaderCell><TableHeaderCell className="p-3">Period</TableHeaderCell><TableHeaderCell className="p-3">KPIs</TableHeaderCell><TableHeaderCell className="p-3">Status</TableHeaderCell><TableHeaderCell className="p-3">Action</TableHeaderCell></TableRow></TableHeader>
-        <TableBody>{rows.map((row) => <TableRow key={row.id}><TableCell className="p-3"><Text weight="semibold">{row.currentVersion.name}</Text><Text as="span" size={200} className="block text-muted-foreground">{row.code}</Text></TableCell><TableCell className="p-3 capitalize">{row.subjectType.replaceAll("_", " ")} #{row.subjectId}</TableCell><TableCell className="p-3">{row.period.label}</TableCell><TableCell className="p-3">{row.entries.length}</TableCell><TableCell className="p-3"><KpiStatusBadge status={row.status} /></TableCell><TableCell className="p-3"><Button as="a" href={`/dashboard/kpi/scorecards/${row.id}`} appearance="subtle">View details</Button></TableCell></TableRow>)}</TableBody>
+        <TableHeader><TableRow><TableHeaderCell className="p-3">Scorecard</TableHeaderCell><TableHeaderCell className="p-3">Type / owner</TableHeaderCell><TableHeaderCell className="p-3">Period</TableHeaderCell><TableHeaderCell className="p-3">KPIs</TableHeaderCell><TableHeaderCell className="p-3">Status</TableHeaderCell></TableRow></TableHeader>
+        <TableBody>{rows.map((row) => <TableRow key={row.id} className="cursor-pointer hover:bg-muted/40" onClick={(event) => { if (event.target instanceof Element && event.target.closest("button, a")) return; setSelectedScorecardId(row.id) }}><TableCell className="p-3"><button type="button" className="text-left font-semibold hover:underline focus-visible:underline" onClick={() => setSelectedScorecardId(row.id)}>{row.currentVersion.name}</button><Text as="span" size={200} className="block text-muted-foreground">{row.code}</Text></TableCell><TableCell className="p-3">{row.subjectType === "employee" ? employeeNames[row.subjectId] ?? `Employee #${row.subjectId}` : `${row.subjectType.replaceAll("_", " ")} #${row.subjectId}`}</TableCell><TableCell className="p-3">{row.period.label}</TableCell><TableCell className="p-3">{row.entries.length}</TableCell><TableCell className="p-3"><KpiStatusBadge status={row.status} /></TableCell></TableRow>)}</TableBody>
       </Table></div>
     </Card>}
+    <Dialog open={selectedScorecardId !== null} onOpenChange={(_, data) => { if (!data.open) closeScorecard() }}>
+      <DialogSurface style={{ width: "min(1100px, calc(100vw - 32px))", maxWidth: "calc(100vw - 32px)", height: "min(900px, calc(100dvh - 32px))", maxHeight: "calc(100dvh - 32px)", padding: 0, overflow: "hidden" }}>
+        <DialogBody style={{ display: "flex", flexDirection: "column", height: "100%", minWidth: 0, gap: 0 }}>
+          <DialogTitle style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "16px 24px", borderBottom: "1px solid var(--border)" }}>
+            <span className="min-w-0 break-words" style={{ fontFamily: "var(--font-fredoka), sans-serif", fontSize: "clamp(24px, 2.4vw, 32px)", fontWeight: 600, lineHeight: 1.15 }}>{selectedScorecard?.currentVersion.name ?? "Scorecard"}</span>
+            <Button appearance="secondary" icon={<Dismiss16Regular aria-hidden="true" />} onClick={closeScorecard}>Close</Button>
+          </DialogTitle>
+          <DialogContent style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: "auto", overflowX: "hidden", padding: "0 24px 24px" }}>
+            {selectedScorecardId !== null && <ScorecardDetail key={selectedScorecardId} id={selectedScorecardId} embedded />}
+          </DialogContent>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
   </div>
 }
 
@@ -143,7 +170,8 @@ export function ScorecardBuilder({ scorecardId }: { scorecardId?: number }) {
               <label className="space-y-1 text-sm"><span className="flex items-center gap-1.5">Scorecard mode<Tooltip relationship="description" content={<span><strong>Weighted evaluation:</strong> combines KPI results using their weights; weights must total 100%.<br /><strong>Strategic status only:</strong> tracks KPI statuses without a weighted overall score; weights are ignored.</span>}><Button type="button" appearance="subtle" size="small" icon={<Info16Regular aria-hidden />} aria-label="Explain scorecard modes" /></Tooltip></span><ScorecardDropdown label="Scorecard mode" value={mode} onChange={(value) => { setMode(value as "weighted" | "strategic"); setItems((rows) => rows.map((row) => ({ ...row, weight: value === "strategic" ? "0" : row.weight }))) }} options={[{ value: "weighted", label: "Weighted evaluation" }, { value: "strategic", label: "Strategic status only" }]} /></label>
               <label className="space-y-1 text-sm"><span>Scoring policy <span className="text-muted-foreground">(optional)</span></span><ScorecardDropdown label="Scoring policy" value={policyId} onChange={setPolicyId} options={[{ value: "", label: "Choose a published policy" }, ...policies.flatMap((policy) => policy.versions.filter((version) => version.publishedAt).map((version) => ({ value: String(version.id), label: version.name })))]} /></label>
             </div>
-            <section className="space-y-4 border-t border-border pt-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><h2 className="text-lg font-semibold">KPI assignments</h2><p className="mt-1 text-sm text-muted-foreground">Only active assignments for this subject and reporting period are available.</p></div><Badge appearance="outline" color={available.length ? "brand" : "informative"}>{items.length} selected</Badge></div>
+            <section className="space-y-4 border-t border-border pt-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><h2 className="text-lg font-semibold">KPI assignments</h2><p className="mt-1 text-sm text-muted-foreground">Only active assignments for this subject and reporting period are available. Include every active employee KPI before publishing a personal scorecard.</p></div><Badge appearance="outline" color={available.length ? "brand" : "informative"}>{items.length} selected</Badge></div>
+              {subjectType === "employee" && !!subjectId && !!periodId && available.length > 0 && <KpiFeedback intent="warning">{available.length} active {available.length === 1 ? "KPI is" : "KPIs are"} still missing from this scorecard. Add {available.length === 1 ? "it" : "them"} before publishing.</KpiFeedback>}
               <div className="flex flex-wrap gap-2"><div className="min-w-0 flex-1"><ScorecardDropdown label="Available KPI assignment" value={selected} onChange={setSelected} options={[{ value: "", label: "Select an eligible KPI" }, ...available.map((assignment) => ({ value: String(assignment.id), label: `${assignment.definitionVersion?.name ?? "KPI"} · Target ${targetSummary(assignment.currentTarget?.target)}` }))]} /></div><KpiFluentButton type="button" className={button} disabled={!selected} onClick={() => { const id = Number(selected); if (items.some((i) => i.assignmentId === id)) return; setItems((rows) => [...rows, { assignmentId: id, weight: mode === "strategic" ? "0" : "", required: true }]); setSelected("") }}>Add KPI</KpiFluentButton></div>
               {available.length === 0 && <p className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">{!subjectId || !periodId ? "Select a subject and reporting period to see eligible KPI assignments." : "No matching active assignments. Create an assignment for this subject and period first."}</p>}
               <div>{items.map((item) => { const a = assignments.find((row) => row.id === item.assignmentId); return <div key={item.assignmentId} className="grid items-end gap-3 border-b border-border py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_8rem_7rem_auto]"><div className="min-w-0"><b className="block truncate">{a?.definitionVersion?.name ?? "KPI assignment"}</b><p className="mt-1 text-xs text-muted-foreground">Target: {targetSummary(a?.currentTarget?.target)}</p></div><Field label={`Weight (%)`} type="number" value={item.weight} onChange={(value) => setItems((rows) => rows.map((r) => r.assignmentId === item.assignmentId ? { ...r, weight: value } : r))} /><Checkbox label="Required" checked={item.required} onChange={(_, data) => setItems((rows) => rows.map((r) => r.assignmentId === item.assignmentId ? { ...r, required: data.checked === true } : r))} /><KpiFluentButton type="button" className="text-sm text-red-700 underline" onClick={() => setItems((rows) => rows.filter((r) => r.assignmentId !== item.assignmentId))}>Remove</KpiFluentButton></div> })}</div>

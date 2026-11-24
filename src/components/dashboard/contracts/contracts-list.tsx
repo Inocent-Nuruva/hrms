@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -134,44 +135,44 @@ export function ContractsList({
       {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
 
       <div className="overflow-hidden rounded-xl border border-border bg-background">
-        <table className="hidden w-full text-sm md:table">
-          <thead className="bg-muted/50 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-4 py-2.5">Reference</th>
-              {!employeeId ? <th className="px-4 py-2.5">Employee</th> : null}
-              <th className="px-4 py-2.5">Type</th>
-              <th className="px-4 py-2.5">Period</th>
-              <th className="px-4 py-2.5">Status</th>
-              <th className="px-4 py-2.5">Validity</th>
-              <th className="px-4 py-2.5">Company signatory</th>
-            </tr>
-          </thead>
-          <tbody>
+        <StandardTable className="hidden w-full text-sm md:table">
+          <StandardTableHeader className="bg-muted/50 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <StandardTableRow>
+              <StandardTableHead className="px-4 py-2.5">Reference</StandardTableHead>
+              {!employeeId ? <StandardTableHead className="px-4 py-2.5">Employee</StandardTableHead> : null}
+              <StandardTableHead className="px-4 py-2.5">Type</StandardTableHead>
+              <StandardTableHead className="px-4 py-2.5">Period</StandardTableHead>
+              <StandardTableHead className="px-4 py-2.5">Status</StandardTableHead>
+              <StandardTableHead className="px-4 py-2.5">Validity</StandardTableHead>
+              <StandardTableHead className="px-4 py-2.5">Company signatory</StandardTableHead>
+            </StandardTableRow>
+          </StandardTableHeader>
+          <StandardTableBody>
             {rows.map((row) => (
-              <tr key={row.id} className="border-t border-border hover:bg-muted/30">
-                <td className="px-4 py-3">
+              <StandardTableRow key={row.id} className="border-t border-border hover:bg-muted/30">
+                <StandardTableCell className="px-4 py-3">
                   <Link href={`/dashboard/employees/contracts/${row.id}`} className="font-medium text-primary hover:underline">
                     {row.referenceNo}
                   </Link>
                   <span className="block text-xs text-muted-foreground">v{row.version}{row.amendmentReason ? ` · ${row.amendmentReason}` : ""}</span>
-                </td>
+                </StandardTableCell>
                 {!employeeId ? (
-                  <td className="px-4 py-3">
+                  <StandardTableCell className="px-4 py-3">
                     {row.employeeName}
                     <span className="block text-xs text-muted-foreground">{row.employeeNo}</span>
-                  </td>
+                  </StandardTableCell>
                 ) : null}
-                <td className="px-4 py-3">{CONTRACT_TYPE_LABELS[row.contractType]}</td>
-                <td className="px-4 py-3 whitespace-nowrap">
+                <StandardTableCell className="px-4 py-3">{CONTRACT_TYPE_LABELS[row.contractType]}</StandardTableCell>
+                <StandardTableCell className="px-4 py-3 whitespace-nowrap">
                   {formatDate(row.startDate)} – {row.endDate ? formatDate(row.endDate) : "open"}
-                </td>
-                <td className="px-4 py-3"><ContractStatusBadge status={row.status} /></td>
-                <td className="px-4 py-3"><ContractValidityText validity={row.validity} /></td>
-                <td className="px-4 py-3 text-slate-600">{row.signatoryName ?? "—"}</td>
-              </tr>
+                </StandardTableCell>
+                <StandardTableCell className="px-4 py-3"><ContractStatusBadge status={row.status} /></StandardTableCell>
+                <StandardTableCell className="px-4 py-3"><ContractValidityText validity={row.validity} /></StandardTableCell>
+                <StandardTableCell className="px-4 py-3 text-slate-600">{row.signatoryName ?? "—"}</StandardTableCell>
+              </StandardTableRow>
             ))}
-          </tbody>
-        </table>
+          </StandardTableBody>
+        </StandardTable>
         <ul className="divide-y divide-border md:hidden">
           {rows.map((row) => (
             <li key={row.id}>

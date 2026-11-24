@@ -2,39 +2,44 @@
 
 import { KpiFluentInput } from "./kpi-fluent-fields";
 import { fluentConfirm } from "@/components/ui/fluent-dialog-service"
-import { Card, Table, TableHeader, TableBody, TableRow, TableHeaderCell, TableCell, Text } from "@fluentui/react-components";
+import { Table, TableHeader, TableBody, TableRow, TableHeaderCell, TableCell } from "@fluentui/react-components";
+import { Calculator20Regular, Copy20Regular, DocumentBulletList24Regular, History20Regular } from "@fluentui/react-icons";
 import * as React from "react";
 import { KpiFluentButton } from "./kpi-fluent-button";
 import { KpiPageHeader, KpiStatusBadge } from "./kpi-page-elements";
 import Link from "next/link";
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
 import { readKpiToken, scorecardsEnabled } from "@/lib/kpi-session";
-import { scorecardApi, type Scorecard } from "@/lib/scorecard-api";
+import { scorecardApi, type Scorecard, type ScorecardEntry } from "@/lib/scorecard-api";
 import { KpiWorkflowGuidancePanel } from "./kpi-workflow-guidance";
+import { scorecardEmployeeNames } from "./scorecard-subject-names";
 
-function textTarget(target: Record<string, unknown> | null | undefined) {
-  return target
-    ? Object.entries(target)
-        .map(([k, v]) => `${k}: ${String(v)}`)
-        .join(" · ")
-    : "—";
+function textTarget(entry: ScorecardEntry) {
+  const target = entry.target;
+  if (!target) return "—";
+  const unit = entry.measurementUnit === "%" ? "%" : entry.measurementUnit ? ` ${entry.measurementUnit}` : "";
+  if (target.min !== undefined && target.max !== undefined) return `${target.min}–${target.max}${unit}`;
+  if (typeof target.value === "boolean") return target.value ? "Yes" : "No";
+  if (target.value !== undefined && target.value !== null) return `${target.value}${unit}`;
+  if (typeof target.description === "string") return target.description;
+  return Object.values(target).map(String).join(" · ") || "—";
 }
 function parseExample(type: string | undefined, raw: string): unknown {
   if (!raw.trim()) return undefined;
   if (["numeric", "percentage", "currency", "duration"].includes(type ?? "")) {
     const n = Number(raw);
-    if (!Number.isFinite(n)) throw new Error("Enter a valid numeric example");
+    if (!Number.isFinite(n)) throw new Error("Enter a number for the sample result.");
     return n;
   }
   if (type === "binary") {
-    if (!["true", "false"].includes(raw.toLowerCase()))
-      throw new Error("Enter true or false");
-    return raw.toLowerCase() === "true";
+    if (!["true", "false", "yes", "no"].includes(raw.trim().toLowerCase()))
+      throw new Error("Enter Yes or No for the sample result.");
+    return ["true", "yes"].includes(raw.trim().toLowerCase());
   }
   if (type === "milestone") {
-    if (!["true", "false"].includes(raw.toLowerCase()))
-      throw new Error("Enter true or false for milestone completion");
-    return { completed: raw.toLowerCase() === "true" };
+    if (!["true", "false", "yes", "no"].includes(raw.trim().toLowerCase()))
+      throw new Error("Enter Yes or No for the sample milestone.");
+    return { completed: ["true", "yes"].includes(raw.trim().toLowerCase()) };
   }
   return raw;
 }
@@ -42,14 +47,17 @@ function parseExample(type: string | undefined, raw: string): unknown {
 export function ScorecardDetail({
   id,
   personal = false,
+  embedded = false,
 }: {
   id: number;
   personal?: boolean;
+  embedded?: boolean;
 }) {
   const actor = useDashboardActor(),
     token = readKpiToken();
   const [card, setCard] = React.useState<Scorecard | null>(null),
     [loading, setLoading] = React.useState(true);
+  const [employeeName, setEmployeeName] = React.useState("");
   const [error, setError] = React.useState(""),
     [notice, setNotice] = React.useState(""),
     [busy, setBusy] = React.useState(false);
@@ -88,6 +96,14 @@ export function ScorecardDetail({
   React.useEffect(() => {
     if (actor.ready) void reload();
   }, [actor.ready, reload]);
+  React.useEffect(() => {
+    if (!token || card?.subjectType !== "employee") return;
+    let active = true;
+    void scorecardEmployeeNames(token, [card.subjectId]).then((names) => {
+      if (active) setEmployeeName(names[card.subjectId] ?? "");
+    });
+    return () => { active = false; };
+  }, [token, card?.subjectType, card?.subjectId]);
   const canEdit =
     !personal &&
     actor.roleNames.some((r) =>
@@ -128,9 +144,9 @@ export function ScorecardDetail({
   if (!scorecardsEnabled)
     return <p className="p-6">Scorecards are disabled in this environment.</p>;
   return (
-    <div className="space-y-4 pt-3">
-      <KpiPageHeader title="Scorecard details" description="Approved results appear here; missing achievements remain awaiting data." actions={<Link className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium hover:bg-muted" href={personal ? "/dashboard/me/scorecards" : "/dashboard/kpi/scorecards"}>Back to scorecards</Link>} />
-      <KpiWorkflowGuidancePanel recordKind="scorecard" recordId={id} />
+    <div className="space-y-7 pb-8 pt-5">
+      {!embedded && <KpiPageHeader title="Scorecard details" description="Approved results appear here; missing achievements remain awaiting data." actions={<Link className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium hover:bg-muted" href={personal ? "/dashboard/me/scorecards" : "/dashboard/kpi/scorecards"}>Back to scorecards</Link>} />}
+      {!embedded && <KpiWorkflowGuidancePanel recordKind="scorecard" recordId={id} />}
       {loading && <p>Loading scorecard…</p>}
       {error && (
         <p role="alert" className="rounded bg-red-50 p-3 text-red-700">
@@ -144,16 +160,17 @@ export function ScorecardDetail({
       )}
       {card && (
         <>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-semibold">
+          <header className="flex flex-wrap items-start justify-between gap-5 border-b border-border pb-6">
+            <div className="min-w-0 space-y-3">
+              {!embedded && <h1 className="text-2xl font-semibold">
                 {card.currentVersion.name}
-              </h1>
-              <div className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-                <span>{card.code} · {card.subjectType} #{card.subjectId} · {card.period.label}</span>
+              </h1>}
+              <div className="flex flex-wrap items-center gap-3">
                 <KpiStatusBadge status={card.status} />
+                <span className="text-sm text-muted-foreground">{card.code}</span>
               </div>
-              <p className="mt-1 text-sm">{card.currentVersion.description}</p>
+              <dl className="flex flex-wrap gap-x-7 gap-y-2 text-sm"><div><dt className="text-muted-foreground">Owner</dt><dd className="mt-0.5 font-medium">{card.subjectType === "employee" ? employeeName || `Employee #${card.subjectId}` : `${card.subjectType.replaceAll("_", " ")} #${card.subjectId}`}</dd></div><div><dt className="text-muted-foreground">Reporting period</dt><dd className="mt-0.5 font-medium">{card.period.label}</dd></div></dl>
+              {card.currentVersion.description?.trim() && card.currentVersion.description.trim().toLocaleLowerCase() !== card.currentVersion.name.trim().toLocaleLowerCase() && <p className="max-w-2xl whitespace-pre-wrap text-sm text-muted-foreground">{card.currentVersion.description}</p>}
             </div>
             {canEdit && card.status !== "archived" && (
               <div className="flex flex-wrap items-center gap-2">
@@ -221,30 +238,24 @@ export function ScorecardDetail({
                 </KpiFluentButton>
               </div>
             )}
-          </div>
-          <div className="rounded-lg border p-4 text-sm">
-            <p>
-              <b>Configuration:</b> version {card.currentVersion.version} ·{" "}
-              {card.currentVersion.mode} ·{" "}
-              {card.currentVersion.publishedAt ? "Published" : "Draft"}
-            </p>
-            <p>
-              <b>Scoring policy version:</b>{" "}
-              {card.currentVersion.policyVersionId ?? "Not selected"}
-            </p>
-            <p>
-              <b>Weight total:</b>{" "}
-              {card.entries
-                .reduce((sum, e) => sum + Number(e.weight), 0)
-                .toFixed(4)}
-              %
-            </p>
-            <p>
-              <b>Performance:</b> {card.performanceStatus.replaceAll("_", " ")} · Completeness {card.completenessPercent ?? "0"}% · Overall score {card.overallScore ?? "Unavailable"} · Rating {card.rating ?? "Unavailable"}
-            </p>
-          </div>
-          <div className="overflow-x-auto rounded-lg border">
-            <Table className="w-full text-left text-sm">
+          </header>
+          {card.missingAssignmentIds?.length ? <div role="alert" className="border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-amber-900">{card.missingAssignmentIds.length} active {card.missingAssignmentIds.length === 1 ? "KPI is" : "KPIs are"} missing from this published scorecard. Create and publish a scorecard revision to include {card.missingAssignmentIds.length === 1 ? "it" : "them"} before using the score.</div> : null}
+          <section aria-label="Scorecard summary" className="space-y-4">
+            <div className="flex items-center gap-3"><DocumentBulletList24Regular className="shrink-0 text-primary" aria-hidden="true" /><div><h2 className="font-semibold">Scorecard overview</h2><p className="text-sm text-muted-foreground">Configuration and current results for this period.</p></div></div>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-5 border-y border-border py-5 sm:grid-cols-3 lg:grid-cols-4">
+              <div><dt className="text-xs text-muted-foreground">Configuration</dt><dd className="mt-1 font-medium">Version {card.currentVersion.version} · {card.currentVersion.mode === "weighted" ? "Weighted" : "Strategic"}</dd><p className="text-xs text-muted-foreground">{card.currentVersion.publishedAt ? "Published" : "Draft"}</p></div>
+              <div><dt className="text-xs text-muted-foreground">Scoring policy</dt><dd className="mt-1 font-medium">{card.currentVersion.policyVersionId ? `Policy #${card.currentVersion.policyVersionId}` : "Not selected"}</dd></div>
+              <div><dt className="text-xs text-muted-foreground">Weight total</dt><dd className="mt-1 font-medium">{card.entries.reduce((sum, entry) => sum + Number(entry.weight), 0).toFixed(2)}%</dd></div>
+              <div><dt className="text-xs text-muted-foreground">Performance</dt><dd className="mt-1 font-medium capitalize">{card.performanceStatus.replaceAll("_", " ")}</dd></div>
+              <div><dt className="text-xs text-muted-foreground">{card.missingAssignmentIds?.length ? "Included KPI completeness" : "Completeness"}</dt><dd className="mt-1 font-medium">{card.completenessPercent ?? "0"}%</dd></div>
+              <div><dt className="text-xs text-muted-foreground">Overall score</dt><dd className="mt-1 font-medium">{card.overallScore ?? "Unavailable"}</dd></div>
+              <div><dt className="text-xs text-muted-foreground">Rating</dt><dd className="mt-1 font-medium">{card.rating ?? "Unavailable"}</dd></div>
+            </dl>
+          </section>
+          <section aria-labelledby="scorecard-kpis" className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2"><h2 id="scorecard-kpis" className="font-semibold">KPI results</h2><span className="text-sm text-muted-foreground">{card.entries.length} {card.entries.length === 1 ? "KPI" : "KPIs"}</span></div>
+            <div className="overflow-x-auto border-y border-border">
+            <Table className="min-w-[760px] w-full text-left text-sm">
               <TableHeader>
                 <TableRow className="border-b">
                   <TableHeaderCell className="p-3">KPI</TableHeaderCell>
@@ -258,44 +269,38 @@ export function ScorecardDetail({
               </TableHeader>
               <TableBody>
                 {card.entries.map((e) => (
-                  <TableRow key={e.assignmentId} className="border-b">
+                  <TableRow key={e.assignmentId} className="border-b border-border last:border-0">
                     <TableCell className="p-3">
-                      {e.kpiName}
-                      <span className="block text-xs text-muted-foreground">
-                        Definition version #{e.definitionVersionId} · target
-                        revision #{e.targetRevisionId}
-                      </span>
+                      <span className="font-medium">{e.kpiName}</span>
                     </TableCell>
-                    <TableCell className="p-3">{textTarget(e.target)}</TableCell>
-                    <TableCell className="p-3">{e.actual === null || e.actual === undefined ? "—" : typeof e.actual === "object" ? JSON.stringify(e.actual) : String(e.actual)}</TableCell>
+                    <TableCell className="p-3">{textTarget(e)}</TableCell>
+                    <TableCell className="p-3">{e.actual === null || e.actual === undefined ? "—" : typeof e.actual === "object" ? JSON.stringify(e.actual) : typeof e.actual === "boolean" ? e.actual ? "Yes" : "No" : `${e.actual}${e.measurementUnit === "%" ? "%" : e.measurementUnit ? ` ${e.measurementUnit}` : ""}`}</TableCell>
                     <TableCell className="p-3">{e.weight}%</TableCell>
                     <TableCell className="p-3">{e.achievement === null || e.achievement === undefined ? "—" : `${e.achievement}%`}{e.rawAchievement && e.rawAchievement !== e.achievement ? ` (raw ${e.rawAchievement}%)` : ""}</TableCell>
                     <TableCell className="p-3">{e.weightedScore ?? "—"}</TableCell>
-                    <TableCell className="p-3">{e.status === "scored" ? "Approved" : "Awaiting Data"}{e.managerFeedback ? ` · ${e.managerFeedback}` : ""}</TableCell>
+                    <TableCell className="p-3">{e.status === "target_changed" ? <span className="text-sm font-medium text-amber-700">Target changed · revise scorecard</span> : <KpiStatusBadge status={e.status === "scored" ? "approved" : "awaiting_data"} />}{e.managerFeedback && <span className="mt-1 block max-w-48 text-xs text-muted-foreground">{e.managerFeedback}</span>}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </div>
-          <section className="space-y-2 rounded-lg border p-4">
-            <h2 className="font-semibold">Configuration history</h2>
-            {card.versions.map((v) => (
-              <p className="text-sm" key={v.id}>
-                Version {v.version}:{" "}
-                {v.publishedAt
-                  ? `Published ${new Date(v.publishedAt).toLocaleString()}`
-                  : "Draft"}{" "}
-                · policy version #{v.policyVersionId ?? "—"} ·{" "}
-                {v.entries.length} KPIs
-              </p>
-            ))}
+            </div>
           </section>
-          {canEdit && (
-            <section className="space-y-3 rounded-lg border p-4">
-              <h2 className="font-semibold">Clone into a new draft</h2>
+          <section className="space-y-3 border-t border-border pt-6">
+            <h2 className="flex items-center gap-2 font-semibold"><History20Regular className="text-primary" aria-hidden="true" />Configuration history</h2>
+            <ol className="divide-y divide-border border-y border-border">{card.versions.map((version) => (
+              <li className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm" key={version.id}>
+                <span className="font-medium">Version {version.version}</span>
+                <span className="text-muted-foreground">{version.publishedAt ? `Published ${new Date(version.publishedAt).toLocaleString()}` : "Draft"} · {version.entries.length} {version.entries.length === 1 ? "KPI" : "KPIs"} · {version.policyVersionId ? `Policy #${version.policyVersionId}` : "No scoring policy"}</span>
+              </li>
+            ))}</ol>
+          </section>
+          {canEdit && <div className="grid gap-8 border-t border-border pt-6 lg:grid-cols-2 lg:gap-0">
+            <section className="space-y-3 lg:border-r lg:border-border lg:pr-8">
+              <h2 className="flex items-center gap-2 font-semibold"><Copy20Regular className="text-primary" aria-hidden="true" />Clone into a new draft</h2>
+              <p className="text-sm text-muted-foreground">Create a separate scorecard based on this configuration.</p>
               <div className="flex flex-wrap gap-2">
                 <KpiFluentInput
-                  className="rounded border px-3 py-2 text-sm"
+                  className="min-w-44 flex-1 rounded border px-3 py-2 text-sm"
                   aria-label="New scorecard identifier"
                   placeholder="NEW_SCORECARD_CODE"
                   value={cloneCode}
@@ -315,26 +320,24 @@ export function ScorecardDetail({
                 </KpiFluentButton>
               </div>
             </section>
-          )}
-          {canEdit && (
-            <section className="space-y-3 rounded-lg border p-4">
-              <h2 className="font-semibold">Example scoring preview</h2>
+            <section className="space-y-3 lg:pl-8">
+              <h2 className="flex items-center gap-2 font-semibold"><Calculator20Regular className="text-primary" aria-hidden="true" />Try a sample score</h2>
               <p className="text-sm text-muted-foreground">
-                Example inputs are calculated only. They are never saved as
-                employee achievements.
+                Enter a possible result for each KPI to see the score it would produce. Nothing you enter here is saved.
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {card.entries.map((e) => (
                   <label key={e.assignmentId} className="space-y-1 text-sm">
                     <span>
-                      {e.kpiName} example actual{" "}
+                      Sample result for {e.kpiName}{" "}
                       {e.measurementType === "milestone" ||
                       e.measurementType === "binary"
-                        ? "(true/false)"
+                        ? "(Yes or No)"
                         : ""}
                     </span>
                     <KpiFluentInput
                       className="w-full rounded border px-3 py-2"
+                      placeholder={e.measurementType === "milestone" || e.measurementType === "binary" ? "Yes or No" : ["numeric", "percentage", "currency", "duration"].includes(e.measurementType ?? "") ? "Enter a number" : "Enter a result"}
                       value={examples[e.assignmentId] ?? ""}
                       onChange={(event) =>
                         setExamples((values) => ({
@@ -376,30 +379,17 @@ export function ScorecardDetail({
                   }
                 }}
               >
-                Calculate example preview
+                See sample score
               </KpiFluentButton>
               {preview && (
-                <Card appearance="outline" className="p-3">
-                  <p>
-                    <Text weight="semibold">Example only — not an employee result</Text>
-                  </p>
-                  <p>
-                    Completeness: {preview.completenessPercent}% · Preview
-                    score: {preview.overallScore ?? "Unavailable"} · Rating:{" "}
-                    {preview.rating ?? "Unavailable"}
-                  </p>
-                  {preview.entries.map((e) => (
-                    <p key={e.entryId}>
-                      Assignment #{e.entryId}: {e.status} · raw{" "}
-                      {e.rawAchievement ?? "—"} · scored{" "}
-                      {e.scoredAchievement ?? "—"} · weighted{" "}
-                      {e.weightedContribution ?? "—"}
-                    </p>
-                  ))}
-                </Card>
+                <div className="space-y-2 border-t border-border pt-4 text-sm">
+                  <p className="font-medium">Sample score · nothing saved</p>
+                  <p className="text-muted-foreground">Data complete: {preview.completenessPercent}% · Score: {preview.overallScore ?? "Unavailable"} · Rating: {preview.rating ?? "Unavailable"}</p>
+                  {preview.entries.map((entry, index) => <p key={entry.entryId} className="text-muted-foreground">Result {index + 1}: {entry.status.replaceAll("_", " ")} · KPI score {entry.scoredAchievement ?? "—"} · Weighted score {entry.weightedContribution ?? "—"}{entry.rawAchievement && entry.rawAchievement !== entry.scoredAchievement ? ` · Before adjustment ${entry.rawAchievement}` : ""}</p>)}
+                </div>
               )}
             </section>
-          )}
+          </div>}
         </>
       )}
     </div>

@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import * as React from "react"
 import { RefreshCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -411,35 +412,35 @@ function LeaveRecalculationDialog({
             </div>
 
             <div className="overflow-x-auto rounded-md border border-border">
-              <table className="w-full min-w-190 text-sm">
-                <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-                  <tr>
-                    <th className="px-2 py-2">Employee</th>
-                    <th className="px-2 py-2">Leave type</th>
-                    <th className="px-2 py-2 text-right">Current balance</th>
-                    <th className="px-2 py-2 text-right">Recalculated</th>
-                    <th className="px-2 py-2 text-right">Difference</th>
-                    <th className="px-2 py-2">How it was calculated</th>
-                    <th className="px-2 py-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <StandardTable className="w-full min-w-190 text-sm">
+                <StandardTableHeader className="bg-muted/50 text-left text-xs text-muted-foreground">
+                  <StandardTableRow>
+                    <StandardTableHead className="px-2 py-2">Employee</StandardTableHead>
+                    <StandardTableHead className="px-2 py-2">Leave type</StandardTableHead>
+                    <StandardTableHead className="px-2 py-2 text-right">Current balance</StandardTableHead>
+                    <StandardTableHead className="px-2 py-2 text-right">Recalculated</StandardTableHead>
+                    <StandardTableHead className="px-2 py-2 text-right">Difference</StandardTableHead>
+                    <StandardTableHead className="px-2 py-2">How it was calculated</StandardTableHead>
+                    <StandardTableHead className="px-2 py-2">Status</StandardTableHead>
+                  </StandardTableRow>
+                </StandardTableHeader>
+                <StandardTableBody>
                   {lines.length ? (
                     lines.map((l) => {
                       const diff = Number(l.difference_days)
                       return (
-                        <tr key={l.id} className="border-t border-border align-top">
-                          <td className="px-2 py-2">
+                        <StandardTableRow key={l.id} className="border-t border-border align-top">
+                          <StandardTableCell className="px-2 py-2">
                             <span className="block font-medium">{l.employee_name ?? `#${l.employee_id}`}</span>
                             <span className="block text-xs text-muted-foreground">{l.employee_no}</span>
-                          </td>
-                          <td className="px-2 py-2">{l.leave_type_name ?? "-"}</td>
-                          <td className="px-2 py-2 text-right tabular-nums">{num(l.current_available_days)}</td>
-                          <td className="px-2 py-2 text-right tabular-nums">{num(l.recalculated_available_days)}</td>
-                          <td className={cn("px-2 py-2 text-right font-semibold tabular-nums", diff < 0 ? "text-destructive" : diff > 0 ? "text-emerald-700 dark:text-emerald-400" : "")}>
+                          </StandardTableCell>
+                          <StandardTableCell className="px-2 py-2">{l.leave_type_name ?? "-"}</StandardTableCell>
+                          <StandardTableCell className="px-2 py-2 text-right tabular-nums">{num(l.current_available_days)}</StandardTableCell>
+                          <StandardTableCell className="px-2 py-2 text-right tabular-nums">{num(l.recalculated_available_days)}</StandardTableCell>
+                          <StandardTableCell className={cn("px-2 py-2 text-right font-semibold tabular-nums", diff < 0 ? "text-destructive" : diff > 0 ? "text-emerald-700 dark:text-emerald-400" : "")}>
                             {diff > 0 ? "+" : ""}{num(diff)}
-                          </td>
-                          <td className="px-2 py-2 text-xs text-muted-foreground">
+                          </StandardTableCell>
+                          <StandardTableCell className="px-2 py-2 text-xs text-muted-foreground">
                             Accrued {num(l.current_accrued_days)} → {num(l.recalculated_accrued_days)} of {num(l.entitlement_days)}
                             {l.accrual_frequency ? ` · ${l.accrual_frequency}` : ""}
                             {l.policy_version ? ` · policy v${l.policy_version}` : ""}
@@ -451,20 +452,20 @@ function LeaveRecalculationDialog({
                             Used {num(l.used_days)} · pending {num(l.pending_days)} · adjustments {num(l.adjusted_days)}
                             {l.warnings?.length ? <span className="mt-1 block text-amber-700 dark:text-amber-300">{l.warnings.join(" ")}</span> : null}
                             {l.error ? <span className="mt-1 block text-destructive">{l.error}</span> : null}
-                          </td>
-                          <td className="px-2 py-2 text-xs">{l.status}</td>
-                        </tr>
+                          </StandardTableCell>
+                          <StandardTableCell className="px-2 py-2 text-xs">{l.status}</StandardTableCell>
+                        </StandardTableRow>
                       )
                     })
                   ) : (
-                    <tr>
-                      <td colSpan={7} className="px-2 py-6 text-center text-sm text-muted-foreground">
+                    <StandardTableRow>
+                      <StandardTableCell colSpan={7} className="px-2 py-6 text-center text-sm text-muted-foreground">
                         {BUSY.includes(run.status) ? "Calculating…" : "No differences: balances already match."}
-                      </td>
-                    </tr>
+                      </StandardTableCell>
+                    </StandardTableRow>
                   )}
-                </tbody>
-              </table>
+                </StandardTableBody>
+              </StandardTable>
             </div>
 
             {canApply ? (
@@ -489,34 +490,34 @@ function LeaveRecalculationDialog({
 
         {view === "history" ? (
           <div className="overflow-x-auto rounded-md border border-border">
-            <table className="w-full min-w-160 text-sm">
-              <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-2 py-2">Reference</th>
-                  <th className="px-2 py-2">Scope</th>
-                  <th className="px-2 py-2">Status</th>
-                  <th className="px-2 py-2 text-right">Changes</th>
-                  <th className="px-2 py-2">Reason</th>
-                  <th className="px-2 py-2">Created</th>
-                </tr>
-              </thead>
-              <tbody>
+            <StandardTable className="w-full min-w-160 text-sm">
+              <StandardTableHeader className="bg-muted/50 text-left text-xs text-muted-foreground">
+                <StandardTableRow>
+                  <StandardTableHead className="px-2 py-2">Reference</StandardTableHead>
+                  <StandardTableHead className="px-2 py-2">Scope</StandardTableHead>
+                  <StandardTableHead className="px-2 py-2">Status</StandardTableHead>
+                  <StandardTableHead className="px-2 py-2 text-right">Changes</StandardTableHead>
+                  <StandardTableHead className="px-2 py-2">Reason</StandardTableHead>
+                  <StandardTableHead className="px-2 py-2">Created</StandardTableHead>
+                </StandardTableRow>
+              </StandardTableHeader>
+              <StandardTableBody>
                 {history.length ? (
                   history.map((h) => (
-                    <tr key={h.id} className="cursor-pointer border-t border-border hover:bg-muted/40" onClick={() => { setView("run"); void loadRun(h.id) }}>
-                      <td className="px-2 py-2 font-medium">{h.reference}</td>
-                      <td className="px-2 py-2">{h.scope_type}{h.trigger !== "manual" ? ` (${h.trigger})` : ""}</td>
-                      <td className="px-2 py-2">{STATUS_LABEL[h.status]}</td>
-                      <td className="px-2 py-2 text-right tabular-nums">{h.lines_applied || h.lines_changed}</td>
-                      <td className="max-w-55 truncate px-2 py-2 text-xs text-muted-foreground" title={h.reason ?? ""}>{h.reason ?? "-"}</td>
-                      <td className="px-2 py-2 text-xs">{new Date(h.created_at).toLocaleString()}</td>
-                    </tr>
+                    <StandardTableRow key={h.id} className="cursor-pointer border-t border-border hover:bg-muted/40" onClick={() => { setView("run"); void loadRun(h.id) }}>
+                      <StandardTableCell className="px-2 py-2 font-medium">{h.reference}</StandardTableCell>
+                      <StandardTableCell className="px-2 py-2">{h.scope_type}{h.trigger !== "manual" ? ` (${h.trigger})` : ""}</StandardTableCell>
+                      <StandardTableCell className="px-2 py-2">{STATUS_LABEL[h.status]}</StandardTableCell>
+                      <StandardTableCell className="px-2 py-2 text-right tabular-nums">{h.lines_applied || h.lines_changed}</StandardTableCell>
+                      <StandardTableCell className="max-w-55 truncate px-2 py-2 text-xs text-muted-foreground" title={h.reason ?? ""}>{h.reason ?? "-"}</StandardTableCell>
+                      <StandardTableCell className="px-2 py-2 text-xs">{new Date(h.created_at).toLocaleString()}</StandardTableCell>
+                    </StandardTableRow>
                   ))
                 ) : (
-                  <tr><td colSpan={6} className="px-2 py-6 text-center text-muted-foreground">No recalculations yet.</td></tr>
+                  <StandardTableRow><StandardTableCell colSpan={6} className="px-2 py-6 text-center text-muted-foreground">No recalculations yet.</StandardTableCell></StandardTableRow>
                 )}
-              </tbody>
-            </table>
+              </StandardTableBody>
+            </StandardTable>
           </div>
         ) : null}
 

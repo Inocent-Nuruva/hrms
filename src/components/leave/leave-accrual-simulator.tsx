@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import * as React from "react"
 import { Input } from "@/components/ui/input"
 import { readStoredSessionTokens } from "@/lib/session-client"
@@ -93,24 +94,24 @@ export function LeaveAccrualSimulator({
                 {result.explanation} Leave year {result.cycle_start} – {result.cycle_end}.
               </p>
               <div className="overflow-x-auto">
-                <table className="w-full text-xs tabular-nums">
-                  <thead>
-                    <tr className="text-muted-foreground">
+                <StandardTable className="w-full text-xs tabular-nums">
+                  <StandardTableHeader>
+                    <StandardTableRow className="text-muted-foreground">
                       {result.months.map((m) => (
-                        <th key={m.as_of} className="px-1 py-0.5 font-normal">
+                        <StandardTableHead key={m.as_of} className="px-1 py-0.5 font-normal">
                           {new Date(`${m.as_of}T00:00:00Z`).toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" })}
-                        </th>
+                        </StandardTableHead>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
+                    </StandardTableRow>
+                  </StandardTableHeader>
+                  <StandardTableBody>
+                    <StandardTableRow>
                       {result.months.map((m) => (
-                        <td key={m.as_of} className="px-1 py-0.5 text-center">{m.accrued}</td>
+                        <StandardTableCell key={m.as_of} className="px-1 py-0.5 text-center">{m.accrued}</StandardTableCell>
                       ))}
-                    </tr>
-                  </tbody>
-                </table>
+                    </StandardTableRow>
+                  </StandardTableBody>
+                </StandardTable>
               </div>
               <p className="text-[11px] text-muted-foreground">Days earned by the end of each month (before leave taken).</p>
             </>

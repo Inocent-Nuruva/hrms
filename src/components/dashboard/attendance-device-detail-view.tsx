@@ -1,7 +1,7 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
-
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { fluentPrompt } from "@/components/ui/fluent-dialog-service";
 
 import * as React from "react";
@@ -3127,20 +3127,20 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
               </div>
             ) : (
               <div className="overflow-x-auto border-t border-slate-100">
-                <table className="w-full min-w-[36rem] text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <th className="py-2.5 pr-3 font-semibold">Employee</th>
-                      <th className="px-3 py-2.5 font-semibold">No.</th>
-                      <th className="px-3 py-2.5 font-semibold">HR link</th>
-                      <th className="px-3 py-2.5 font-semibold">Status</th>
-                      <th className="px-3 py-2.5 font-semibold">Assigned</th>
-                      <th className="py-2.5 pl-3 text-right font-semibold">
+                <StandardTable className="w-full min-w-[36rem] text-left text-sm">
+                  <StandardTableHeader>
+                    <StandardTableRow className="border-b border-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <StandardTableHead className="py-2.5 pr-3 font-semibold">Employee</StandardTableHead>
+                      <StandardTableHead className="px-3 py-2.5 font-semibold">No.</StandardTableHead>
+                      <StandardTableHead className="px-3 py-2.5 font-semibold">HR link</StandardTableHead>
+                      <StandardTableHead className="px-3 py-2.5 font-semibold">Status</StandardTableHead>
+                      <StandardTableHead className="px-3 py-2.5 font-semibold">Assigned</StandardTableHead>
+                      <StandardTableHead className="py-2.5 pl-3 text-right font-semibold">
                         Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                      </StandardTableHead>
+                    </StandardTableRow>
+                  </StandardTableHeader>
+                  <StandardTableBody>
                     {filteredAssignedEmployees.map((emp, index) => {
                       const empId = readNumberFromRecord(emp, ["id"]) ?? index;
                       const linkedEmployeeId = deviceAssignmentEmployeeId(emp);
@@ -3171,20 +3171,20 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                       );
 
                       return (
-                        <tr
+                        <StandardTableRow
                           key={`device-emp-${empId}`}
                           className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70"
                         >
-                          <td className="py-3 pr-3">
+                          <StandardTableCell className="py-3 pr-3">
                             <p className="font-medium text-slate-900">{name}</p>
-                          </td>
-                          <td className="px-3 py-3 text-slate-600">{empNo}</td>
-                          <td className="px-3 py-3">
+                          </StandardTableCell>
+                          <StandardTableCell className="px-3 py-3 text-slate-600">{empNo}</StandardTableCell>
+                          <StandardTableCell className="px-3 py-3">
                             <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", linked ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800")}>
                               {linked ? "Linked" : "Not linked"}
                             </span>
-                          </td>
-                          <td className="px-3 py-3">
+                          </StandardTableCell>
+                          <StandardTableCell className="px-3 py-3">
                             <span
                               className={cn(
                                 "inline-flex items-center gap-1.5 text-xs font-semibold",
@@ -3199,11 +3199,11 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                               />
                               {statusLabel}
                             </span>
-                          </td>
-                          <td className="px-3 py-3 text-slate-600">
+                          </StandardTableCell>
+                          <StandardTableCell className="px-3 py-3 text-slate-600">
                             {assignedAt}
-                          </td>
-                          <td className="py-3 pl-3">
+                          </StandardTableCell>
+                          <StandardTableCell className="py-3 pl-3">
                             <div className="flex items-center justify-end gap-1.5">
                               {canViewDeviceFingerprints && (
                                 <button
@@ -3284,12 +3284,12 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                                 <span className="hidden sm:inline">Remove</span>
                               </button>
                             </div>
-                          </td>
-                        </tr>
+                          </StandardTableCell>
+                        </StandardTableRow>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </StandardTableBody>
+                </StandardTable>
               </div>
             )}
           </div>
@@ -3464,47 +3464,47 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                 </p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                        <th className="py-2 pr-3">Action</th>
-                        <th className="py-2 pr-3">Status</th>
-                        <th className="py-2 pr-3">Employee</th>
-                        <th className="py-2">When</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <StandardTable className="min-w-full text-sm">
+                    <StandardTableHeader>
+                      <StandardTableRow className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                        <StandardTableHead className="py-2 pr-3">Action</StandardTableHead>
+                        <StandardTableHead className="py-2 pr-3">Status</StandardTableHead>
+                        <StandardTableHead className="py-2 pr-3">Employee</StandardTableHead>
+                        <StandardTableHead className="py-2">When</StandardTableHead>
+                      </StandardTableRow>
+                    </StandardTableHeader>
+                    <StandardTableBody>
                       {deviceAuditLogs.map((row, index) => (
-                        <tr
+                        <StandardTableRow
                           key={`audit-${readNumberFromRecord(row, ["id"]) ?? index}`}
                           className="border-b border-slate-100"
                         >
-                          <td className="py-2 pr-3">
+                          <StandardTableCell className="py-2 pr-3">
                             {readDisplayField(row, ["action", "event"]) || "—"}
-                          </td>
-                          <td className="py-2 pr-3">
+                          </StandardTableCell>
+                          <StandardTableCell className="py-2 pr-3">
                             {readDisplayField(row, ["status"]) || "—"}
-                          </td>
-                          <td className="py-2 pr-3">
+                          </StandardTableCell>
+                          <StandardTableCell className="py-2 pr-3">
                             {readDisplayField(row, [
                               "employee_name",
                               "employeeName",
                               "employee_no",
                               "employeeNo",
                             ]) || "—"}
-                          </td>
-                          <td className="py-2">
+                          </StandardTableCell>
+                          <StandardTableCell className="py-2">
                             {readDisplayField(row, [
                               "created_at",
                               "createdAt",
                               "updated_at",
                               "updatedAt",
                             ]) || "—"}
-                          </td>
-                        </tr>
+                          </StandardTableCell>
+                        </StandardTableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </StandardTableBody>
+                  </StandardTable>
                 </div>
               )}
             </div>
@@ -3520,42 +3520,42 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                 </p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                        <th className="py-2 pr-3">Command</th>
-                        <th className="py-2 pr-3">Status</th>
-                        <th className="py-2">When</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <StandardTable className="min-w-full text-sm">
+                    <StandardTableHeader>
+                      <StandardTableRow className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                        <StandardTableHead className="py-2 pr-3">Command</StandardTableHead>
+                        <StandardTableHead className="py-2 pr-3">Status</StandardTableHead>
+                        <StandardTableHead className="py-2">When</StandardTableHead>
+                      </StandardTableRow>
+                    </StandardTableHeader>
+                    <StandardTableBody>
                       {deviceCommandLogs.map((row, index) => (
-                        <tr
+                        <StandardTableRow
                           key={`cmd-${readNumberFromRecord(row, ["id"]) ?? index}`}
                           className="border-b border-slate-100"
                         >
-                          <td className="py-2 pr-3">
+                          <StandardTableCell className="py-2 pr-3">
                             {readDisplayField(row, [
                               "commandType",
                               "command_type",
                               "command",
                             ]) || "—"}
-                          </td>
-                          <td className="py-2 pr-3">
+                          </StandardTableCell>
+                          <StandardTableCell className="py-2 pr-3">
                             {readDisplayField(row, ["status"]) || "—"}
-                          </td>
-                          <td className="py-2">
+                          </StandardTableCell>
+                          <StandardTableCell className="py-2">
                             {readDisplayField(row, [
                               "created_at",
                               "createdAt",
                               "updated_at",
                               "updatedAt",
                             ]) || "—"}
-                          </td>
-                        </tr>
+                          </StandardTableCell>
+                        </StandardTableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </StandardTableBody>
+                  </StandardTable>
                 </div>
               )}
             </div>
@@ -4563,38 +4563,38 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
             </p>
           ) : (
             <div className="max-h-80 overflow-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                    <th className="py-2 pr-3">Action</th>
-                    <th className="py-2 pr-3">Status</th>
-                    <th className="py-2">When</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <StandardTable className="min-w-full text-sm">
+                <StandardTableHeader>
+                  <StandardTableRow className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <StandardTableHead className="py-2 pr-3">Action</StandardTableHead>
+                    <StandardTableHead className="py-2 pr-3">Status</StandardTableHead>
+                    <StandardTableHead className="py-2">When</StandardTableHead>
+                  </StandardTableRow>
+                </StandardTableHeader>
+                <StandardTableBody>
                   {employeeLogs.map((row, index) => (
-                    <tr
+                    <StandardTableRow
                       key={`emp-audit-${readNumberFromRecord(row, ["id"]) ?? index}`}
                       className="border-b border-slate-100"
                     >
-                      <td className="py-2 pr-3">
+                      <StandardTableCell className="py-2 pr-3">
                         {readDisplayField(row, ["action", "event"]) || "—"}
-                      </td>
-                      <td className="py-2 pr-3">
+                      </StandardTableCell>
+                      <StandardTableCell className="py-2 pr-3">
                         {readDisplayField(row, ["status"]) || "—"}
-                      </td>
-                      <td className="py-2">
+                      </StandardTableCell>
+                      <StandardTableCell className="py-2">
                         {readDisplayField(row, [
                           "created_at",
                           "createdAt",
                           "updated_at",
                           "updatedAt",
                         ]) || "—"}
-                      </td>
-                    </tr>
+                      </StandardTableCell>
+                    </StandardTableRow>
                   ))}
-                </tbody>
-              </table>
+                </StandardTableBody>
+              </StandardTable>
             </div>
           )}
           <DialogFooter>

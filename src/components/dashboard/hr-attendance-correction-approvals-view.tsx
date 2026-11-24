@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
@@ -1502,24 +1503,24 @@ export function HrAttendanceCorrectionApprovalsView() {
                   </div>
                   {changeRows.length > 0 ? (
                     <div className="overflow-hidden rounded-lg border border-border">
-                      <table className="min-w-full text-xs">
-                        <thead className="bg-muted/40 text-left text-[10px] tracking-wide text-muted-foreground uppercase">
-                          <tr>
-                            <th className="px-2.5 py-1.5 font-medium">Field</th>
-                            <th className="px-2.5 py-1.5 font-medium">Current</th>
-                            <th className="px-2.5 py-1.5 font-medium">Requested</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border bg-card">
+                      <StandardTable className="min-w-full text-xs">
+                        <StandardTableHeader className="bg-muted/40 text-left text-[10px] tracking-wide text-muted-foreground uppercase">
+                          <StandardTableRow>
+                            <StandardTableHead className="px-2.5 py-1.5 font-medium">Field</StandardTableHead>
+                            <StandardTableHead className="px-2.5 py-1.5 font-medium">Current</StandardTableHead>
+                            <StandardTableHead className="px-2.5 py-1.5 font-medium">Requested</StandardTableHead>
+                          </StandardTableRow>
+                        </StandardTableHeader>
+                        <StandardTableBody className="divide-y divide-border bg-card">
                           {changeRows.map((row) => (
-                            <tr key={row.field}>
-                              <td className="px-2.5 py-1.5 font-medium text-foreground">{row.label}</td>
-                              <td className="px-2.5 py-1.5 text-muted-foreground">{row.currentValue}</td>
-                              <td className="px-2.5 py-1.5 font-medium text-primary">{row.requestedValue}</td>
-                            </tr>
+                            <StandardTableRow key={row.field}>
+                              <StandardTableCell className="px-2.5 py-1.5 font-medium text-foreground">{row.label}</StandardTableCell>
+                              <StandardTableCell className="px-2.5 py-1.5 text-muted-foreground">{row.currentValue}</StandardTableCell>
+                              <StandardTableCell className="px-2.5 py-1.5 font-medium text-primary">{row.requestedValue}</StandardTableCell>
+                            </StandardTableRow>
                           ))}
-                        </tbody>
-                      </table>
+                        </StandardTableBody>
+                      </StandardTable>
                     </div>
                   ) : (
                     <div className="rounded-lg border border-dashed border-border px-2.5 py-3 text-[11px] text-muted-foreground">

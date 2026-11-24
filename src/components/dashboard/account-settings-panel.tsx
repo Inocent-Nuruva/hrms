@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
@@ -1740,26 +1741,26 @@ function AccountSettingsPanelContent({
                     </span>
                   </div>
                   <div className="overflow-x-auto rounded-lg border">
-                    <table className="min-w-full border-collapse text-sm">
-                      <thead className="bg-muted/30">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <StandardTable className="min-w-full border-collapse text-sm">
+                      <StandardTableHeader className="bg-muted/30">
+                        <StandardTableRow>
+                          <StandardTableHead className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             Notification
-                          </th>
+                          </StandardTableHead>
                           {NOTIFICATION_PREFERENCE_CHANNELS.map((channel) => (
-                            <th
+                            <StandardTableHead
                               key={channel}
                               className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                             >
                               {formatNotificationPreferenceLabel(channel)}
-                            </th>
+                            </StandardTableHead>
                           ))}
-                        </tr>
-                      </thead>
-                      <tbody>
+                        </StandardTableRow>
+                      </StandardTableHeader>
+                      <StandardTableBody>
                         {group.types.map((notificationType) => (
-                          <tr key={notificationType} className="border-t">
-                            <td className="px-3 py-3 align-top">
+                          <StandardTableRow key={notificationType} className="border-t">
+                            <StandardTableCell className="px-3 py-3 align-top">
                               <div className="space-y-0.5">
                                 <p className="text-sm font-medium text-foreground">
                                   {formatNotificationPreferenceLabel(notificationType)}
@@ -1768,7 +1769,7 @@ function AccountSettingsPanelContent({
                                   {notificationType}
                                 </p>
                               </div>
-                            </td>
+                            </StandardTableCell>
                             {NOTIFICATION_PREFERENCE_CHANNELS.map((channel) => {
                               const key = buildNotificationPreferenceKey(notificationType, channel)
                               const preference = notificationPreferencesByKey.get(key) ?? null
@@ -1783,7 +1784,7 @@ function AccountSettingsPanelContent({
                                 ? readNotificationPreferenceEnabled(preference)
                                 : defaultEnabled
                               return (
-                                <td key={channel} className="px-3 py-3 text-center align-middle">
+                                <StandardTableCell key={channel} className="px-3 py-3 text-center align-middle">
                                   <div className="flex justify-center">
                                     <Switch
                                       className="notification-preference-switch"
@@ -1810,13 +1811,13 @@ function AccountSettingsPanelContent({
                                       }
                                     />
                                   </div>
-                                </td>
+                                </StandardTableCell>
                               )
                             })}
-                          </tr>
+                          </StandardTableRow>
                         ))}
-                      </tbody>
-                    </table>
+                      </StandardTableBody>
+                    </StandardTable>
                   </div>
                 </div>
               ))}

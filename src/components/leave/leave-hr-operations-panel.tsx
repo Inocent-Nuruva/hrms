@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -170,33 +171,33 @@ export function LeaveHrOperationsPanel({
           </div>
         ) : null}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-xs">
-            <thead className="text-muted-foreground">
-              <tr>
+          <StandardTable className="w-full min-w-[720px] text-left text-xs">
+            <StandardTableHeader className="text-muted-foreground">
+              <StandardTableRow>
                 {["Employee", "Leave type", "Exit date", "Earned", "Carried", "Used", "Settlement days", "Status", ""].map((h) => (
-                  <th key={h} className="px-2 py-1.5 font-semibold">
+                  <StandardTableHead key={h} className="px-2 py-1.5 font-semibold">
                     {h}
-                  </th>
+                  </StandardTableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+              </StandardTableRow>
+            </StandardTableHeader>
+            <StandardTableBody className="divide-y divide-border">
               {rows.map((row) => {
                 const days = Number(row.settlement_days)
                 const status = String(row.status ?? "")
                 return (
-                  <tr key={String(row.id)}>
-                    <td className="px-2 py-1.5">#{String(row.employee_id)}</td>
-                    <td className="px-2 py-1.5">{leaveTypeLabel(Number(row.leave_type_id) || null)}</td>
-                    <td className="px-2 py-1.5">{String(row.exit_date ?? "").slice(0, 10)}</td>
-                    <td className="px-2 py-1.5">{num(row.earned_to_exit_days)}</td>
-                    <td className="px-2 py-1.5">{num(row.carried_forward_days)}</td>
-                    <td className="px-2 py-1.5">{num(row.used_days)}</td>
-                    <td className={`px-2 py-1.5 font-semibold ${days < 0 ? "text-rose-600" : ""}`}>
+                  <StandardTableRow key={String(row.id)}>
+                    <StandardTableCell className="px-2 py-1.5">#{String(row.employee_id)}</StandardTableCell>
+                    <StandardTableCell className="px-2 py-1.5">{leaveTypeLabel(Number(row.leave_type_id) || null)}</StandardTableCell>
+                    <StandardTableCell className="px-2 py-1.5">{String(row.exit_date ?? "").slice(0, 10)}</StandardTableCell>
+                    <StandardTableCell className="px-2 py-1.5">{num(row.earned_to_exit_days)}</StandardTableCell>
+                    <StandardTableCell className="px-2 py-1.5">{num(row.carried_forward_days)}</StandardTableCell>
+                    <StandardTableCell className="px-2 py-1.5">{num(row.used_days)}</StandardTableCell>
+                    <StandardTableCell className={`px-2 py-1.5 font-semibold ${days < 0 ? "text-rose-600" : ""}`}>
                       {num(days)} {days < 0 ? "(recover)" : ""}
-                    </td>
-                    <td className="px-2 py-1.5">{STATUS_LABEL[status] ?? status}</td>
-                    <td className="px-2 py-1.5">
+                    </StandardTableCell>
+                    <StandardTableCell className="px-2 py-1.5">{STATUS_LABEL[status] ?? status}</StandardTableCell>
+                    <StandardTableCell className="px-2 py-1.5">
                       {canManage && status === "draft" && row.offboarding_request_id ? (
                         <button
                           type="button"
@@ -207,19 +208,19 @@ export function LeaveHrOperationsPanel({
                           Approve
                         </button>
                       ) : null}
-                    </td>
-                  </tr>
+                    </StandardTableCell>
+                  </StandardTableRow>
                 )
               })}
               {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-2 py-6 text-center text-muted-foreground">
+                <StandardTableRow>
+                  <StandardTableCell colSpan={9} className="px-2 py-6 text-center text-muted-foreground">
                     No exit settlements yet.
-                  </td>
-                </tr>
+                  </StandardTableCell>
+                </StandardTableRow>
               ) : null}
-            </tbody>
-          </table>
+            </StandardTableBody>
+          </StandardTable>
         </div>
       </section>
 
