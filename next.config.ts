@@ -46,6 +46,12 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(process.cwd()),
   },
+  async redirects() {
+    return [
+      { source: "/probation/cases/:id(\\d+)", destination: "/dashboard/probation/team?case=:id", permanent: false },
+      { source: "/me/probation", destination: "/dashboard/me/probation", permanent: false },
+    ];
+  },
   async rewrites() {
     const backendOrigin = resolveBackendOrigin();
     return {
