@@ -13,13 +13,14 @@ const ALLOWED_VIEWS = new Set<ProbationHrTab>([
 ])
 
 interface ProbationViewPageProps {
+  searchParams: Promise<{ case?: string | string[] }>
   params: Promise<{
     view: string
   }>
 }
 
 export default async function ProbationViewPage({
-  params,
+  params, searchParams,
 }: ProbationViewPageProps) {
   const { view } = await params
   const normalized = view?.toLowerCase() as ProbationHrTab
@@ -28,5 +29,8 @@ export default async function ProbationViewPage({
     redirect("/dashboard/probation/overview")
   }
 
-  return <ProbationManagementView activeTab={normalized} />
+  const caseId = (await searchParams).case
+  return <ProbationManagementView activeTab={normalized} requestedCaseId={
+    normalized === "team" && typeof caseId === "string" && /^[1-9]\d*$/.test(caseId) ? caseId : undefined
+  } />
 }

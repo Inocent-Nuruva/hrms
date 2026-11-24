@@ -129,7 +129,7 @@ export const PROBATION_ROUTE_PERMISSION: PermissionRequirement = {
 }
 
 export const PROBATION_POLICIES_PERMISSION: PermissionRequirement = {
-  permissions: ["probation_policies:read"],
+  permissions: ["probation_policies:read", "probation_policies:create"],
   mode: "any",
 }
 
@@ -139,12 +139,12 @@ export const PROBATION_CASES_PERMISSION: PermissionRequirement = {
 }
 
 export const PROBATION_TEAM_PERMISSION: PermissionRequirement = {
-  permissions: ["probation_cases:read-team", "manager:read", "manager_team:read", "manager_self_service:read", "probation_reviews:manager-review"],
+  permissions: ["probation_cases:read-team", "manager:read", "manager_team:read", "manager_self_service:read", "probation_reviews:manager-review", "probation_reviews:manager-review-any"],
   mode: "any",
 }
 
 export const PROBATION_SECTION_PERMISSION: PermissionRequirement = {
-  permissions: ["probation_policies:read", "probation_cases:read", "probation_letters:generate", "probation_reviews:manager-review", "probation_cases:read-team", "manager:read", "manager_team:read", "manager_self_service:read"],
+  permissions: ["probation_policies:read", "probation_policies:create", "probation_cases:read", "probation_letters:generate", "probation_reviews:manager-review", "probation_reviews:manager-review-any", "probation_cases:read-team", "manager:read", "manager_team:read", "manager_self_service:read"],
   mode: "any",
 }
 
@@ -623,10 +623,11 @@ const ADMIN_DASHBOARD_LANDING_ROUTES = [
   "/dashboard/permissions",
 ]
 
-const DASHBOARD_ROUTE_SHELLS: Record<string, DashboardAccessMode> = {
+const DASHBOARD_ROUTE_SHELLS: Record<string, DashboardAccessMode | null> = {
   // This is the admin-shell overview surface, not a generic feature route.
   "/dashboard/company-overview": "admin",
   "/dashboard/probation": "admin",
+  "/dashboard/probation/team": null,
 }
 
 /** Permissions that unlock the company employee directory and employee profiles. */

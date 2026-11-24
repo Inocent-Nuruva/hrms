@@ -171,9 +171,10 @@ function probationLetterType(row: AdminRecord | null | undefined) {
 }
 
 export function ProbationManagementView({
-  activeTab,
+  activeTab, requestedCaseId,
 }: {
   activeTab: ProbationHrTab;
+  requestedCaseId?: string;
 }) {
   const router = useRouter();
   const actor = useDashboardActor();
@@ -458,7 +459,7 @@ export function ProbationManagementView({
     [cases],
   );
 
-  async function openCase(row: AdminRecord) {
+  const openCase = React.useCallback(async (row: AdminRecord) => {
     const token = readStoredToken();
     const id = rowId(row);
     setCaseDetail(row);
@@ -469,6 +470,8 @@ export function ProbationManagementView({
       const detail = await getProbationCase(token, id);
       if (detail) setCaseDetail(detail);
     } catch (errorObject) {
+      setCaseOpen(false);
+      setCaseDetail(null);
       toast.error(
         errorObject instanceof Error
           ? errorObject.message
@@ -477,7 +480,11 @@ export function ProbationManagementView({
     } finally {
       setCaseLoading(false);
     }
-  }
+  }, []);
+
+  React.useEffect(() => {
+    if (canAccess && requestedCaseId) void openCase({ id: requestedCaseId });
+  }, [canAccess, requestedCaseId, openCase]);
 
   function openForm(
     mode: FormMode,
@@ -1106,6 +1113,7 @@ export function ProbationManagementView({
               <FluentButton
                 appearance="primary"
                 icon={<Add20Regular />}
+                disabled={!policyOptions}
                 onClick={() => openForm("policy")}
               >
                 New policy
@@ -1258,6 +1266,25 @@ export function ProbationManagementView({
                   )}
                 />
               </div>
+              {asRecordArray(caseDetail.reviewCycles ?? caseDetail.review_cycles)
+                .filter(cycle => cycle.managerRecommendation ?? cycle.manager_recommendation)
+                .sort((a, b) => Number(b.cycleNumber ?? b.cycle_number) - Number(a.cycleNumber ?? a.cycle_number))
+                .map(cycle => {
+                  const number = readString(cycle, ["cycleNumber", "cycle_number"]);
+                  const current = number === readString(caseDetail, ["currentCycleNumber", "current_cycle_number"]);
+                  return <section key={number} className="grid gap-2 rounded-xl border border-border bg-card p-3">
+                    <h3 className="text-sm font-semibold">Manager review · Cycle {number}</h3>
+                    <DetailField label="Recommendation" value={prettify(readString(cycle, ["managerRecommendation", "manager_recommendation"]))} />
+                    <DetailField label="Weighted score" value={readString(cycle, ["managerScore", "manager_score"])} />
+                    <p className="whitespace-pre-wrap text-sm">{readString(cycle, ["managerComments", "manager_comments"])}</p>
+                    {current && asRecordArray(caseDetail.managerReviewCriteria)
+                      .filter(item => item.managerRating != null)
+                      .map(item => <div key={String(item.criterionCode)} className="text-sm">
+                        <strong>{String(item.criterionName)}</strong> {String(item.managerRating)} / {String(item.maximumRating)}
+                        {item.managerComment ? <p className="whitespace-pre-wrap">{String(item.managerComment)}</p> : null}
+                      </div>)}
+                  </section>;
+                })}
               {asRecordArray(caseDetail.objectives).length > 0 ? (
                 <div className="rounded-xl border border-border bg-card p-3">
                   <h3 className="text-sm font-semibold">Objectives</h3>

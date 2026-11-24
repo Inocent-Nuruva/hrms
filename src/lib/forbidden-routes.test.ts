@@ -139,6 +139,14 @@ describe("forbidden route memory", () => {
     ).toBe(true)
   })
 
+  it("exposes My team to probation reviewers in either shell and preserves the HR page grants", () => {
+    for (const mode of ["employee", "admin"] as const) {
+      expect(canAccessDashboardRoute("/dashboard/probation/team", ["probation_reviews:manager-review"], mode)).toBe(true)
+      expect(canAccessDashboardRoute("/dashboard/probation/team", ["data_scope:self"], mode)).toBe(false)
+      expect(canAccessDashboardRoute("/dashboard/probation/letter-templates", ["probation_reviews:manager-review"], mode)).toBe(false)
+    }
+  })
+
   it("keeps employee-mode probation redirects inside the My shell", () => {
     expect(canAccessDashboardRoute("/dashboard/probation/cases", ["probation:read"], "employee")).toBe(false)
     expect(
