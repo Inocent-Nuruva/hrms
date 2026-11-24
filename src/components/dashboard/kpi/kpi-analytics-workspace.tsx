@@ -537,7 +537,7 @@ function TeamPanel({
   onEmployeeSelect: (employeeId: number) => void;
 }) {
   return (
-    <section className="border-t border-border pt-6" aria-label="My reporting team">
+    <section className="pt-4" aria-label="My reporting team">
       <h2 className="flex items-center gap-2 text-2xl font-bold"><PeopleTeam24Regular className="text-primary" /> My reporting team</h2>
       <p className="mt-1 text-sm text-muted-foreground">Employees you manage. Select a name to see their details.</p>
       <div className="mt-4 max-w-sm">
@@ -1365,7 +1365,7 @@ export function KpiAnalyticsWorkspace({
       <p className="p-6">You do not have access to management analytics.</p>
     );
   return (
-    <main className="flex flex-col gap-8">
+    <main className={`flex flex-col ${isManager && !personal ? "gap-0" : "gap-8"}`}>
       <header className="relative isolate -mx-3 overflow-hidden border-y border-border bg-card px-5 py-6 shadow-sm sm:-mx-4 sm:px-7 sm:py-8">
         <SharedDashboardHeroBackground />
         <div className="relative z-10 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">

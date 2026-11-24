@@ -4,7 +4,7 @@ import * as React from "react"
 import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Textarea } from "@fluentui/react-components"
 import { Dismiss16Regular, Save16Regular } from "@fluentui/react-icons"
 import { FluentSelect } from "@/components/ui/fluent-select"
-import { kpiApi, type KpiDefinitionForm } from "@/lib/kpi-api"
+import { kpiApi, type KpiDefinitionForm, type KpiPeriod } from "@/lib/kpi-api"
 import { readKpiToken } from "@/lib/kpi-session"
 import { validateKpiDefinition } from "./kpi-definition-validation"
 
@@ -38,6 +38,7 @@ export function KpiDefinitionEditDialog({ definitionId, onClose, onSaved }: {
 }) {
   const token = readKpiToken()
   const [form, setForm] = React.useState<KpiDefinitionForm | null>(null)
+  const [periods, setPeriods] = React.useState<KpiPeriod[]>([])
   const [loading, setLoading] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState("")
@@ -54,6 +55,7 @@ export function KpiDefinitionEditDialog({ definitionId, onClose, onSaved }: {
       setLoading(false)
       return
     }
+    void kpiApi.periods(token).then((rows) => { if (active) setPeriods(rows) }).catch(() => { if (active) setPeriods([]) })
     void kpiApi.definition(token, definitionId).then((definition) => {
       if (!active) return
       const draft = definition.versions?.[0]
@@ -68,6 +70,7 @@ export function KpiDefinitionEditDialog({ definitionId, onClose, onSaved }: {
         measurementUnit: draft.measurementUnit ?? "",
         direction: draft.direction,
         frequency: draft.frequency,
+        preferredPeriodId: draft.preferredPeriodId ?? undefined,
         ownerEmployeeId: draft.ownerEmployeeId ?? undefined,
       })
     }).catch((cause: unknown) => {
@@ -127,7 +130,8 @@ export function KpiDefinitionEditDialog({ definitionId, onClose, onSaved }: {
               <FluentSelect label="Measurement type" value={form.measurementType} options={measurementOptions} onChange={(value) => setForm((current) => current ? { ...current, measurementType: value, measurementUnit: value === "percentage" ? "%" : "", direction: ["binary", "milestone", "qualitative"].includes(value) ? "not_applicable" : "higher" } : current)} />
               <FluentSelect label="Performance direction" value={form.direction} options={directionOptions.filter((option) => ["binary", "milestone", "qualitative"].includes(form.measurementType) ? option.value === "not_applicable" : option.value !== "not_applicable")} onChange={(value) => change("direction", value)} />
               <Field label="Measurement unit" hint={form.measurementType === "currency" ? "Use a three-letter currency code such as TZS." : form.measurementType === "duration" ? "Use seconds, minutes, hours or days." : undefined}><Input value={form.measurementUnit ?? ""} disabled={form.measurementType === "percentage" || form.measurementType === "binary"} maxLength={60} onChange={(_, data) => change("measurementUnit", form.measurementType === "currency" ? data.value.toUpperCase() : data.value)} /></Field>
-              <FluentSelect label="Reporting frequency" value={form.frequency} options={frequencyOptions} onChange={(value) => change("frequency", value)} />
+              <FluentSelect label="Reporting frequency" value={form.frequency} options={frequencyOptions} onChange={(value) => setForm((current) => current ? { ...current, frequency: value, preferredPeriodId: undefined } : current)} />
+              <FluentSelect label="Reporting period" value={form.preferredPeriodId ? String(form.preferredPeriodId) : ""} options={[{ value: "", label: "Choose later" }, ...periods.filter((period) => period.frequency === form.frequency).map((period) => ({ value: String(period.id), label: period.label }))]} onChange={(value) => change("preferredPeriodId", value ? Number(value) : undefined)} />
               <Field label="Owner employee ID" hint="Optional"><Input type="number" min={1} value={form.ownerEmployeeId?.toString() ?? ""} onChange={(_, data) => change("ownerEmployeeId", data.value ? Number(data.value) : undefined)} /></Field>
             </div>
           </form>}

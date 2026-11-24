@@ -10,6 +10,7 @@ import {
 import { CheckmarkCircle24Filled, Info20Regular } from "@fluentui/react-icons"
 import { kpiApi, type KpiDefinition, type KpiDefinitionForm, type KpiPeriod } from "@/lib/kpi-api"
 import { validateKpiDefinition, validateKpiDefinitionStep } from "./kpi-definition-validation"
+import { kpiIdentifierFromName } from "./kpi-identifier"
 
 const initial: KpiDefinitionForm = {
   code: "", name: "", description: "", category: "", strategicObjective: "",
@@ -39,7 +40,7 @@ function Choice({ value, choices, onChange, label }: {
 }
 
 export function KpiCreationWizard({ token, periods, onCancel, onCreated }: {
-  token: string; periods: KpiPeriod[]; onCancel: () => void; onCreated?: () => void
+  token: string; periods: KpiPeriod[]; onCancel: () => void; onCreated?: (definition: KpiDefinition) => void
 }) {
   const [step, setStep] = React.useState(1)
   const [form, setForm] = React.useState<KpiDefinitionForm>(initial)
@@ -81,11 +82,11 @@ export function KpiCreationWizard({ token, periods, onCancel, onCreated }: {
           const published = await kpiApi.publishDefinition(token, draft.id)
           setCreated(published)
           setNotice("KPI published. You can now assign it to an authorized subject.")
+          onCreated?.(published)
         } catch (cause) {
           setError(`Draft saved, but publication failed: ${cause instanceof Error ? cause.message : "Request failed"}`)
         }
-      } else setNotice("Draft KPI saved. Publish it when its definition is ready.")
-      onCreated?.()
+      } else { setNotice("Draft KPI saved. Publish it when its definition is ready."); onCreated?.(draft) }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Could not save KPI"
       setError(/KPI role and active company are required|Active company context is required/i.test(message)
@@ -100,7 +101,7 @@ export function KpiCreationWizard({ token, periods, onCancel, onCreated }: {
 
     {step === 1 && <div className="grid gap-4 md:grid-cols-2">
       <div className="md:col-span-2"><h3 className="font-semibold">Describe what will be measured</h3><p className="text-sm text-muted-foreground">Choose a clear result you can measure, such as tasks completed, customer ratings, time to resolve a request, or orders delivered on time.</p></div>
-      <Field label="KPI name" required className="content-start"><Input value={form.name} maxLength={160} onChange={(_, data) => change("name", data.value)} placeholder="e.g. Monthly Policy Renewal Rate" /></Field>
+      <Field label="KPI name" required className="content-start"><Input value={form.name} maxLength={160} onChange={(_, data) => setForm((current) => ({ ...current, name: data.value, code: !current.code || current.code === kpiIdentifierFromName(current.name) ? kpiIdentifierFromName(data.value) : current.code }))} placeholder="e.g. Monthly Policy Renewal Rate" /></Field>
       <Field label="KPI code" required hint="2–80 letters, digits, underscores or hyphens; start with a letter." className="content-start"><Input value={form.code} maxLength={80} onChange={(_, data) => change("code", data.value.toUpperCase())} placeholder="e.g. RENEWAL_RATE" /></Field>
       <Field label="Category" required className="content-start"><Input value={form.category} maxLength={100} onChange={(_, data) => change("category", data.value)} placeholder="e.g. Sales" /></Field>
       <Field label="Strategic objective or purpose" className="content-start"><Input value={form.strategicObjective ?? ""} onChange={(_, data) => change("strategicObjective", data.value)} /></Field>
@@ -120,8 +121,8 @@ export function KpiCreationWizard({ token, periods, onCancel, onCreated }: {
 
     {step === 3 && <div className="space-y-4">
       <div className="flex items-center gap-2"><h3 className="font-semibold">Plan the reporting period and target</h3><Tooltip content="Choose how often the KPI is reported. Employee-specific targets are set only when the KPI is assigned. This wizard will not change an employee record or assign a target." relationship="description"><Button appearance="subtle" size="small" icon={<Info20Regular />} aria-label="About reporting periods" /></Tooltip></div>
-      <div className="grid gap-4 md:grid-cols-2"><Field label="Reporting frequency" required className="content-start"><Choice label="Reporting frequency" value={form.frequency} choices={frequencies} onChange={(value) => { change("frequency", value); setPeriodId("") }} /></Field>
-        <Field label="Period for the next assignment" hint="Optional. This selection is only carried to the assignment form after saving." className="content-start"><Choice label="Period for the next assignment" value={periodId} choices={[["", "Choose later"], ...matchingPeriods.map((period) => [String(period.id), period.label] as const)]} onChange={setPeriodId} /></Field></div>
+      <div className="grid gap-4 md:grid-cols-2"><Field label="Reporting frequency" required className="content-start"><Choice label="Reporting frequency" value={form.frequency} choices={frequencies} onChange={(value) => { change("frequency", value); setPeriodId(""); change("preferredPeriodId", undefined) }} /></Field>
+        <Field label="Reporting period" hint="Saved with this KPI and selected automatically when you assign it. You can choose one later while editing a draft." className="content-start"><Choice label="Reporting period" value={periodId} choices={[["", "Choose later"], ...matchingPeriods.map((period) => [String(period.id), period.label] as const)]} onChange={(value) => { setPeriodId(value); change("preferredPeriodId", value ? Number(value) : undefined) }} /></Field></div>
       {matchingPeriods.length === 0 && <div role="status" className="flex items-start gap-3 rounded-md px-4 py-3 text-sm" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}><Info20Regular className="mt-0.5 shrink-0" aria-hidden="true" /><p>No {form.frequency} period is configured yet. Save the definition, then create a reporting period before assignment.</p></div>}
     </div>}
 
@@ -140,7 +141,7 @@ export function KpiCreationWizard({ token, periods, onCancel, onCreated }: {
       <div className="flex flex-wrap gap-2"><Button as="a" href={`/dashboard/kpi/definitions/${created.id}`} appearance="primary">View created KPI</Button>{created.status === "published" && <Button as="a" href={`/dashboard/kpi/assignments?definition=${created.id}${periodId ? `&period=${periodId}` : ""}`} appearance="secondary">Assign KPI</Button>}<Button appearance="secondary" onClick={() => { setForm(initial); setPeriodId(""); setCreated(null); setNotice(""); setError(""); setStep(1) }}>Create another KPI</Button><Button as="a" href="/dashboard/kpi" appearance="subtle">Return to KPI Library</Button></div>
     </Card>}
 
-    {step < 5 && <div className="flex flex-wrap justify-between gap-2"><Button appearance="subtle" onClick={cancel} disabled={busy}>Cancel</Button><div className="flex flex-wrap gap-2">{step > 1 && <Button appearance="secondary" disabled={busy} onClick={() => { setError(""); setStep((current) => current - 1) }}>Back</Button>}{step < 4 ? <Button appearance="primary" onClick={next}>Continue</Button> : <><Button appearance="secondary" disabled={busy} onClick={() => void save(false)}>{busy ? "Saving…" : "Save Draft"}</Button><Button appearance="primary" disabled={busy} onClick={() => void save(true)}>{busy ? "Saving…" : "Save & Publish"}</Button></>}</div></div>}
+      {step < 5 && <div className="flex flex-wrap justify-between gap-2"><Button appearance="subtle" onClick={cancel} disabled={busy}>Cancel</Button><div className="flex flex-wrap gap-2">{step > 1 && <Button appearance="secondary" disabled={busy} onClick={() => { setError(""); setStep((current) => current - 1) }}>Back</Button>}{step < 4 ? <Button appearance="primary" onClick={next}>Continue</Button> : <><Button appearance="secondary" disabled={busy} onClick={() => void save(false)}>{busy ? "Saving…" : "Save Draft"}</Button>{periodId && <Button appearance="primary" disabled={busy} onClick={() => void save(true)}>{busy ? "Saving…" : "Save & Publish"}</Button>}</>}</div></div>}
 
     <Dialog open={confirmDiscard} onOpenChange={(_, data) => setConfirmDiscard(data.open)}><DialogSurface><DialogBody><DialogTitle>Discard this KPI?</DialogTitle><DialogContent>Your unsaved definition information will be lost.</DialogContent><DialogActions><Button appearance="secondary" onClick={() => setConfirmDiscard(false)}>Keep editing</Button><Button appearance="primary" onClick={() => { setConfirmDiscard(false); onCancel() }}>Discard changes</Button></DialogActions></DialogBody></DialogSurface></Dialog>
   </div>
