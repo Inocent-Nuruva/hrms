@@ -56,4 +56,13 @@ describe("KPI workspace navigation", () => {
       expect(tabs[index].textContent).toContain(label)
     }
   })
+
+  it("opens Insights without a redundant Analytics subtab", async () => {
+    await act(async () => root.render(<Tabs2 groups={managementKpiSectionTabGroups} currentPath="/dashboard/kpi/analytics" showGroupNavigation />))
+    const insights = [...container.querySelectorAll('[role="tablist"][aria-label="Workspace areas"] [role="tab"]')].find((button) => button.textContent === "Insights") as HTMLButtonElement
+    expect(insights.getAttribute("aria-selected")).toBe("true")
+    expect(container.querySelector('[role="tablist"][aria-label="Section pages"]')).toBeNull()
+    await act(async () => insights.click())
+    expect(push).toHaveBeenCalledWith("/dashboard/kpi/analytics")
+  })
 })
