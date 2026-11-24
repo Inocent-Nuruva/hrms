@@ -35,9 +35,8 @@ import {
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { cn } from "@/lib/utils"
-import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { readStoredSessionTokens } from "@/lib/session-client"
 
-const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
 type EmployeeOption = {
   id: number
@@ -77,26 +76,7 @@ function asRecord(value: unknown): AdminRecord | null {
 }
 
 function readStoredToken() {
-  if (typeof window === "undefined") {
-    return ""
-  }
-
-  const direct = window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ""
-  if (direct) {
-    return direct
-  }
-
-  const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
-  if (!authTokensRaw) {
-    return ""
-  }
-
-  try {
-    const parsed = JSON.parse(authTokensRaw) as { accessToken?: string; access_token?: string }
-    return (parsed.accessToken ?? parsed.access_token ?? "").trim()
-  } catch {
-    return ""
-  }
+  return readStoredSessionTokens().accessToken
 }
 
 function readString(row: AdminRecord | null, keys: string[], fallback = "-") {
@@ -285,6 +265,7 @@ export function AttendanceBusinessTripsView() {
       actor.permissionLabels,
       ATTENDANCE_BUSINESS_TRIPS_ROUTE_PERMISSION,
     )
+  const canRead = canPerformPermission(actor.permissionLabels, "attendance_business_trips:read")
   const canCreate = canPerformPermission(
     actor.permissionLabels,
     "attendance_business_trips:create",
@@ -352,6 +333,7 @@ export function AttendanceBusinessTripsView() {
     employeeOptions.find((option) => option.id === form.employeeId)?.label || "Not selected"
 
   const loadTrips = React.useCallback(async () => {
+    if (!canRead) { setTrips([]); return }
     const token = readStoredToken()
     if (!token) {
       const message = "Authentication required. Please log in again."
@@ -382,7 +364,7 @@ export function AttendanceBusinessTripsView() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [canRead])
 
   React.useEffect(() => {
     if (!canView) {
@@ -757,7 +739,7 @@ export function AttendanceBusinessTripsView() {
                 </button>
               </>
             ) : null}
-            {selectedTrip && canCancel && selectedStatus === "submitted" ? (
+            {selectedTrip && canCancel && ["draft", "submitted", "approved", "rejected"].includes(selectedStatus) ? (
               <button
                 type="button"
                 className="inline-flex h-8 items-center justify-center rounded-md border border-rose-300 px-3 text-xs font-medium text-rose-700"

@@ -111,7 +111,8 @@ import {
   recordLeaveOpeningPreviewReview,
   listAllLeaveBalances,
   listEmployeesWithoutLeaveBalances,
-  listLeaveHolidays,
+  listAllLeaveHolidays,
+  listLeaveHolidayBranches,
   listLeavePolicies,
   listLeaveRequests,
   getLeaveRequestSummary,
@@ -133,7 +134,8 @@ import {
   type AdminRecord,
   type LeaveImportResult,
 } from "@/lib/admin-api";
-import { AUTH_STORAGE_KEYS } from "@/utils/constants";
+import { readStoredSessionTokens } from "@/lib/session-client";
+import { HOLIDAY_IMPORT_COUNTRIES, type HolidayImportCountryCode } from "@/lib/holiday-catalog";
 import {
   formatBalanceDays,
   groupLeaveBalancesByEmployee,
@@ -203,7 +205,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const TOKEN_STORAGE_KEY = "hrms.admin.accessToken";
 const WORKFLOW_CREATE_DRAFT_KEY = "hrms.leaveWorkflow.createDraft.v1";
 
 type WorkflowCreateDraft = {
@@ -386,8 +387,6 @@ type WorkflowStepPayload = {
   is_required: boolean;
 };
 
-type HolidayImportCountryCode = "TZ" | "KE" | "UG";
-
 type ImportableHoliday = {
   countryCode: HolidayImportCountryCode;
   countryName: string;
@@ -397,15 +396,6 @@ type ImportableHoliday = {
   isRecurring: boolean;
   type: string;
 };
-
-const HOLIDAY_IMPORT_COUNTRIES: Array<{
-  code: HolidayImportCountryCode;
-  label: string;
-}> = [
-  { code: "TZ", label: "Tanzania" },
-  { code: "KE", label: "Kenya" },
-  { code: "UG", label: "Uganda" },
-];
 
 const TRANSACTION_TYPE_DESCRIPTIONS: Record<string, string> = {
   INITIAL_ALLOCATION: "Initial leave days assigned to an employee.",
@@ -448,34 +438,12 @@ const TAB_LOOKUP_REQUIREMENTS: Record<LeaveTab, LeaveLookupKey[]> = {
   transactions: ["employees", "types"],
   reports: [],
   holidays: [],
-  policies: ["types", "departments", "positions", "branches", "grades"],
+  policies: [],
   workflows: [],
 };
 
 function readStoredToken() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  const direct = window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? "";
-  if (direct) {
-    return direct;
-  }
-
-  const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens);
-  if (!authTokensRaw) {
-    return "";
-  }
-
-  try {
-    const parsed = JSON.parse(authTokensRaw) as {
-      accessToken?: string;
-      access_token?: string;
-    };
-    return (parsed.accessToken ?? parsed.access_token ?? "").trim();
-  } catch {
-    return "";
-  }
+  return readStoredSessionTokens().accessToken;
 }
 
 function decodeJwtPayload(token: string) {
@@ -1398,6 +1366,11 @@ export function LeaveManagementView({
     permissions: ["holidays:delete", "attendance_holidays:delete"],
     mode: "any",
   });
+  const canCreateBranchHolidays = canPerformPermission(actor.permissionLabels, "attendance_holidays:create");
+  const canUpdateBranchHolidays = canPerformPermission(actor.permissionLabels, "attendance_holidays:update");
+  const canDeleteBranchHolidays = canPerformPermission(actor.permissionLabels, "attendance_holidays:delete");
+  const canEditHoliday = (row: AdminRecord) => row.branch_id == null ? canUpdateHolidays : canUpdateBranchHolidays;
+  const canRemoveHoliday = (row: AdminRecord) => row.branch_id == null ? canDeleteHolidays : canDeleteBranchHolidays;
   const canReadPolicies = canPerformPermission(
     actor.permissionLabels,
     "leave_policies:read",
@@ -1741,7 +1714,10 @@ export function LeaveManagementView({
 
   const [balanceForm, setBalanceForm] = React.useState(emptyBalanceForm);
 
+  const [holidayBeingEdited, setHolidayBeingEdited] = React.useState<AdminRecord | null>(null);
+  const [holidayBranches, setHolidayBranches] = React.useState<AdminRecord[]>([]);
   const [holidayForm, setHolidayForm] = React.useState({
+    branch_id: "",
     name: "",
     holiday_date: "",
     is_recurring: "false",
@@ -2171,13 +2147,7 @@ export function LeaveManagementView({
             break;
           }
           case "holidays": {
-            const result = await listLeaveHolidays(token, {
-              page: 1,
-              limit: 100,
-              sortBy: "created_at",
-              sortOrder: "DESC",
-            });
-            setHolidays(result.rows);
+            setHolidays(await listAllLeaveHolidays(token));
             break;
           }
           case "policies": {
@@ -2588,7 +2558,7 @@ export function LeaveManagementView({
 
   const existingHolidayKeys = React.useMemo(() => {
     return new Set(
-      holidays.map((row) =>
+      holidays.filter((row) => row.branch_id == null).map((row) =>
         holidayMatchKey(readString(row, ["name"]), readHolidayDate(row)),
       ),
     );
@@ -2603,21 +2573,22 @@ export function LeaveManagementView({
   const selectedHolidayMissing = React.useMemo(() => {
     return holidayImportCatalog.filter(
       (entry) =>
-        !existingHolidayKeys.has(
+        entry.countryCode === holidayImportCountry && entry.holidayDate.startsWith(holidayImportYear + "-") && !existingHolidayKeys.has(
           holidayMatchKey(entry.name, entry.holidayDate),
         ),
     );
-  }, [existingHolidayKeys, holidayImportCatalog]);
+  }, [existingHolidayKeys, holidayImportCatalog, holidayImportCountry, holidayImportYear]);
 
   const removableCountryHolidays = React.useMemo(() => {
     return holidays.filter((row) =>
-      holidayRemoveCatalog.some(
+      row.branch_id == null && row.import_country_code === holidayRemoveCountry &&
+      readHolidayDate(row).startsWith(holidayRemoveYear + "-") && holidayRemoveCatalog.some(
         (entry) =>
           holidayMatchKey(entry.name, entry.holidayDate) ===
           holidayMatchKey(readString(row, ["name"]), readHolidayDate(row)),
       ),
     );
-  }, [holidayRemoveCatalog, holidays]);
+  }, [holidayRemoveCatalog, holidayRemoveCountry, holidayRemoveYear, holidays]);
 
   const employeeNameById = React.useMemo(() => {
     const names = new Map<number, string>();
@@ -3208,6 +3179,7 @@ export function LeaveManagementView({
         await createLeaveHoliday(token, {
           name: entry.name.trim(),
           holiday_date: entry.holidayDate,
+          import_country_code: entry.countryCode,
           is_recurring: entry.isRecurring,
         });
         completed += 1;
@@ -3232,6 +3204,7 @@ export function LeaveManagementView({
         errorObject instanceof Error
           ? errorObject.message
           : "Failed to import country holidays.";
+      await reloadAll(tab, true);
       setError(message);
       showErrorAlert(message);
     } finally {
@@ -3279,7 +3252,7 @@ export function LeaveManagementView({
         if (id === null) {
           continue;
         }
-        await deleteLeaveHoliday(token, id);
+        await deleteLeaveHoliday(token, id, { import_country_code: holidayRemoveCountry, holiday_date: readHolidayDate(row) });
         completed += 1;
         setHolidayRemoveProgress({
           completed,
@@ -3302,6 +3275,7 @@ export function LeaveManagementView({
         errorObject instanceof Error
           ? errorObject.message
           : "Failed to remove country holidays.";
+      await reloadAll(tab, true);
       setError(message);
       showErrorAlert(message);
     } finally {
@@ -4298,10 +4272,30 @@ export function LeaveManagementView({
     setBalanceDialogOpen(true);
   }
 
+  function openHolidayForm(row: AdminRecord | null) {
+    setHolidayBeingEdited(row);
+    setHolidayForm({
+      name: row ? readString(row, ["name"]) : "",
+      holiday_date: row ? readHolidayDate(row) : "",
+      is_recurring: row && readBoolean(row, ["is_recurring"]) ? "true" : "false",
+      branch_id: row?.branch_id == null ? "" : String(row.branch_id),
+    });
+    setHolidayDialogOpen(true);
+  }
+
+  const holidayBranchToken = holidayDialogOpen && !holidayBeingEdited && canCreateBranchHolidays ? readStoredToken() : "";
+  React.useEffect(() => {
+    if (!holidayBranchToken) return;
+    let current = true;
+    setHolidayBranches([]);
+    void listLeaveHolidayBranches(holidayBranchToken)
+      .then((rows) => { if (current) setHolidayBranches(rows); })
+      .catch((error: unknown) => { if (current) showErrorAlert(error instanceof Error ? error.message : "Could not load holiday branches."); });
+    return () => { current = false; };
+  }, [holidayBranchToken]);
+
   async function submitHolidayForm() {
-    if (!canCreateHolidays) {
-      return;
-    }
+    if (holidayBeingEdited ? !canEditHoliday(holidayBeingEdited) : !canCreateHolidays) return;
     const token = readStoredToken();
     if (!token) {
       const message = "Authentication required. Please log in again.";
@@ -4313,19 +4307,24 @@ export function LeaveManagementView({
     setSaving(true);
     setError(null);
     try {
-      await createLeaveHoliday(token, {
+      const data = {
+        ...(holidayForm.branch_id ? { branch_id: Number(holidayForm.branch_id) } : {}),
         name: holidayForm.name.trim(),
         holiday_date: holidayForm.holiday_date,
         is_recurring: holidayForm.is_recurring === "true",
-      });
-      setHolidayForm({ name: "", holiday_date: "", is_recurring: "false" });
+      };
+      if (holidayBeingEdited) {
+        await patchLeaveHoliday(token, String(holidayBeingEdited.id), data);
+      } else {
+        await createLeaveHoliday(token, data);
+      }
       setHolidayDialogOpen(false);
       await reloadAll(tab, true);
     } catch (errorObject) {
       const message =
         errorObject instanceof Error
           ? errorObject.message
-          : "Failed to create holiday.";
+          : "Failed to save holiday.";
       setError(message);
       showErrorAlert(message);
     } finally {
@@ -4647,7 +4646,7 @@ export function LeaveManagementView({
       if (editingWorkflowId === null) {
         await createLeaveWorkflow(token, {
           name: workflowForm.name.trim(),
-          leave_type_id: Number(workflowForm.leave_type_id),
+          leave_type_id: toId(workflowForm.leave_type_id) ?? null,
           status: workflowForm.status,
           is_default: workflowForm.is_default === "true",
           reminder_after_days: workflowForm.reminder_after_days
@@ -4688,7 +4687,7 @@ export function LeaveManagementView({
       } else {
         await patchLeaveWorkflow(token, editingWorkflowId, {
           name: workflowForm.name.trim(),
-          leave_type_id: Number(workflowForm.leave_type_id),
+          leave_type_id: toId(workflowForm.leave_type_id) ?? null,
           status: workflowForm.status,
           is_default: workflowForm.is_default === "true",
           reminder_after_days: workflowForm.reminder_after_days
@@ -4736,7 +4735,7 @@ export function LeaveManagementView({
       return;
     }
     void (async () => {
-      const loaded = await ensureLookups(["types"]);
+      const loaded = await ensureLookups(canPerformPermission(actor.permissionLabels, "leave_types:read") ? ["types"] : []);
       if (!loaded) {
         return;
       }
@@ -4776,7 +4775,7 @@ export function LeaveManagementView({
     if (!canUpdateWorkflows) {
       return;
     }
-    const loaded = await ensureLookups(["types"]);
+    const loaded = await ensureLookups(canPerformPermission(actor.permissionLabels, "leave_types:read") ? ["types"] : []);
     if (!loaded) {
       return;
     }
@@ -5658,7 +5657,7 @@ export function LeaveManagementView({
   }
 
   async function toggleHolidayRecurring(row: AdminRecord) {
-    if (!canUpdateHolidays) {
+    if (!canEditHoliday(row)) {
       return;
     }
     const token = readStoredToken();
@@ -5669,6 +5668,7 @@ export function LeaveManagementView({
     setSaving(true);
     try {
       await patchLeaveHoliday(token, id, {
+        ...(row.branch_id == null ? {} : { branch_id: Number(row.branch_id) }),
         is_recurring: !readBoolean(row, ["is_recurring"]),
       });
       await reloadAll(tab, true);
@@ -5685,7 +5685,7 @@ export function LeaveManagementView({
   }
 
   async function removeHoliday(row: AdminRecord) {
-    if (!canDeleteHolidays) {
+    if (!canRemoveHoliday(row)) {
       return;
     }
     const token = readStoredToken();
@@ -5695,7 +5695,8 @@ export function LeaveManagementView({
     }
     setSaving(true);
     try {
-      await deleteLeaveHoliday(token, id);
+      const branchId = readNumber(row, ["branch_id"]);
+      await deleteLeaveHoliday(token, id, branchId == null ? {} : { branch_id: branchId });
       await reloadAll(tab, true);
     } catch (errorObject) {
       const message =
@@ -8572,14 +8573,16 @@ export function LeaveManagementView({
       <Dialog open={holidayDialogOpen} onOpenChange={setHolidayDialogOpen}>
         <DialogPopup from="bottom" className="sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Add Holiday</DialogTitle>
+            <DialogTitle>{holidayBeingEdited ? "Edit Holiday" : "Add Holiday"}</DialogTitle>
             <DialogDescription>
-              Enter holiday details, then save them.
+              {holidayBeingEdited?.branch_id != null ? "Applies to " + (holidayBeingEdited.branch_name || "branch #" + String(holidayBeingEdited.branch_id)) : "Company-wide holidays apply to all branches."}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 md:grid-cols-3">
             <input
               className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+              aria-label="Holiday name"
+              maxLength={200}
               placeholder="Holiday name"
               value={holidayForm.name}
               onChange={(event) =>
@@ -8596,6 +8599,17 @@ export function LeaveManagementView({
               }
               placeholder="Holiday date"
             />
+            {!holidayBeingEdited && canCreateBranchHolidays ? (
+              <label className="space-y-1">
+                <span className="text-sm font-medium">Applies to</span>
+                <select aria-label="Applies to" className="h-10 w-full rounded-md border px-3 text-sm"
+                  value={holidayForm.branch_id}
+                  onChange={(event) => setHolidayForm((prev) => ({ ...prev, branch_id: event.target.value }))}>
+                  <option value="">All branches</option>
+                  {holidayBranches.map((branch) => <option key={String(branch.id)} value={String(branch.id)}>{String(branch.name)}</option>)}
+                </select>
+              </label>
+            ) : null}
             <FluentSelect
               ariaLabel="Holiday repeat"
               value={holidayForm.is_recurring}
@@ -8619,10 +8633,10 @@ export function LeaveManagementView({
             <button
               type="button"
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white"
-              disabled={saving}
+              disabled={saving || !holidayForm.name.trim() || !holidayForm.holiday_date}
               onClick={() => void submitHolidayForm()}
             >
-              {saving ? "Saving..." : "Add Holiday"}
+              {saving ? "Saving..." : holidayBeingEdited ? "Save changes" : "Add Holiday"}
             </button>
           </DialogFooter>
         </DialogPopup>
@@ -8747,8 +8761,7 @@ export function LeaveManagementView({
           <DialogHeader>
             <DialogTitle>Remove Country Holidays</DialogTitle>
             <DialogDescription>
-              Select a country and year to remove holidays that match a
-              previously imported country set.
+              Remove company holidays recorded by an import for the selected country and year. Older entries with no import record can be removed individually.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -9371,7 +9384,7 @@ export function LeaveManagementView({
 
       {tab === "holidays" ? (
         <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">This calendar is shared with Attendance. Manage company-wide dates here and branch dates in Attendance Setup → Holidays.</p>
+          <p className="text-sm text-muted-foreground">Attendance and Leave share this calendar. The Applies to column shows which branches observe each holiday.</p>
           <ResizableTable
             title="Holidays"
             toolbarActions={
@@ -9400,7 +9413,7 @@ export function LeaveManagementView({
                   <button
                     type="button"
                     className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
-                    onClick={() => setHolidayDialogOpen(true)}
+                    onClick={() => openHolidayForm(null)}
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Add Holiday
@@ -9433,7 +9446,7 @@ export function LeaveManagementView({
                   r.branch_id == null ? (
                     "All branches"
                   ) : (
-                    <span title="Branch holiday. Manage it under Attendance > Holidays.">
+                    <span>
                       {readString(r, ["branch_name"]) || `Branch #${String(r.branch_id)}`}
                     </span>
                   ),
@@ -9446,9 +9459,9 @@ export function LeaveManagementView({
                   <Switch
                     size="sm"
                     checked={readBoolean(r, ["is_recurring"])}
-                    disabled={!canUpdateHolidays || r.editable_here === false}
+                    disabled={saving || !canEditHoliday(r)}
                     onCheckedChange={
-                      canUpdateHolidays && r.editable_here !== false
+                      canEditHoliday(r)
                         ? () => void toggleHolidayRecurring(r)
                         : undefined
                     }
@@ -9457,35 +9470,25 @@ export function LeaveManagementView({
                   />
                 ),
               },
-              ...(canDeleteHolidays
-                ? [
-                    {
-                      key: "actions",
-                      label: "Act",
-                      defaultWidth: 45,
-                      sortable: false,
-                      render: (row: AdminRecord) => (
-                        <div
-                          className="flex justify-end"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <button
-                            type="button"
-                            className="rounded-md border border-rose-200 p-2 text-rose-600 disabled:opacity-40"
-                            disabled={row.editable_here === false}
-                            title={
-                              row.editable_here === false
-                                ? "Branch holiday. Manage it under Attendance > Holidays."
-                                : undefined
-                            }
-                            onClick={() => setPendingHolidayDelete(row)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ),
-                    },
-                  ]
+              ...(canUpdateHolidays || canDeleteHolidays
+                ? [{
+                    key: "actions",
+                    label: "Actions",
+                    defaultWidth: 90,
+                    sortable: false,
+                    render: (row: AdminRecord) => (
+                      <div className="flex justify-end gap-1">
+                        {canEditHoliday(row) ? (
+                          <button type="button" className="rounded-md border p-2" aria-label={"Edit " + String(row.name)}
+                            onClick={() => openHolidayForm(row)}><Pencil className="h-4 w-4" /></button>
+                        ) : null}
+                        {canRemoveHoliday(row) ? (
+                          <button type="button" className="rounded-md border border-rose-200 p-2 text-rose-600" aria-label={"Delete " + String(row.name)}
+                            onClick={() => setPendingHolidayDelete(row)}><Trash2 className="h-4 w-4" /></button>
+                        ) : null}
+                      </div>
+                    ),
+                  }]
                 : []),
             ]}
             itemsPerPage={20}
