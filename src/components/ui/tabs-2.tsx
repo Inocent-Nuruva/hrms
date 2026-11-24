@@ -155,7 +155,7 @@ export function Tabs2({ groups, currentPath, className, showGroupNavigation = fa
             return <Tab key={group.title ?? first.url} value={first.url} className={cn(styles.tab, "!bg-transparent hover:!bg-transparent")}>{group.title ?? first.title}</Tab>
           })}
         </TabList> : null}
-        <TabList
+        {(!showGroupNavigation || groups.length <= 1 || tabs.length > 1) && <TabList
           aria-label="Section pages"
           size="small"
           selectedValue={selectedValue}
@@ -182,7 +182,7 @@ export function Tabs2({ groups, currentPath, className, showGroupNavigation = fa
               </span>
             </Tab>
           ))}
-        </TabList>
+        </TabList>}
       </div>
     </div>
   )
