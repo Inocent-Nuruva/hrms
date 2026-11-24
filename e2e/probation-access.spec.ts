@@ -26,7 +26,7 @@ async function workspace(page: Page, additionalPermissions: string[] = [], revie
         const review=saved[path]
         const [rating]=review.ratings as Array<{rating:number;comment:string}>
         sample={...sample,status:"HR_REVIEW_PENDING",
-          reviewCycles:[{cycleNumber:1,managerRecommendation:review.recommendation,managerComments:review.comments,managerScore:"75.00"}],
+          reviewCycles:[{cycleNumber:1,managerRecommendation:review.recommendation,managerComments:review.comments,recommendedExtensionDays:review.recommended_extension_days,managerScore:"75.00"}],
           managerReviewCriteria:[{criterionCode:"WORK",criterionName:"Quality",maximumRating:"4",managerRating:rating.rating,managerComment:rating.comment}]}
       }
       if (path==="/api/probation/letter-templates") templates.set(String(saved[path].letter_type),saved[path])
@@ -135,10 +135,22 @@ for (const [name,width,height] of [["desktop",1366,900],["mobile",390,844]] as c
 
 
 test("employee-shell probation reviewer can follow an existing reminder and open the assigned review", async ({page}) => {
-  await workspace(page, [], true)
+  const saved=await workspace(page, [], true)
   await page.goto("/probation/cases/42")
   await expect(page).toHaveURL(/dashboard\/probation\/team\?case=42/)
   await expect(page.getByRole("button",{name:"Manager review",exact:true})).toBeVisible()
   await expect(page.getByRole("button",{name:"HR decision",exact:true})).toHaveCount(0)
   await expect(page.getByRole("tab",{name:"Letter templates",exact:true})).toHaveCount(0)
+  await page.getByRole("button",{name:"Manager review",exact:true}).click()
+  await page.getByLabel(/Quality rating/).fill("3")
+  await expect(page.getByLabel("Suggested extension days")).toHaveCount(0)
+  await page.getByRole("combobox",{name:"Recommendation"}).click()
+  await page.getByRole("option",{name:"Extend",exact:true}).click()
+  await page.getByLabel("Suggested extension days").fill("8")
+  await page.getByRole("textbox",{name:"Manager review comments"}).fill("Another supervised assignment")
+  await page.getByRole("button",{name:"Save",exact:true}).click()
+  await expect.poll(()=>saved["/api/probation/cases/42/manager-review"]).toMatchObject({recommendation:"EXTEND",recommended_extension_days:8})
+  const reviewSummary=page.getByRole("heading",{name:"Manager review · Cycle 1"}).locator("..")
+  await expect(reviewSummary.getByText("Suggested extension days",{exact:true})).toBeVisible()
+  await expect(reviewSummary.getByText("8",{exact:true})).toBeVisible()
 })
