@@ -4,6 +4,7 @@ import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow
 import * as React from "react"
 import { PlusIcon, RefreshCwIcon, TrashIcon } from "lucide-react"
 
+import { fluentForm } from "@/components/ui/fluent-dialog-service"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PageHeader } from "@/components/ui/page-header"
@@ -113,6 +114,7 @@ function Chip({ status, label }: { status: string; label: string }) {
 /** Statutory leave rules per jurisdiction: setup, verification, activation. */
 export function LeaveStatutoryView() {
   const actor = useDashboardActor()
+  const canReadTypes = canPerformPermission(actor.permissionLabels, "leave_types:read")
   const canManage = canPerformPermission(actor.permissionLabels, "leave_statutory:manage")
   const canApprove = canPerformPermission(actor.permissionLabels, "leave_statutory:approve")
   const [sets, setSets] = React.useState<StatutoryRuleSet[]>([])
@@ -129,7 +131,7 @@ export function LeaveStatutoryView() {
       const [ruleSets, companySettings, types] = await Promise.all([
         listStatutoryRuleSets(token()),
         getStatutorySettings(token()),
-        listLeaveTypes(token(), { limit: 100 }),
+        canReadTypes ? listLeaveTypes(token(), { limit: 100 }) : { rows: [] },
       ])
       setSets(ruleSets)
       setSettings(companySettings)
@@ -139,11 +141,11 @@ export function LeaveStatutoryView() {
     } finally {
       setLoaded(true)
     }
-  }, [])
+  }, [canReadTypes])
 
   React.useEffect(() => {
-    void load()
-  }, [load])
+    if (actor.ready) void load()
+  }, [actor.ready, load])
 
   async function run(label: string, action: () => Promise<unknown>) {
     setBusy(true)
@@ -158,6 +160,18 @@ export function LeaveStatutoryView() {
     } finally {
       setBusy(false)
     }
+  }
+
+  async function recordVerification(set: StatutoryRuleSet, verified: boolean) {
+    const label = verified ? "Record verification" : "Record rejection"
+    const result = await fluentForm([{
+      name: "notes", label: "Verification notes", type: "textarea", required: true,
+      hint: "Identify the legislation and amendments reviewed and explain the decision.",
+    }], { title: label, message: set.name, confirmLabel: label })
+    if (!result) return
+    await run(verified ? "Recorded as verified" : "Recorded as rejected", () =>
+      verifyStatutoryRuleSet(token(), set.id, { verified, notes: result.notes }),
+    )
   }
 
   function editSet(set: StatutoryRuleSet) {
@@ -320,19 +334,14 @@ export function LeaveStatutoryView() {
                   <Button size="sm" variant="outline" disabled={busy} onClick={() => void run("Submitted for approval", () => submitStatutoryRuleSet(token(), set.id))}>Submit</Button>
                 ) : null}
                 {canApprove && ["draft", "pending_approval"].includes(set.status) ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => {
-                      const notes = window.prompt("Verification notes: which current legislation and amendments did you check?")
-                      if (!notes) return
-                      const verified = window.confirm("Mark these values as legally verified? Cancel records the check as rejected.")
-                      void run(verified ? "Recorded as verified" : "Recorded as rejected", () => verifyStatutoryRuleSet(token(), set.id, { verified, notes }))
-                    }}
-                  >
-                    Record verification
-                  </Button>
+                  <>
+                    <Button size="sm" variant="outline" disabled={busy} onClick={() => void recordVerification(set, true)}>
+                      Record verification
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={busy} onClick={() => void recordVerification(set, false)}>
+                      Record rejection
+                    </Button>
+                  </>
                 ) : null}
                 {canApprove && ["draft", "pending_approval"].includes(set.status) ? (
                   <Button
