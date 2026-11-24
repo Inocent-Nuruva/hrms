@@ -595,7 +595,7 @@ export function ProbationManagementView({
           ratings: managerRatingPayload(caseDetail, form),
           recommendation: form.recommendation,
           comments: form.comments,
-          recommended_extension_days: form.recommended_extension_days
+          recommended_extension_days: form.recommendation === "EXTEND" && form.recommended_extension_days
             ? Number(form.recommended_extension_days)
             : undefined,
         });
@@ -1277,6 +1277,7 @@ export function ProbationManagementView({
                   return <section key={number} className="grid gap-2 rounded-xl border border-border bg-card p-3">
                     <h3 className="text-sm font-semibold">Manager review · Cycle {number}</h3>
                     <DetailField label="Recommendation" value={prettify(readString(cycle, ["managerRecommendation", "manager_recommendation"]))} />
+                    {cycle.recommendedExtensionDays != null && <DetailField label="Suggested extension days" value={String(cycle.recommendedExtensionDays)} />}
                     <DetailField label="Weighted score" value={readString(cycle, ["managerScore", "manager_score"])} />
                     <p className="whitespace-pre-wrap text-sm">{readString(cycle, ["managerComments", "manager_comments"])}</p>
                     {current && asRecordArray(caseDetail.managerReviewCriteria)
@@ -1755,18 +1756,12 @@ export function ProbationManagementView({
                       }
                     />
                   </Field>
-                  <Field label="Extension days">
-                    <input
-                      className={inputClass}
-                      value={form.recommended_extension_days ?? ""}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          recommended_extension_days: event.target.value,
-                        }))
-                      }
-                    />
-                  </Field>
+                  {form.recommendation === "EXTEND" && (
+                    <FluentField label="Suggested extension days">
+                      <FluentInput type="number" min={1} step={1} value={form.recommended_extension_days ?? ""}
+                        onChange={(_, data) => setForm(current => ({ ...current, recommended_extension_days: data.value }))} />
+                    </FluentField>
+                  )}
                 </>
               ) : null}
               {formMode === "hr-decision" ? (
