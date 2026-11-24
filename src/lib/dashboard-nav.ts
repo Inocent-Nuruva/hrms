@@ -79,7 +79,7 @@ const PERSONAL_ATTENDANCE_ROUTES = new Set([
 
 export function isSelfServiceDashboardRoute(url: string) {
   const path = normalizeDashboardPath(url)
-  if (path === "/dashboard/me" || path.startsWith("/dashboard/me/")) {
+  if (path === "/dashboard/to-do" || path === "/dashboard/me" || path.startsWith("/dashboard/me/")) {
     return true
   }
   return PERSONAL_ATTENDANCE_ROUTES.has(path)
@@ -112,8 +112,8 @@ export function selfServiceHomeFor(url: string): string | null {
   if (path.startsWith("/dashboard/me/movements") || path.startsWith("/dashboard/movements")) {
     return "/dashboard/me/movements"
   }
-  if (path.startsWith("/dashboard/me/insights")) {
-    return "/dashboard"
+  if (path === "/dashboard/me/insights" || path === "/dashboard/to-do") {
+    return path
   }
   if (path.startsWith("/dashboard/me/leave") || path.startsWith("/dashboard/leave-management")) {
     return "/dashboard/me/leave/requests"

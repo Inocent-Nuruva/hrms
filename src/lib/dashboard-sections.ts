@@ -51,6 +51,7 @@ export const employeeSelfSectionTabGroups: DashboardSectionTabGroup[] = [
     title: "My employee workspace",
     items: [
       { title: "Profile", url: "/dashboard/me/profile" },
+      { title: "My insights", url: "/dashboard/me/insights" },
       {
         title: "Location privacy notice",
         url: "/dashboard/me/location-privacy",
@@ -70,6 +71,7 @@ export const employeeSelfSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Team members", url: "/dashboard/me/team/members" },
       { title: "Team attendance", url: "/dashboard/me/team/attendance" },
       { title: "Team actions", url: "/dashboard/me/team/actions" },
+      { title: "Team recommendations", url: "/dashboard/me/team/recommendations" },
     ],
   },
 ];
@@ -77,6 +79,13 @@ export const employeeSelfSectionTabGroups: DashboardSectionTabGroup[] = [
 export const employeeSectionTabGroups: DashboardSectionTabGroup[] = [
   ...employeeSelfSectionTabGroups,
   ...employeeOperationsSectionTabGroups,
+];
+
+export const toDoQueues: DashboardSectionTab[] = [
+  { title: "Employee Requests", url: "/dashboard/me/requests/actions" },
+  { title: "Correction Requests", url: "/dashboard/attendance/correction-requests" },
+  { title: "Profile Update Approvals", url: "/dashboard/employees/profile-update-approvals" },
+  { title: "Review recommendations", url: "/dashboard/to-do/recommendations" },
 ];
 
 export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
@@ -513,6 +522,7 @@ export const selfTeamSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Attendance", url: "/dashboard/me/team/attendance" },
       { title: "Activity summary", url: "/dashboard/me/team/activity-summary" },
       { title: "Actions", url: "/dashboard/me/team/actions" },
+      { title: "Team recommendations", url: "/dashboard/me/team/recommendations" },
       { title: "Movements", url: "/dashboard/team/movements" },
     ],
   },
