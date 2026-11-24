@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import { PencilIcon, PlusIcon, RotateCcwIcon, Trash2Icon, XIcon } from "lucide-react"
-import { fluentConfirm, fluentForm, fluentPrompt, type FormField } from "@/components/ui/fluent-dialog-service"
+import { fluentConfirm, fluentPrompt } from "@/components/ui/fluent-dialog-service"
+import { useRecordForm, type RecordFormField } from "@/components/dashboard/profile-records/record-form-dialog"
 import { adminRequest, type AdminRecord } from "@/lib/admin-api"
 import { cn } from "@/lib/utils"
 import { toast } from "@/components/ui/fluent-toast-store"
@@ -17,7 +18,10 @@ export type ProfileRecordType =
   | "professional_qualification"
   | "experience"
 
-type FieldSpec = FormField & { boolean?: boolean }
+type FieldSpec = RecordFormField
+
+const opts = (...values: string[]) =>
+  values.map((value) => ({ value, label: value.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()) }))
 
 /** Needs HR approval before it takes effect (create, edit or delete). */
 export const SENSITIVE_RECORD_TYPES: ProfileRecordType[] = ["relative", "identification", "bank_account"]
@@ -35,13 +39,13 @@ export const RECORD_LABELS: Record<ProfileRecordType, string> = {
 
 const RECORD_FIELDS: Record<ProfileRecordType, FieldSpec[]> = {
   contact: [
-    { name: "contact_type", label: "Type", required: true, hint: "work, personal, mobile, home, whatsapp or other", defaultValue: "personal" },
+    { name: "contact_type", label: "Contact type", required: true, defaultValue: "personal", options: opts("work", "personal", "mobile", "home", "whatsapp", "other") },
     { name: "phone_number", label: "Phone number" },
     { name: "email", label: "Email" },
-    { name: "notes", label: "Notes", type: "textarea" },
+    { name: "notes", label: "Notes" },
   ],
   address: [
-    { name: "address_type", label: "Type", required: true, hint: "home, temporary, work, mailing or other", defaultValue: "home" },
+    { name: "address_type", label: "Address type", required: true, defaultValue: "home", options: opts("home", "temporary", "work", "mailing", "other") },
     { name: "address_line_1", label: "Address line 1" },
     { name: "address_line_2", label: "Address line 2" },
     { name: "city", label: "City" },
@@ -51,19 +55,19 @@ const RECORD_FIELDS: Record<ProfileRecordType, FieldSpec[]> = {
   ],
   relative: [
     { name: "full_name", label: "Full name", required: true },
-    { name: "relationship", label: "Relationship", required: true, placeholder: "e.g. Spouse, Parent" },
+    { name: "relationship", label: "Relationship", required: true },
     { name: "phone", label: "Phone" },
     { name: "email", label: "Email" },
     { name: "address", label: "Address" },
     { name: "occupation", label: "Occupation" },
   ],
   identification: [
-    { name: "identification_type", label: "Type", required: true, hint: "national_id, passport, tax_id, social_security, driver_license, work_permit or other", defaultValue: "national_id" },
+    { name: "identification_type", label: "Identification type", required: true, defaultValue: "national_id", options: opts("national_id", "passport", "tax_id", "social_security", "driver_license", "work_permit", "other") },
     { name: "identification_number", label: "Number", required: true },
     { name: "issued_country", label: "Issuing country" },
     { name: "issuing_authority", label: "Issuing authority" },
-    { name: "issue_date", label: "Issue date", type: "date" },
-    { name: "expiry_date", label: "Expiry date", type: "date" },
+    { name: "issue_date", label: "Issue date" },
+    { name: "expiry_date", label: "Expiry date" },
   ],
   bank_account: [
     { name: "bank_name", label: "Bank name" },
@@ -79,23 +83,23 @@ const RECORD_FIELDS: Record<ProfileRecordType, FieldSpec[]> = {
     { name: "degree_or_certificate", label: "Degree / certificate", required: true },
     { name: "field_of_study", label: "Field of study", required: true },
     { name: "country_of_residence", label: "Country", required: true },
-    { name: "start_date", label: "Start date", type: "date", required: true },
-    { name: "end_date", label: "End date", type: "date", required: true },
+    { name: "start_date", label: "Start date", required: true },
+    { name: "end_date", label: "End date", required: true },
   ],
   professional_qualification: [
     { name: "programme_name", label: "Programme", required: true },
     { name: "institution_name", label: "Institution", required: true },
     { name: "issuing_organization", label: "Issuing organization", required: true },
     { name: "country_of_residence", label: "Country", required: true },
-    { name: "issue_date", label: "Issue date", type: "date", required: true },
-    { name: "expiry_date", label: "Expiry date", type: "date" },
+    { name: "issue_date", label: "Issue date", required: true },
+    { name: "expiry_date", label: "Expiry date" },
   ],
   experience: [
     { name: "company_name", label: "Company", required: true },
     { name: "job_title", label: "Job title", required: true },
-    { name: "responsibilities_description", label: "Responsibilities", type: "textarea", required: true },
-    { name: "start_date", label: "Start date", type: "date", required: true },
-    { name: "end_date", label: "End date", type: "date", hint: "Leave empty if you still work there." },
+    { name: "responsibilities_description", label: "Responsibilities", required: true },
+    { name: "start_date", label: "Start date", required: true },
+    { name: "end_date", label: "End date", hint: "Leave empty if you still work there." },
   ],
 }
 
@@ -237,16 +241,19 @@ export function AddProfileRecordButton({
 }) {
   const [busy, setBusy] = React.useState(false)
   const sensitive = SENSITIVE_RECORD_TYPES.includes(type)
+  const form = useRecordForm()
 
   const handleAdd = async () => {
-    const values = await fluentForm(RECORD_FIELDS[type], {
-      title: `Add ${RECORD_LABELS[type].toLowerCase()}`,
-      message: sensitive ? "HR will review this before it appears on your profile." : "",
-      confirmLabel: sensitive ? "Send to HR" : "Save",
+    const result = await form.open(RECORD_FIELDS[type], {
+      title: `Add ${RECORD_LABELS[type]} Record`,
+      description: sensitive
+        ? "Fill in the details. HR will review this before it appears on your profile."
+        : `Fill in the details to add a new ${RECORD_LABELS[type].toLowerCase()} record.`,
+      confirmLabel: sensitive ? "Send to HR" : "Add",
+      reasonLabel: sensitive ? "Reason for HR" : undefined,
     })
-    if (!values) return
-    const reason = await askReason(type, "addition")
-    if (reason === null) return
+    if (!result) return
+    const { values, reason } = result
     setBusy(true)
     try {
       const result = await createMyRecord(token, type, cleanForm(values, false), reason || undefined)
@@ -260,6 +267,8 @@ export function AddProfileRecordButton({
   }
 
   return (
+    <>
+    {form.dialog}
     <button
       type="button"
       onClick={() => void handleAdd()}
@@ -272,6 +281,7 @@ export function AddProfileRecordButton({
       <PlusIcon className="size-3.5" aria-hidden="true" />
       Add
     </button>
+    </>
   )
 }
 
@@ -293,6 +303,7 @@ export function ProfileRecordActions({
   pending?: boolean
 }) {
   const [busy, setBusy] = React.useState(false)
+  const form = useRecordForm()
   const id = recordIdOf(record)
   const sensitive = SENSITIVE_RECORD_TYPES.includes(type)
   if (!id) return null
@@ -322,12 +333,16 @@ export function ProfileRecordActions({
       ...field,
       defaultValue: toInputValue(record[field.name]) || field.defaultValue,
     }))
-    const values = await fluentForm(fields, {
-      title: `Edit ${RECORD_LABELS[type].toLowerCase()}`,
-      message: sensitive ? "HR will review this change before it is applied." : "",
+    const result = await form.open(fields, {
+      title: `Edit ${RECORD_LABELS[type]} Record`,
+      description: sensitive
+        ? "Update the details. HR will review this change before it is applied."
+        : `Update your ${RECORD_LABELS[type].toLowerCase()} information.`,
       confirmLabel: sensitive ? "Send to HR" : "Save",
+      reasonLabel: sensitive ? "Reason for HR" : undefined,
     })
-    if (!values) return
+    if (!result) return
+    const { values, reason } = result
     const changed: AdminRecord = {}
     for (const [key, value] of Object.entries(cleanForm(values, true))) {
       if (toInputValue(record[key]) !== toInputValue(value)) changed[key] = value
@@ -336,8 +351,6 @@ export function ProfileRecordActions({
       notify("Nothing changed.", "success")
       return
     }
-    const reason = await askReason(type, "change")
-    if (reason === null) return
     await run(() => updateMyRecord(token, type, id, changed, reason || undefined), "change")
   }
 
@@ -356,6 +369,7 @@ export function ProfileRecordActions({
 
   return (
     <span className="inline-flex items-center gap-1">
+      {form.dialog}
       <button
         type="button"
         aria-label={`Edit ${RECORD_LABELS[type]}`}

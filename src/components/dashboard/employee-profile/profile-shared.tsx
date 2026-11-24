@@ -347,6 +347,12 @@ export function renderRecordFields(record: AdminRecord, sectionTitle: string) {
     return String(value)
   }
 
+  // Employee-uploaded documents keep their optional expiry date in metadata.
+  const documentExpiry = (record.metadata as { expiry_date?: unknown } | null | undefined)?.expiry_date
+  if (sectionTitle.toLowerCase() === "documents" && typeof documentExpiry === "string" && documentExpiry) {
+    fields.push({ label: "expiry date", value: normalizeValue("expiry_date", documentExpiry) })
+  }
+
   for (const [key, rawValue] of Object.entries(record)) {
     if (key === "id" || key.endsWith("_id") || key.startsWith("__")) {
       continue

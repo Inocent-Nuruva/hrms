@@ -37,3 +37,12 @@ export function showNotificationPopup(row: AdminRecord) {
     action: { label: "View", onClick: () => window.location.assign(destination) },
   })
 }
+
+export function showMissedNotificationsPopup(count: number) {
+  if (count < 1 || typeof document === "undefined" || document.visibilityState !== "visible") return
+  toast.info(count === 1 ? "You have 1 unread notification" : `You have ${count} unread notifications`, {
+    description: "Open your inbox to catch up on activity while you were away.",
+    duration: 10_000,
+    action: { label: "Open inbox", onClick: () => window.location.assign("/dashboard/operations/notifications") },
+  })
+}

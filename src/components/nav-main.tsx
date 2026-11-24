@@ -408,9 +408,7 @@ export function NavMain({
   const selectedCategory = items.find(
     (item) => item.items?.length && nodeContainsCurrentPath(item, currentPath),
   )
-  const activeCategoryValue = selectedCategory
-    ? categoryValue(selectedCategory)
-    : ""
+  const activeCategoryValue = selectedCategory ? categoryValue(selectedCategory) : ""
   const [openCategories, setOpenCategories] = React.useState<string[]>([])
   const [pinnedUrls, setPinnedUrls] = React.useState<string[]>([])
   const [sortOrder, setSortOrder] = React.useState<NavSortOrder>("alpha-asc")
@@ -484,20 +482,6 @@ export function NavMain({
     if (typeof window === "undefined") return
     try {
       const stored = JSON.parse(
-        window.localStorage.getItem(OPEN_GROUPS_STORAGE_KEY) ?? "[]",
-      ) as unknown
-      if (Array.isArray(stored)) {
-        setOpenCategories(stored.filter((value): value is string => typeof value === "string"))
-      }
-    } catch {
-      // Ignore invalid navigation preferences.
-    }
-  }, [])
-
-  React.useEffect(() => {
-    if (typeof window === "undefined") return
-    try {
-      const stored = JSON.parse(
         window.localStorage.getItem(PINNED_LINKS_STORAGE_KEY) ?? "[]",
       ) as unknown
       if (Array.isArray(stored)) {
@@ -533,21 +517,14 @@ export function NavMain({
     }
   }, [])
 
+  // A new session starts collapsed, while a deep link expands its current group.
   React.useEffect(() => {
     if (!activeCategoryValue) return
-    setOpenCategories((current) =>
-      current.includes(activeCategoryValue)
-        ? current
-        : [...current, activeCategoryValue],
-    )
+    setOpenCategories((current) => current.includes(activeCategoryValue) ? current : [...current, activeCategoryValue])
   }, [activeCategoryValue])
 
   React.useEffect(() => {
-    if (typeof window === "undefined") return
-    window.localStorage.setItem(
-      OPEN_GROUPS_STORAGE_KEY,
-      JSON.stringify(openCategories),
-    )
+    window.localStorage.setItem(OPEN_GROUPS_STORAGE_KEY, JSON.stringify(openCategories))
   }, [openCategories])
 
   React.useEffect(() => {

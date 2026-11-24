@@ -13,7 +13,7 @@ import {
 import { subscribeToDashboardActorSnapshot } from "@/lib/dashboard-permissions";
 import { showErrorAlert } from "@/lib/error-alert";
 import { readStoredSessionTokens } from "@/lib/session-client";
-import { showNotificationPopup } from "@/lib/notification-popups";
+import { showMissedNotificationsPopup, showNotificationPopup } from "@/lib/notification-popups";
 
 export type {
   NotificationCategory,
@@ -35,6 +35,7 @@ const SOCKET_CONNECT_FALLBACK_MS = 8_000;
 const SOCKET_CONNECT_ERROR_WARNING_COUNT = 2;
 const NOTIFICATION_REST_POLL_MS = 30_000;
 const NOTIFICATION_SOUND_PATH = "/assets/sounds/hrms_sound.mp3";
+const UNREAD_REMINDER_KEY = "hrms:unread-reminder-shown";
 /** Absolute asset URL so the sound always resolves from Next public/. */
 function resolveNotificationSoundUrl() {
   if (typeof window === "undefined") {
@@ -877,6 +878,9 @@ async function loadAttentionItems(tokenOverride?: string) {
         const id = readItemId(item);
         if (id !== null && !previousIds.has(id)) showNotificationPopup(item);
       }
+    } else if (typeof window !== "undefined" && window.sessionStorage.getItem(UNREAD_REMINDER_KEY) !== "true") {
+      showMissedNotificationsPopup(attentionItems.length);
+      window.sessionStorage.setItem(UNREAD_REMINDER_KEY, "true");
     }
     attentionBaselineReady = true;
     return attentionItems;

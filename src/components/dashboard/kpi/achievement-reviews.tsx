@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge, Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Dropdown, Option, Table, TableHeader, TableBody, TableRow, TableHeaderCell, TableCell } from "@fluentui/react-components";
+import { Badge, Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Dropdown, Input, Option, Table, TableHeader, TableBody, TableRow, TableHeaderCell, TableCell } from "@fluentui/react-components";
 import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
 import { KpiFluentTextarea } from "./kpi-fluent-fields";
 import * as React from "react";
@@ -16,8 +16,8 @@ import { KpiSearchSelect, type KpiChoice } from "./kpi-search-select";
 import { numericActivityTotal } from "@/lib/kpi-activity-total";
 import Decimal from "decimal.js";
 
-type AdvancedReviewFilters = { employee: string; department: string; branch: string; period: string };
-const emptyAdvancedFilters: AdvancedReviewFilters = { employee: "", department: "", branch: "", period: "" };
+type AdvancedReviewFilters = { employee: string; department: string; branch: string; period: string; category: string; query: string };
+const emptyAdvancedFilters: AdvancedReviewFilters = { employee: "", department: "", branch: "", period: "", category: "", query: "" };
 const reviewOrder: Record<string, number> = { submitted: 0, under_review: 1, returned: 2, rejected: 3, approved: 4 };
 async function listReviewRows(token: string, status: string): Promise<Achievement[]> {
   if (status === "awaiting") return achievementApi.pending(token);
@@ -93,7 +93,9 @@ export function AchievementReviews() {
     [employee, setEmployee] = React.useState(""),
     [department, setDepartment] = React.useState(""),
     [branch, setBranch] = React.useState(""),
-    [period, setPeriod] = React.useState("");
+    [period, setPeriod] = React.useState(""),
+    [category, setCategory] = React.useState(""),
+    [query, setQuery] = React.useState("");
   const [loading, setLoading] = React.useState(true),
     [error, setError] = React.useState("");
   const [filtersOpen, setFiltersOpen] = React.useState(false);
@@ -130,11 +132,14 @@ export function AchievementReviews() {
       (!employee || String(row.assignment.subjectId) === employee) &&
       (!department || String(row.assignment.organizationSnapshot?.departmentId) === department) &&
       (!branch || String(row.assignment.organizationSnapshot?.branchId) === branch) &&
-      (!period || String(row.assignment.periodId) === period),
+      (!period || String(row.assignment.periodId) === period) &&
+      (!category || (row.assignment.definitionVersion?.category ?? "").trim().toLocaleLowerCase() === category.toLocaleLowerCase()) &&
+      (!query.trim() || `${row.assignment.definitionVersion?.name ?? ""} ${row.assignment.definitionVersion?.category ?? ""} ${subjectName(row, subjectNames)}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())),
   ).sort((left, right) => (reviewOrder[left.current.status] ?? 5) - (reviewOrder[right.current.status] ?? 5));
-  const advancedFilterCount = [employee, department, branch, period].filter(Boolean).length;
+  const categories = Array.from(new Set(rows.map((row) => row.assignment.definitionVersion?.category?.trim()).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b));
+  const advancedFilterCount = [employee, department, branch, period, category, query].filter(Boolean).length;
   function openAdvancedFilters() {
-    setDraftFilters({ employee, department, branch, period });
+    setDraftFilters({ employee, department, branch, period, category, query });
     setFiltersOpen(true);
   }
   function applyAdvancedFilters() {
@@ -142,6 +147,8 @@ export function AchievementReviews() {
     setDepartment(draftFilters.department);
     setBranch(draftFilters.branch);
     setPeriod(draftFilters.period);
+    setCategory(draftFilters.category);
+    setQuery(draftFilters.query);
     setFiltersOpen(false);
   }
   function closeReview() {
@@ -187,7 +194,7 @@ export function AchievementReviews() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button appearance="secondary" onClick={openAdvancedFilters}>More filters{advancedFilterCount ? ` (${advancedFilterCount})` : ""}</Button>
-            {(status !== "all" || advancedFilterCount > 0) && <Button appearance="subtle" onClick={() => { if (status !== "all") setLoading(true); setStatus("all"); setEmployee(""); setDepartment(""); setBranch(""); setPeriod(""); }}>Clear filters</Button>}
+            {(status !== "all" || advancedFilterCount > 0) && <Button appearance="subtle" onClick={() => { if (status !== "all") setLoading(true); setStatus("all"); setEmployee(""); setDepartment(""); setBranch(""); setPeriod(""); setCategory(""); setQuery(""); }}>Clear filters</Button>}
           </div>
         </div>
       </section>
@@ -196,9 +203,11 @@ export function AchievementReviews() {
           <DialogBody>
             <DialogTitle>Filter submissions</DialogTitle>
             <DialogContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">Filter by person, team, or reporting period.</p>
+              <p className="text-sm text-muted-foreground">Find submissions by KPI, person, category, team, or reporting period.</p>
               <div className="grid gap-4 sm:grid-cols-2">
+                <label className="space-y-1 text-sm sm:col-span-2"><span className="font-medium">Search KPI or employee</span><Input className="w-full" value={draftFilters.query} onChange={(_, data) => setDraftFilters((current) => ({ ...current, query: data.value }))} placeholder="Name or category" /></label>
                 <KpiSearchSelect label="Employee" value={draftFilters.employee} onChange={(value) => setDraftFilters((current) => ({ ...current, employee: value }))} load={loadEmployees} emptyLabel="All employees" fluentDropdown />
+                <label className="space-y-1 text-sm"><span className="font-medium">KPI category</span><Dropdown className="w-full" aria-label="KPI category" value={draftFilters.category || "All categories"} selectedOptions={[draftFilters.category]} onOptionSelect={(_, data) => setDraftFilters((current) => ({ ...current, category: data.optionValue ?? "" }))}><Option value="">All categories</Option>{categories.map((value) => <Option key={value} value={value}>{value}</Option>)}</Dropdown></label>
                 <KpiSearchSelect label="Department" value={draftFilters.department} onChange={(value) => setDraftFilters((current) => ({ ...current, department: value }))} load={loadDepartments} emptyLabel="All departments" fluentDropdown />
                 <KpiSearchSelect label="Branch" value={draftFilters.branch} onChange={(value) => setDraftFilters((current) => ({ ...current, branch: value }))} load={loadBranches} emptyLabel="All branches" fluentDropdown />
                 <KpiSearchSelect label="Period" value={draftFilters.period} onChange={(value) => setDraftFilters((current) => ({ ...current, period: value }))} load={loadPeriods} emptyLabel="All periods" fluentDropdown />
@@ -216,8 +225,8 @@ export function AchievementReviews() {
       {error && <KpiFeedback intent="error">{error}</KpiFeedback>}
       {!loading && filtered.length === 0 && (
         <div className="rounded-lg border border-border bg-card p-6 text-center">
-          <h2 className="font-semibold">{status !== "all" || employee || department || branch || period ? "No submissions match these filters" : "No submissions yet"}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{status !== "all" || employee || department || branch || period ? "Change or clear a filter to see more submissions." : "Submitted KPI results will appear here once employees send them for review."}</p>
+          <h2 className="font-semibold">{status !== "all" || advancedFilterCount ? "No submissions match these filters" : "No submissions yet"}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{status !== "all" || advancedFilterCount ? "Change or clear a filter to see more submissions." : "Submitted KPI results will appear here once employees send them for review."}</p>
         </div>
       )}
       {!loading && filtered.length > 0 && <div className="overflow-x-auto rounded-lg border">

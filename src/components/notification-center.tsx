@@ -2,7 +2,6 @@
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import {
   AnimatePresence,
   motion,
@@ -285,7 +284,6 @@ export function NotificationCenter({
   onOpenChange: (open: boolean) => void;
   onUnreadCountChange?: (count: number) => void;
 }) {
-  const router = useRouter();
   const {
     clearAllNotifications,
     deleteNotification,
@@ -434,9 +432,11 @@ export function NotificationCenter({
       }
 
       onOpenChange(false);
-      router.push(destination);
+      // A full navigation unmounts the notification drawer before the target
+      // page opens its own dialog, so the target is never hidden behind it.
+      window.location.assign(destination);
     },
-    [markAsRead, markAsSeen, onOpenChange, router],
+    [markAsRead, markAsSeen, onOpenChange],
   );
 
   const handleMarkRead = React.useCallback(

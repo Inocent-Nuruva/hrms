@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
-import { fluentConfirm, fluentForm, type FormField } from "@/components/ui/fluent-dialog-service"
+import { fluentConfirm } from "@/components/ui/fluent-dialog-service"
+import { useRecordForm, type RecordFormField } from "@/components/dashboard/profile-records/record-form-dialog"
 import { adminRequest, buildUrl, fileToBase64UploadDto, type AdminRecord } from "@/lib/admin-api"
 import { toast } from "@/components/ui/fluent-toast-store"
 
@@ -11,11 +12,31 @@ import { toast } from "@/components/ui/fluent-toast-store"
 // documents the employee uploaded (`can_modify`). HR-added documents are
 // read-only here.
 
-const DOCUMENT_FIELDS: FormField[] = [
+// Same fields and inputs as HR's document form: "type" renders the document
+// type select and "expiry_date" the date picker (via renderEntryInput). The
+// expiry date is stored in the document's metadata.
+const DOCUMENT_FIELDS: RecordFormField[] = [
   { name: "title", label: "Title", required: true },
-  { name: "type", label: "Type", placeholder: "e.g. Certificate, ID copy, CV" },
-  { name: "notes", label: "Notes", type: "textarea" },
+  { name: "type", label: "Document type", required: true },
+  { name: "expiry_date", label: "Expiry date" },
+  { name: "notes", label: "Notes" },
 ]
+
+const ACCEPTED_FILES = ".pdf,.png,.jpg,.jpeg,.doc,.docx"
+
+function expiryOf(record: AdminRecord) {
+  const metadata = record.metadata as { expiry_date?: unknown } | null | undefined
+  const value = metadata?.expiry_date
+  return typeof value === "string" && value ? value.slice(0, 10) : ""
+}
+
+function documentPayload(values: Record<string, string>, editing: boolean): AdminRecord {
+  const { expiry_date: expiry = "", ...rest } = values
+  const out = cleanForm(rest, editing)
+  if (editing) out.expiry_date = expiry.trim()
+  else if (expiry.trim()) out.metadata = { expiry_date: expiry.trim() }
+  return out
+}
 
 function unwrapList(payload: unknown): AdminRecord[] {
   if (Array.isArray(payload)) return payload as AdminRecord[]
@@ -73,20 +94,11 @@ async function downloadMyDocument(token: string, id: number, fileName: string) {
   URL.revokeObjectURL(url)
 }
 
-function pickFile(): Promise<File | null> {
-  return new Promise((resolve) => {
-    const input = document.createElement("input")
-    input.type = "file"
-    input.accept = ".pdf,.png,.jpg,.jpeg,.doc,.docx"
-    input.onchange = () => resolve(input.files?.[0] ?? null)
-    input.click()
-  })
-}
-
 export function MyDocumentsSection({ token }: { token: string }) {
   const [documents, setDocuments] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(true)
   const [busy, setBusy] = React.useState(false)
+  const form = useRecordForm()
 
   const load = React.useCallback(async () => {
     if (!token) return
@@ -118,25 +130,27 @@ export function MyDocumentsSection({ token }: { token: string }) {
   }
 
   const handleAdd = async () => {
-    const file = await pickFile()
-    if (!file) return
-    const values = await fluentForm(
-      DOCUMENT_FIELDS.map((field) =>
-        field.name === "title" ? { ...field, defaultValue: file.name.replace(/\.[^.]+$/, "") } : field,
-      ),
-      { title: "Add document", message: file.name, confirmLabel: "Upload" },
-    )
-    if (!values) return
-    await run(() => uploadMyDocument(token, file, cleanForm(values, false)), "Document uploaded.")
+    const result = await form.open(DOCUMENT_FIELDS, {
+      title: "Add Documents Record",
+      description: "Fill in the details and choose the file to upload.",
+      confirmLabel: "Upload",
+      file: { label: "Attachment", accept: ACCEPTED_FILES, hint: "PDF, image or Word file." },
+    })
+    if (!result?.file) return
+    const file = result.file
+    await run(() => uploadMyDocument(token, file, documentPayload(result.values, false)), "Document uploaded.")
   }
 
   const handleEdit = async (record: AdminRecord, id: number) => {
-    const values = await fluentForm(
-      DOCUMENT_FIELDS.map((field) => ({ ...field, defaultValue: String(record[field.name] ?? "") })),
-      { title: "Edit document", confirmLabel: "Save" },
+    const result = await form.open(
+      DOCUMENT_FIELDS.map((field) => ({
+        ...field,
+        defaultValue: field.name === "expiry_date" ? expiryOf(record) : String(record[field.name] ?? ""),
+      })),
+      { title: "Edit Documents Record", description: "Update the details of this document.", confirmLabel: "Save" },
     )
-    if (!values) return
-    await run(() => updateMyDocument(token, id, cleanForm(values, true)), "Document updated.")
+    if (!result) return
+    await run(() => updateMyDocument(token, id, documentPayload(result.values, true)), "Document updated.")
   }
 
   const handleDelete = async (record: AdminRecord, id: number) => {
@@ -150,6 +164,7 @@ export function MyDocumentsSection({ token }: { token: string }) {
 
   return (
     <div className="space-y-2">
+      {form.dialog}
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-semibold">Documents ({documents.length})</p>
         <button
@@ -171,7 +186,8 @@ export function MyDocumentsSection({ token }: { token: string }) {
             if (!Number.isFinite(id) || id <= 0) return null
             const name = String(record.title ?? record.original_file_name ?? "Document")
             const meta = [
-              record.type ? String(record.type) : null,
+              record.type ? String(record.type).replace(/_/g, " ") : null,
+              expiryOf(record) ? `Expires ${new Date(expiryOf(record)).toLocaleDateString()}` : null,
               record.uploaded_at ? new Date(String(record.uploaded_at)).toLocaleDateString() : null,
               record.can_modify ? null : "Added by HR",
             ].filter(Boolean)
