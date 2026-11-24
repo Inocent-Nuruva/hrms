@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { cn } from "@/lib/utils"
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
@@ -11,7 +12,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
       data-slot="table-container"
       className="relative"
     >
-      <table
+      <StandardTable
         data-slot="table"
         className={cn("w-full min-w-[640px] caption-bottom text-left md:min-w-[720px]", className)}
         {...props}
@@ -22,7 +23,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
 
 function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
-    <thead
+    <StandardTableHeader
       data-slot="table-header"
       className={cn(
         "bg-transparent [&_tr]:border-b [&_tr]:border-border",
@@ -35,7 +36,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
 
 function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
   return (
-    <tbody
+    <StandardTableBody
       data-slot="table-body"
       className={cn("[&_tr]:border-b [&_tr]:border-border [&_tr:last-child]:border-0", className)}
       {...props}
@@ -58,7 +59,7 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
 
 function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   return (
-    <tr
+    <StandardTableRow
       data-slot="table-row"
       className={cn(
         "transition-colors hover:bg-[color:var(--section-tab-rail-bg)] has-aria-expanded:bg-[color:var(--section-tab-rail-bg)] data-[state=selected]:bg-[color:var(--section-tab-rail-bg)]",
@@ -71,7 +72,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
 
 function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   return (
-    <th
+    <StandardTableHead
       data-slot="table-head"
       className={cn(
         "h-11 px-3 text-left align-middle text-sm font-normal whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
@@ -84,7 +85,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
 
 function TableCell({ className, ...props }: React.ComponentProps<"td">) {
   return (
-    <td
+    <StandardTableCell
       data-slot="table-cell"
       className={cn(
         "px-3 py-2.5 align-middle text-sm text-foreground [&:has([role=checkbox])]:pr-0",

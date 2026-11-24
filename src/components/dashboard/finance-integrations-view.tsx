@@ -1,5 +1,6 @@
 "use client";
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import * as React from "react";
 import { RefreshCwIcon, UploadIcon } from "lucide-react";
 
@@ -439,38 +440,38 @@ export function FinanceIntegrationsView() {
       <Card title="Transmission log" description="Every file produced and message sent. Failed direct sends retry automatically; you can also retry now.">
         {logs.length ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-muted text-xs text-muted-foreground">
-                <tr>
+            <StandardTable className="w-full text-left text-sm">
+              <StandardTableHeader className="bg-muted text-xs text-muted-foreground">
+                <StandardTableRow>
                   {["When", "Channel", "Operation", "Mode", "Records", "Amount", "Status", ""].map((label) => (
-                    <th key={label} className="px-3 py-2">{label}</th>
+                    <StandardTableHead key={label} className="px-3 py-2">{label}</StandardTableHead>
                   ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
+                </StandardTableRow>
+              </StandardTableHeader>
+              <StandardTableBody className="divide-y divide-border">
                 {logs.map((log) => (
-                  <tr key={rowId(log)}>
-                    <td className="px-3 py-2">{readString(log, ["createdAt", "created_at"]).slice(0, 16).replace("T", " ")}</td>
-                    <td className="px-3 py-2">{readString(log, ["channel"])}</td>
-                    <td className="px-3 py-2">{prettify(readString(log, ["operation"]))}</td>
-                    <td className="px-3 py-2">{readString(log, ["mode"])} · {readString(log, ["environment"])}</td>
-                    <td className="px-3 py-2">{readString(log, ["recordCount", "record_count"], "0")}</td>
-                    <td className="px-3 py-2">{readString(log, ["totalAmount", "total_amount"], "0.00")}</td>
-                    <td className="px-3 py-2">
+                  <StandardTableRow key={rowId(log)}>
+                    <StandardTableCell className="px-3 py-2">{readString(log, ["createdAt", "created_at"]).slice(0, 16).replace("T", " ")}</StandardTableCell>
+                    <StandardTableCell className="px-3 py-2">{readString(log, ["channel"])}</StandardTableCell>
+                    <StandardTableCell className="px-3 py-2">{prettify(readString(log, ["operation"]))}</StandardTableCell>
+                    <StandardTableCell className="px-3 py-2">{readString(log, ["mode"])} · {readString(log, ["environment"])}</StandardTableCell>
+                    <StandardTableCell className="px-3 py-2">{readString(log, ["recordCount", "record_count"], "0")}</StandardTableCell>
+                    <StandardTableCell className="px-3 py-2">{readString(log, ["totalAmount", "total_amount"], "0.00")}</StandardTableCell>
+                    <StandardTableCell className="px-3 py-2">
                       <StatusChip value={readString(log, ["status"])} />
                       {readString(log, ["error"], "") ? <p className="text-xs text-rose-600">{readString(log, ["error"])}</p> : null}
-                    </td>
-                    <td className="px-3 py-2">
+                    </StandardTableCell>
+                    <StandardTableCell className="px-3 py-2">
                       {["FAILED", "ABANDONED"].includes(readString(log, ["status"])) && readString(log, ["mode"]) === "DIRECT" ? (
                         <button type="button" className={actionButtonClass} onClick={() => void run(`retry-${rowId(log)}`, () => retryEmployeeFinanceIntegration(token(), rowId(log)), "Retry sent.").then(load)}>
                           Retry
                         </button>
                       ) : null}
-                    </td>
-                  </tr>
+                    </StandardTableCell>
+                  </StandardTableRow>
                 ))}
-              </tbody>
-            </table>
+              </StandardTableBody>
+            </StandardTable>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Nothing sent yet.</p>
@@ -524,35 +525,35 @@ export function FinanceIntegrationsView() {
               ))}
             </div>
             <div className="max-h-72 overflow-auto rounded-md border border-border">
-              <table className="w-full text-left text-xs">
-                <thead className="sticky top-0 bg-muted text-muted-foreground">
-                  <tr>
+              <StandardTable className="w-full text-left text-xs">
+                <StandardTableHeader className="sticky top-0 bg-muted text-muted-foreground">
+                  <StandardTableRow>
                     {["Row", "Reference", "Employee", "Outstanding", "First due", "Problems"].map((label) => (
-                      <th key={label} className="px-2 py-1.5">{label}</th>
+                      <StandardTableHead key={label} className="px-2 py-1.5">{label}</StandardTableHead>
                     ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
+                  </StandardTableRow>
+                </StandardTableHeader>
+                <StandardTableBody className="divide-y divide-border">
                   {records(migrationResult.rows).map((row) => {
                     const errors = Array.isArray(row.errors) ? row.errors.map(String) : [];
                     const warnings = Array.isArray(row.warnings) ? row.warnings.map(String) : [];
                     return (
-                      <tr key={readString(row, ["row_number"])}>
-                        <td className="px-2 py-1.5">{readString(row, ["row_number"])}</td>
-                        <td className="px-2 py-1.5">{readString(row, ["loan_reference"])}</td>
-                        <td className="px-2 py-1.5">{readString(row, ["employee_no"])}</td>
-                        <td className="px-2 py-1.5">{readString(row, ["outstanding_total"], "—")}</td>
-                        <td className="px-2 py-1.5">{readString(row, ["first_due_date"], "—")}</td>
-                        <td className="px-2 py-1.5">
+                      <StandardTableRow key={readString(row, ["row_number"])}>
+                        <StandardTableCell className="px-2 py-1.5">{readString(row, ["row_number"])}</StandardTableCell>
+                        <StandardTableCell className="px-2 py-1.5">{readString(row, ["loan_reference"])}</StandardTableCell>
+                        <StandardTableCell className="px-2 py-1.5">{readString(row, ["employee_no"])}</StandardTableCell>
+                        <StandardTableCell className="px-2 py-1.5">{readString(row, ["outstanding_total"], "—")}</StandardTableCell>
+                        <StandardTableCell className="px-2 py-1.5">{readString(row, ["first_due_date"], "—")}</StandardTableCell>
+                        <StandardTableCell className="px-2 py-1.5">
                           {errors.map((item) => <p key={item} className="text-rose-600">{item}</p>)}
                           {warnings.map((item) => <p key={item} className="text-amber-700">{item}</p>)}
                           {!errors.length && !warnings.length ? <span className="text-emerald-700">OK</span> : null}
-                        </td>
-                      </tr>
+                        </StandardTableCell>
+                      </StandardTableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </StandardTableBody>
+              </StandardTable>
             </div>
           </div>
         ) : null}

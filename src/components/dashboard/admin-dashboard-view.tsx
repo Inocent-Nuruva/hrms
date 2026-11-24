@@ -1334,7 +1334,7 @@ export default function AdminDashboardView({
         style={
           {
             "--sidebar-width": "15.5rem",
-            "--header-height": "calc(var(--spacing) * 18)",
+            "--header-height": "calc(var(--spacing) * 14)",
           } as React.CSSProperties
         }
       >

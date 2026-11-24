@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { useRouter } from "next/navigation"
@@ -2080,21 +2081,21 @@ export function AttendanceReportView() {
                   </p>
                   {customRows.length > 0 ? (
                     <div className="mt-3 overflow-x-auto rounded-lg border border-border">
-                      <table className="min-w-full text-sm">
-                        <thead className="border-b border-border bg-muted/40 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                          <tr>
+                      <StandardTable className="min-w-full text-sm">
+                        <StandardTableHeader className="border-b border-border bg-muted/40 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          <StandardTableRow>
                             {customResultColumns.map((column) => (
-                              <th key={column} className="px-3 py-2">
+                              <StandardTableHead key={column} className="px-3 py-2">
                                 {column.replace(/_/g, " ")}
-                              </th>
+                              </StandardTableHead>
                             ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border text-foreground">
+                          </StandardTableRow>
+                        </StandardTableHeader>
+                        <StandardTableBody className="divide-y divide-border text-foreground">
                           {customRows.slice(0, 20).map((row, index) => (
-                            <tr key={`custom-row-${index}`}>
+                            <StandardTableRow key={`custom-row-${index}`}>
                               {customResultColumns.map((column) => (
-                                <td key={`${index}-${column}`} className="px-3 py-2 align-top text-xs">
+                                <StandardTableCell key={`${index}-${column}`} className="px-3 py-2 align-top text-xs">
                                   {typeof row[column] === "object" && row[column] !== null
                                     ? readStringValue(row[column] as AdminRecord, [
                                         "name",
@@ -2103,12 +2104,12 @@ export function AttendanceReportView() {
                                         "code",
                                       ]) || "Structured value"
                                     : String(row[column] ?? "—")}
-                                </td>
+                                </StandardTableCell>
                               ))}
-                            </tr>
+                            </StandardTableRow>
                           ))}
-                        </tbody>
-                      </table>
+                        </StandardTableBody>
+                      </StandardTable>
                     </div>
                   ) : (
                     <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-[10rem_1fr]">

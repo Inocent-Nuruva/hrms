@@ -1,11 +1,12 @@
 "use client";
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import {
   loadAttendanceReportRows,
   attendanceReportRate,
 } from "./attendance-report-data";
 import { formsRequest } from "@/lib/forms-feedback";
-import { useAccountAppearance } from "@/hooks/use-account-appearance";
+import { useDashboardHeroBackground } from "@/hooks/use-dashboard-hero-background";
 
 import * as React from "react";
 import { WelcomeCardBackground } from "./welcome-card-background";
@@ -1586,18 +1587,18 @@ function PeopleExperiencePanels({
         </div>
         {filteredPayrollRows.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-left">
-              <thead className="bg-muted/35 text-[10px] text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2 font-medium">Employee</th>
-                  <th className="px-3 py-2 font-medium">Job title</th>
-                  <th className="px-3 py-2 font-medium">Gross</th>
-                  <th className="px-3 py-2 font-medium">Deductions</th>
-                  <th className="px-3 py-2 font-medium">Net pay</th>
-                  <th className="px-4 py-2 text-right font-medium">Payslip</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
+            <StandardTable className="w-full min-w-[680px] text-left">
+              <StandardTableHeader className="bg-muted/35 text-[10px] text-muted-foreground">
+                <StandardTableRow>
+                  <StandardTableHead className="px-4 py-2 font-medium">Employee</StandardTableHead>
+                  <StandardTableHead className="px-3 py-2 font-medium">Job title</StandardTableHead>
+                  <StandardTableHead className="px-3 py-2 font-medium">Gross</StandardTableHead>
+                  <StandardTableHead className="px-3 py-2 font-medium">Deductions</StandardTableHead>
+                  <StandardTableHead className="px-3 py-2 font-medium">Net pay</StandardTableHead>
+                  <StandardTableHead className="px-4 py-2 text-right font-medium">Payslip</StandardTableHead>
+                </StandardTableRow>
+              </StandardTableHeader>
+              <StandardTableBody className="divide-y divide-border/60">
                 {filteredPayrollRows.slice(0, 6).map((row, index) => {
                   const employee = asRecord(row.employee);
                   const name =
@@ -1622,20 +1623,20 @@ function PeopleExperiencePanels({
                   const currency =
                     readStringDeep(row, ["currency", "currency_code"]) || "TZS";
                   return (
-                    <tr
+                    <StandardTableRow
                       key={`${readNumber(row, ["id", "payslip_id"]) ?? index}`}
                       className="text-xs text-foreground hover:bg-muted/20"
                     >
-                      <td className="px-4 py-2.5">
+                      <StandardTableCell className="px-4 py-2.5">
                         <p className="font-medium">{name}</p>
                         <p className="text-[9px] text-muted-foreground">
                           {number || "—"}
                         </p>
-                      </td>
-                      <td className="px-3 py-2.5 text-muted-foreground">
+                      </StandardTableCell>
+                      <StandardTableCell className="px-3 py-2.5 text-muted-foreground">
                         {title}
-                      </td>
-                      <td className="px-3 py-2.5 tabular-nums">
+                      </StandardTableCell>
+                      <StandardTableCell className="px-3 py-2.5 tabular-nums">
                         {formatDashboardCurrency(
                           readDeepValue(row, [
                             "gross_pay",
@@ -1644,8 +1645,8 @@ function PeopleExperiencePanels({
                           ]),
                           currency,
                         )}
-                      </td>
-                      <td className="px-3 py-2.5 tabular-nums">
+                      </StandardTableCell>
+                      <StandardTableCell className="px-3 py-2.5 tabular-nums">
                         {formatDashboardCurrency(
                           readDeepValue(row, [
                             "total_deductions",
@@ -1654,8 +1655,8 @@ function PeopleExperiencePanels({
                           ]),
                           currency,
                         )}
-                      </td>
-                      <td className="px-3 py-2.5 font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                      </StandardTableCell>
+                      <StandardTableCell className="px-3 py-2.5 font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
                         {formatDashboardCurrency(
                           readDeepValue(row, [
                             "net_pay",
@@ -1664,8 +1665,8 @@ function PeopleExperiencePanels({
                           ]),
                           currency,
                         )}
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
+                      </StandardTableCell>
+                      <StandardTableCell className="px-4 py-2.5 text-right">
                         {canOpenPayroll ? (
                           <Link
                             href="/dashboard/operations/payroll"
@@ -1677,12 +1678,12 @@ function PeopleExperiencePanels({
                         ) : (
                           "—"
                         )}
-                      </td>
-                    </tr>
+                      </StandardTableCell>
+                    </StandardTableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </StandardTableBody>
+            </StandardTable>
           </div>
         ) : (
           <div className="flex min-h-56 items-center justify-center px-6 text-center text-xs text-muted-foreground">
@@ -1800,9 +1801,7 @@ export default function HrAnalyticsDashboard({
     warm?.toDate ?? formatInputDate(new Date()),
   );
   const [dateFilterOpen, setDateFilterOpen] = React.useState(false);
-  const [welcomeBackground, setWelcomeBackground] = React.useState<
-    "aurora" | "geometric" | "glow"
-  >("aurora");
+  const [welcomeBackground, saveWelcomeBackground] = useDashboardHeroBackground();
   const nextWelcomeBackground =
     welcomeBackground === "aurora"
       ? "geometric"
@@ -1810,11 +1809,6 @@ export default function HrAnalyticsDashboard({
         ? "glow"
         : "aurora";
 
-  const saveWelcomeBackground = useAccountAppearance(
-    "managerBackground",
-    "aurora",
-    setWelcomeBackground,
-  );
   const toggleWelcomeBackground = () =>
     saveWelcomeBackground(nextWelcomeBackground);
   const [reviewOpen, setReviewOpen] = React.useState(false);
@@ -3712,24 +3706,24 @@ export default function HrAnalyticsDashboard({
                     </div>
                   ) : recentLeaves.length > 0 ? (
                     <div className="overflow-hidden rounded-2xl border border-primary/10">
-                      <table className="w-full text-xs">
-                        <thead className="bg-primary/5 text-muted-foreground">
-                          <tr>
-                            <th className="px-3 py-2 text-left font-medium">
+                      <StandardTable className="w-full text-xs">
+                        <StandardTableHeader className="bg-primary/5 text-muted-foreground">
+                          <StandardTableRow>
+                            <StandardTableHead className="px-3 py-2 text-left font-medium">
                               Employee
-                            </th>
-                            <th className="px-3 py-2 text-left font-medium">
+                            </StandardTableHead>
+                            <StandardTableHead className="px-3 py-2 text-left font-medium">
                               Type
-                            </th>
-                            <th className="px-3 py-2 text-left font-medium">
+                            </StandardTableHead>
+                            <StandardTableHead className="px-3 py-2 text-left font-medium">
                               Dates
-                            </th>
-                            <th className="px-3 py-2 text-left font-medium">
+                            </StandardTableHead>
+                            <StandardTableHead className="px-3 py-2 text-left font-medium">
                               Status
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-primary/10 text-foreground">
+                            </StandardTableHead>
+                          </StandardTableRow>
+                        </StandardTableHeader>
+                        <StandardTableBody className="divide-y divide-primary/10 text-foreground">
                           {recentLeaves.map((lr, i) => {
                             const href = leaveDetailHref(lr);
                             const empNo = getLeaveEmployeeNo(lr);
@@ -3747,7 +3741,7 @@ export default function HrAnalyticsDashboard({
                                 animate={{ opacity: 1, x: 0 }}
                                 transition={{ duration: 0.28, delay: i * 0.04 }}
                               >
-                                <td className="px-3 py-2.5 font-medium">
+                                <StandardTableCell className="px-3 py-2.5 font-medium">
                                   {canOpenLeaveLink ? (
                                     <Link
                                       href={href}
@@ -3763,14 +3757,14 @@ export default function HrAnalyticsDashboard({
                                       {empNo}
                                     </div>
                                   ) : null}
-                                </td>
-                                <td className="px-3 py-2.5">
+                                </StandardTableCell>
+                                <StandardTableCell className="px-3 py-2.5">
                                   {getLeaveType(lr)}
-                                </td>
-                                <td className="px-3 py-2.5 text-muted-foreground">
+                                </StandardTableCell>
+                                <StandardTableCell className="px-3 py-2.5 text-muted-foreground">
                                   {getLeaveDates(lr)}
-                                </td>
-                                <td className="px-3 py-2.5">
+                                </StandardTableCell>
+                                <StandardTableCell className="px-3 py-2.5">
                                   <span
                                     className={cn(
                                       "inline-flex rounded-full bg-primary/8 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
@@ -3779,12 +3773,12 @@ export default function HrAnalyticsDashboard({
                                   >
                                     {getLeaveStatus(lr)}
                                   </span>
-                                </td>
+                                </StandardTableCell>
                               </motion.tr>
                             );
                           })}
-                        </tbody>
-                      </table>
+                        </StandardTableBody>
+                      </StandardTable>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-primary/20 bg-primary/4 px-4 py-8 text-center">

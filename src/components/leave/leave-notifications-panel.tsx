@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import * as React from "react"
 
 import { Button } from "@/components/ui/button"
@@ -184,47 +185,47 @@ export function LeaveNotificationsPanel() {
             </span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-xs">
-              <thead className="bg-muted/40 text-left text-muted-foreground">
-                <tr>
-                  <th className="px-2 py-1.5">When</th>
-                  <th className="px-2 py-1.5">Notification</th>
-                  <th className="px-2 py-1.5">Channel</th>
-                  <th className="px-2 py-1.5">Recipient</th>
-                  <th className="px-2 py-1.5">Status</th>
-                  <th className="px-2 py-1.5">Attempts</th>
-                  <th className="px-2 py-1.5">Last error</th>
-                </tr>
-              </thead>
-              <tbody>
+            <StandardTable className="w-full min-w-[720px] text-xs">
+              <StandardTableHeader className="bg-muted/40 text-left text-muted-foreground">
+                <StandardTableRow>
+                  <StandardTableHead className="px-2 py-1.5">When</StandardTableHead>
+                  <StandardTableHead className="px-2 py-1.5">Notification</StandardTableHead>
+                  <StandardTableHead className="px-2 py-1.5">Channel</StandardTableHead>
+                  <StandardTableHead className="px-2 py-1.5">Recipient</StandardTableHead>
+                  <StandardTableHead className="px-2 py-1.5">Status</StandardTableHead>
+                  <StandardTableHead className="px-2 py-1.5">Attempts</StandardTableHead>
+                  <StandardTableHead className="px-2 py-1.5">Last error</StandardTableHead>
+                </StandardTableRow>
+              </StandardTableHeader>
+              <StandardTableBody>
                 {deliveries.map((row) => {
                   const notification = (row.notification ?? {}) as AdminRecord
                   const status = String(row.status ?? "")
                   return (
-                    <tr key={String(row.id)} className="border-t border-border">
-                      <td className="whitespace-nowrap px-2 py-1.5">{str(row.created_at).slice(0, 16).replace("T", " ")}</td>
-                      <td className="px-2 py-1.5">{str(notification.title)}</td>
-                      <td className="px-2 py-1.5">{str(row.channel)}</td>
-                      <td className="px-2 py-1.5">{str(row.recipient_address)}</td>
-                      <td className="px-2 py-1.5">
+                    <StandardTableRow key={String(row.id)} className="border-t border-border">
+                      <StandardTableCell className="whitespace-nowrap px-2 py-1.5">{str(row.created_at).slice(0, 16).replace("T", " ")}</StandardTableCell>
+                      <StandardTableCell className="px-2 py-1.5">{str(notification.title)}</StandardTableCell>
+                      <StandardTableCell className="px-2 py-1.5">{str(row.channel)}</StandardTableCell>
+                      <StandardTableCell className="px-2 py-1.5">{str(row.recipient_address)}</StandardTableCell>
+                      <StandardTableCell className="px-2 py-1.5">
                         <span className={cn("rounded-full px-2 py-0.5 font-medium", DELIVERY_TONE[status] ?? DELIVERY_TONE.PENDING)}>
                           {status || "—"}
                         </span>
-                      </td>
-                      <td className="px-2 py-1.5">{str(row.attempt_count)}</td>
-                      <td className="max-w-xs px-2 py-1.5 text-red-700">{row.last_error ? String(row.last_error) : ""}</td>
-                    </tr>
+                      </StandardTableCell>
+                      <StandardTableCell className="px-2 py-1.5">{str(row.attempt_count)}</StandardTableCell>
+                      <StandardTableCell className="max-w-xs px-2 py-1.5 text-red-700">{row.last_error ? String(row.last_error) : ""}</StandardTableCell>
+                    </StandardTableRow>
                   )
                 })}
                 {!deliveries.length ? (
-                  <tr>
-                    <td colSpan={7} className="px-2 py-4 text-center text-muted-foreground">
+                  <StandardTableRow>
+                    <StandardTableCell colSpan={7} className="px-2 py-4 text-center text-muted-foreground">
                       No leave notification deliveries yet.
-                    </td>
-                  </tr>
+                    </StandardTableCell>
+                  </StandardTableRow>
                 ) : null}
-              </tbody>
-            </table>
+              </StandardTableBody>
+            </StandardTable>
           </div>
         </div>
       ) : null}

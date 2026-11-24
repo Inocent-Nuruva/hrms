@@ -34,13 +34,13 @@ function applyThemeClass(theme: ThemeMode) {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = React.useState<ThemeMode>("system")
+  const [theme, setThemeState] = React.useState<ThemeMode>("light")
   const [resolvedTheme, setResolvedTheme] = React.useState<"light" | "dark">("light")
 
   React.useEffect(() => {
     const saved = (window.localStorage.getItem(THEME_STORAGE_KEY) ?? "").trim()
     const initialTheme: ThemeMode =
-      saved === "light" || saved === "dark" || saved === "system" ? saved : "system"
+      saved === "light" || saved === "dark" || saved === "system" ? saved : "light"
     setThemeState(initialTheme)
     const resolved = applyThemeClass(initialTheme)
     setResolvedTheme(resolved)
@@ -65,7 +65,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setResolvedTheme(resolved)
   }, [])
 
-  const setTheme = useAccountAppearance("theme", "system", applySavedTheme)
+  const setTheme = useAccountAppearance("theme", "light", applySavedTheme)
 
   const value = React.useMemo(
     () => ({ theme, resolvedTheme, setTheme }),

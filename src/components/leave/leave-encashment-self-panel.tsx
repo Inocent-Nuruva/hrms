@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -124,26 +125,26 @@ export function LeaveEncashmentSelfPanel({ token, balances }: { token: string | 
       ) : null}
       {rows.length ? (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-left text-xs">
-            <thead className="text-muted-foreground">
-              <tr>
+          <StandardTable className="w-full min-w-[560px] text-left text-xs">
+            <StandardTableHeader className="text-muted-foreground">
+              <StandardTableRow>
                 {["Leave type / year", "Requested", "Approved", "Status", "Payment", ""].map((h) => (
-                  <th key={h} className="px-2 py-1.5 font-semibold">
+                  <StandardTableHead key={h} className="px-2 py-1.5 font-semibold">
                     {h}
-                  </th>
+                  </StandardTableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+              </StandardTableRow>
+            </StandardTableHeader>
+            <StandardTableBody className="divide-y divide-border">
               {rows.map((row) => (
-                <tr key={String(row.id)}>
-                  <td className="px-2 py-1.5">
+                <StandardTableRow key={String(row.id)}>
+                  <StandardTableCell className="px-2 py-1.5">
                     {typeName(row)} · {text(row.fiscal_year)}
-                  </td>
-                  <td className="px-2 py-1.5">{text(row.requested_days)}</td>
-                  <td className="px-2 py-1.5">{text(row.approved_days)}</td>
-                  <td className="px-2 py-1.5">{text(row.status)}</td>
-                  <td className="px-2 py-1.5">
+                  </StandardTableCell>
+                  <StandardTableCell className="px-2 py-1.5">{text(row.requested_days)}</StandardTableCell>
+                  <StandardTableCell className="px-2 py-1.5">{text(row.approved_days)}</StandardTableCell>
+                  <StandardTableCell className="px-2 py-1.5">{text(row.status)}</StandardTableCell>
+                  <StandardTableCell className="px-2 py-1.5">
                     {(() => {
                       const payment = String(row.payment_status ?? "").toUpperCase()
                       if (payment === "PAID") return "Paid"
@@ -156,18 +157,18 @@ export function LeaveEncashmentSelfPanel({ token, balances }: { token: string | 
                         {String(row.payable_amount ?? row.calculated_amount)} {String(row.currency ?? "")}
                       </span>
                     ) : null}
-                  </td>
-                  <td className="px-2 py-1.5 text-right">
+                  </StandardTableCell>
+                  <StandardTableCell className="px-2 py-1.5 text-right">
                     {String(row.status) === "pending" ? (
                       <Button size="sm" variant="outline" onClick={() => void cancel(row)}>
                         Cancel
                       </Button>
                     ) : null}
-                  </td>
-                </tr>
+                  </StandardTableCell>
+                </StandardTableRow>
               ))}
-            </tbody>
-          </table>
+            </StandardTableBody>
+          </StandardTable>
         </div>
       ) : null}
     </section>

@@ -1,5 +1,7 @@
 "use client";
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
+import { SharedDashboardHeroBackground } from "@/components/dashboard/welcome-card-background"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
@@ -1492,20 +1494,15 @@ export function FinanceOperationsView({
       <TalentDoodleSprites />
       {activeTab === "overview" ? (
         <div className={`${pageBleedClass} overflow-hidden border-y border-border bg-background`}>
-          <div className="relative overflow-hidden border-b border-border bg-gradient-to-r from-primary via-primary to-primary/90 px-5 py-7 text-primary-foreground sm:px-8 sm:py-8">
-            <div className="finance-hero-drift pointer-events-none absolute -right-16 -top-24 size-80 rounded-full border-[42px] border-primary-foreground/[0.12]" />
-            <div className="finance-hero-orbit pointer-events-none absolute right-16 top-[calc(50%-4.5rem)] size-36 rounded-full border border-primary-foreground/15" />
-            <div className="finance-hero-band pointer-events-none absolute bottom-0 right-28 h-32 w-56 bg-primary-foreground/[0.08]" />
-            <div className="finance-hero-line pointer-events-none absolute left-[46%] top-5 h-24 w-px bg-primary-foreground/15" />
-            <div className="finance-hero-dot pointer-events-none absolute left-[49%] top-9 size-2 rounded-full bg-primary-foreground/25" />
-            <div className="finance-hero-dot finance-hero-dot-delayed pointer-events-none absolute left-[51%] top-16 size-1.5 rounded-full bg-primary-foreground/20" />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-primary-foreground/20" />
+          <div className="relative isolate overflow-hidden border-b border-border bg-card px-5 py-7 text-foreground sm:px-8 sm:py-8"
+          >
+            <SharedDashboardHeroBackground />
             <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex max-w-2xl items-center gap-5">
-                <Wallet24Regular className="size-9 shrink-0 text-primary-foreground/90" aria-hidden="true" />
-                <div className="h-12 w-px shrink-0 bg-primary-foreground/25" aria-hidden="true" />
+                <Wallet24Regular className="size-9 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <div className="h-12 w-px shrink-0 bg-border" aria-hidden="true" />
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary-foreground/70">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
                     Finance workspace
                   </p>
                   <h1 className="mt-1.5 text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -1525,7 +1522,7 @@ export function FinanceOperationsView({
                 }
                 aria-label="Refresh finance overview"
                 title="Refresh"
-                className="!min-w-0 !text-primary-foreground hover:!bg-primary-foreground/10"
+                className="!min-w-0 !text-foreground hover:!bg-primary/10"
                 onClick={() => void load()}
                 disabled={loading}
               />
@@ -2671,18 +2668,18 @@ export function FinanceOperationsView({
                     ) : null}
                   </div>
                   <div className="max-h-80 overflow-auto">
-                    <table className="w-full text-left text-sm">
-                      <thead className="sticky top-0 bg-muted text-xs text-muted-foreground">
-                        <tr>
-                          <th className="px-3 py-2">#</th>
-                          <th className="px-3 py-2">Due</th>
-                          <th className="px-3 py-2">Amount</th>
-                          <th className="px-3 py-2">Paid</th>
-                          <th className="px-3 py-2">Status</th>
-                          <th className="px-3 py-2">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
+                    <StandardTable className="w-full text-left text-sm">
+                      <StandardTableHeader className="sticky top-0 bg-muted text-xs text-muted-foreground">
+                        <StandardTableRow>
+                          <StandardTableHead className="px-3 py-2">#</StandardTableHead>
+                          <StandardTableHead className="px-3 py-2">Due</StandardTableHead>
+                          <StandardTableHead className="px-3 py-2">Amount</StandardTableHead>
+                          <StandardTableHead className="px-3 py-2">Paid</StandardTableHead>
+                          <StandardTableHead className="px-3 py-2">Status</StandardTableHead>
+                          <StandardTableHead className="px-3 py-2">Action</StandardTableHead>
+                        </StandardTableRow>
+                      </StandardTableHeader>
+                      <StandardTableBody className="divide-y divide-border">
                         {accountInstallments.length ? (
                           accountInstallments.map((installment) => {
                             const id = rowId(installment);
@@ -2692,39 +2689,39 @@ export function FinanceOperationsView({
                               "SCHEDULED",
                             ).toUpperCase();
                             return (
-                              <tr key={id}>
-                                <td className="px-3 py-2">
+                              <StandardTableRow key={id}>
+                                <StandardTableCell className="px-3 py-2">
                                   {readString(
                                     installment,
                                     ["installmentNumber", "installment_number"],
                                     id,
                                   )}
-                                </td>
-                                <td className="px-3 py-2">
+                                </StandardTableCell>
+                                <StandardTableCell className="px-3 py-2">
                                   {readString(
                                     installment,
                                     ["dueDate", "due_date"],
                                     "",
                                   )}
-                                </td>
-                                <td className="px-3 py-2">
+                                </StandardTableCell>
+                                <StandardTableCell className="px-3 py-2">
                                   {readString(
                                     installment,
                                     ["totalDue", "total_due"],
                                     "0.00",
                                   )}
-                                </td>
-                                <td className="px-3 py-2">
+                                </StandardTableCell>
+                                <StandardTableCell className="px-3 py-2">
                                   {readString(
                                     installment,
                                     ["paidAmount", "paid_amount"],
                                     "0.00",
                                   )}
-                                </td>
-                                <td className="px-3 py-2">
+                                </StandardTableCell>
+                                <StandardTableCell className="px-3 py-2">
                                   <StatusChip value={status} />
-                                </td>
-                                <td className="px-3 py-2">
+                                </StandardTableCell>
+                                <StandardTableCell className="px-3 py-2">
                                   <button
                                     type="button"
                                     className={actionButtonClass}
@@ -2742,22 +2739,22 @@ export function FinanceOperationsView({
                                   >
                                     Defer
                                   </button>
-                                </td>
-                              </tr>
+                                </StandardTableCell>
+                              </StandardTableRow>
                             );
                           })
                         ) : (
-                          <tr>
-                            <td
+                          <StandardTableRow>
+                            <StandardTableCell
                               className="px-3 py-4 text-muted-foreground"
                               colSpan={6}
                             >
                               No installment schedule found.
-                            </td>
-                          </tr>
+                            </StandardTableCell>
+                          </StandardTableRow>
                         )}
-                      </tbody>
-                    </table>
+                      </StandardTableBody>
+                    </StandardTable>
                   </div>
                 </div>
 

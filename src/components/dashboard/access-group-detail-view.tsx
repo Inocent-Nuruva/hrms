@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
@@ -1060,7 +1061,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
               <p className={`text-sm font-medium ${preview.ready ? "text-green-700" : "text-red-700"}`}>{preview.ready ? "Ready to sync" : "Resolve these issues before syncing"}</p>
               <ul className="space-y-1 text-sm">{preview.issues.map((issue, index) => <li key={`${issue.message}-${index}`} className={issue.severity === "error" ? "text-red-700" : "text-amber-700"}>{issue.severity === "error" ? "Required: " : "Note: "}{issue.message}</li>)}</ul>
               <p className="text-sm text-slate-600">Showing {Math.min(preview.access.length, 100)} of {preview.access.length} employee, device and door assignments.</p>
-              <div className="max-h-80 overflow-auto"><table className="w-full text-left text-sm"><thead><tr><th>Employee</th><th>Device</th><th>Door</th><th>Schedule</th><th>Result</th><th>Combined access</th></tr></thead><tbody>{preview.access.slice(0, 100).map((row, index) => <tr key={`${row.employee_id}-${row.device_id}-${row.door_id}-${index}`} className="border-t"><td>{row.employee_name || row.employee_no || row.employee_id}</td><td>{row.device_name}</td><td>{row.door_name}</td><td>{row.schedule_template_name} {row.week_plan_name ? `(${row.week_plan_name})` : ""}</td><td>{row.included ? "Included" : "Skipped"}</td><td><button type="button" className="text-primary underline disabled:opacity-50" disabled={effectiveLoading} onClick={() => void onPreviewEffective(row.employee_id, row.device_id)}>View</button></td></tr>)}</tbody></table></div>
+              <div className="max-h-80 overflow-auto"><StandardTable className="w-full text-left text-sm"><StandardTableHeader><StandardTableRow><StandardTableHead>Employee</StandardTableHead><StandardTableHead>Device</StandardTableHead><StandardTableHead>Door</StandardTableHead><StandardTableHead>Schedule</StandardTableHead><StandardTableHead>Result</StandardTableHead><StandardTableHead>Combined access</StandardTableHead></StandardTableRow></StandardTableHeader><StandardTableBody>{preview.access.slice(0, 100).map((row, index) => <StandardTableRow key={`${row.employee_id}-${row.device_id}-${row.door_id}-${index}`} className="border-t"><StandardTableCell>{row.employee_name || row.employee_no || row.employee_id}</StandardTableCell><StandardTableCell>{row.device_name}</StandardTableCell><StandardTableCell>{row.door_name}</StandardTableCell><StandardTableCell>{row.schedule_template_name} {row.week_plan_name ? `(${row.week_plan_name})` : ""}</StandardTableCell><StandardTableCell>{row.included ? "Included" : "Skipped"}</StandardTableCell><StandardTableCell><button type="button" className="text-primary underline disabled:opacity-50" disabled={effectiveLoading} onClick={() => void onPreviewEffective(row.employee_id, row.device_id)}>View</button></StandardTableCell></StandardTableRow>)}</StandardTableBody></StandardTable></div>
               {effectiveLoading ? <p className="text-sm">Calculating combined access…</p> : null}
               {effectiveError ? <p className="text-sm text-red-700">{effectiveError}</p> : null}
               {effectiveAccess ? <div className="space-y-2 rounded-md bg-slate-50 p-3 text-sm"><p className="font-semibold">Combined access for employee {effectiveAccess.employee_no || effectiveAccess.employee_id} on {effectiveAccess.device_name}</p><p className="text-amber-700">{effectiveAccess.warning}</p>{effectiveAccess.issues.map((issue) => <p key={issue} className="text-red-700">{issue}</p>)}{effectiveAccess.desired_rights.length ? <ul className="list-disc pl-5">{effectiveAccess.desired_rights.map((right) => <li key={`${right.door_no}-${right.template_no}`}>{right.door_name} — {right.template_name} ({right.groups.map((group) => group.name).join(", ")})</li>)}</ul> : <p>No group-derived rights are configured for this employee and device.</p>}{effectiveAfterRemoval ? <div><p className="mt-2 font-semibold">If this group is removed</p>{effectiveAfterRemoval.issues.map((issue) => <p key={issue} className="text-red-700">{issue}</p>)}{effectiveAfterRemoval.desired_rights.length ? <ul className="list-disc pl-5">{effectiveAfterRemoval.desired_rights.map((right) => <li key={`${right.door_no}-${right.template_no}`}>{right.door_name} — {right.template_name} ({right.groups.map((group) => group.name).join(", ")})</li>)}</ul> : <p>No group-derived rights would remain for this device.</p>}</div> : null}<p className="text-slate-500">Recorded HRMS sync state: {effectiveAccess.recorded_sync_status || "none"}; device state has not been verified. Removing a group does not automatically update the device.</p></div> : null}
@@ -1112,37 +1113,37 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
             </div>
 
             <TableScrollContainer>
-              <table className="w-full min-w-[720px] text-sm">
-                <thead className="bg-slate-50/90">
-                  <tr>
+              <StandardTable className="w-full min-w-[720px] text-sm">
+                <StandardTableHeader className="bg-slate-50/90">
+                  <StandardTableRow>
                     {doorColumns.map((column) => (
-                      <th
+                      <StandardTableHead
                         key={column}
                         className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap"
                       >
                         {prettifyLabel(column)}
-                      </th>
+                      </StandardTableHead>
                     ))}
-                    <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">
+                    <StandardTableHead className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">
                       Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
+                    </StandardTableHead>
+                  </StandardTableRow>
+                </StandardTableHeader>
+                <StandardTableBody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
                   {!loading && filteredDoorRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={Math.max(doorColumns.length + 1, 1)} className="px-4 py-10 text-sm text-slate-500">
+                    <StandardTableRow>
+                      <StandardTableCell colSpan={Math.max(doorColumns.length + 1, 1)} className="px-4 py-10 text-sm text-slate-500">
                         {doorSearch.trim()
                           ? "No assigned doors matched your search."
                           : "No doors assigned to this group yet."}
-                      </td>
-                    </tr>
+                      </StandardTableCell>
+                    </StandardTableRow>
                   ) : null}
                   {filteredDoorRows.map((door, index) => {
                     const rowId =
                       readNumberFromRecord(door, ["door_id", "doorId", "id"]) ?? `door-${index}`
                     return (
-                      <tr
+                      <StandardTableRow
                         key={String(rowId)}
                         style={
                           doorSearchActive
@@ -1154,11 +1155,11 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
                         }
                       >
                         {doorColumns.map((column) => (
-                          <td key={`${rowId}-${column}`} className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">
+                          <StandardTableCell key={`${rowId}-${column}`} className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">
                             {stringifyValue((door as Record<string, unknown>)[column])}
-                          </td>
+                          </StandardTableCell>
                         ))}
-                        <td className="px-4 py-4">
+                        <StandardTableCell className="px-4 py-4">
                           <div className="flex justify-end">
                             <button
                               type="button"
@@ -1171,12 +1172,12 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
                               <Trash2Icon className="h-4 w-4" />
                             </button>
                           </div>
-                        </td>
-                      </tr>
+                        </StandardTableCell>
+                      </StandardTableRow>
                     )
                   })}
-                </tbody>
-              </table>
+                </StandardTableBody>
+              </StandardTable>
             </TableScrollContainer>
           </div>
         ) : null}
@@ -1213,37 +1214,37 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
             </div>
 
             <TableScrollContainer>
-              <table className="w-full min-w-[720px] text-sm">
-                <thead className="bg-slate-50/90">
-                  <tr>
+              <StandardTable className="w-full min-w-[720px] text-sm">
+                <StandardTableHeader className="bg-slate-50/90">
+                  <StandardTableRow>
                     {deviceColumns.map((column) => (
-                      <th
+                      <StandardTableHead
                         key={column}
                         className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap"
                       >
                         {prettifyLabel(column)}
-                      </th>
+                      </StandardTableHead>
                     ))}
-                    <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">
+                    <StandardTableHead className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">
                       Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
+                    </StandardTableHead>
+                  </StandardTableRow>
+                </StandardTableHeader>
+                <StandardTableBody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
                   {!loading && filteredDeviceRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={Math.max(deviceColumns.length + 1, 1)} className="px-4 py-10 text-sm text-slate-500">
+                    <StandardTableRow>
+                      <StandardTableCell colSpan={Math.max(deviceColumns.length + 1, 1)} className="px-4 py-10 text-sm text-slate-500">
                         {deviceSearch.trim()
                           ? "No assigned devices matched your search."
                           : "No devices assigned to this group yet."}
-                      </td>
-                    </tr>
+                      </StandardTableCell>
+                    </StandardTableRow>
                   ) : null}
                   {filteredDeviceRows.map((device, index) => {
                     const rowId =
                       readNumberFromRecord(device, ["device_id", "deviceId", "id"]) ?? `device-${index}`
                     return (
-                      <tr
+                      <StandardTableRow
                         key={String(rowId)}
                         style={
                           deviceSearchActive
@@ -1255,11 +1256,11 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
                         }
                       >
                         {deviceColumns.map((column) => (
-                          <td key={`${rowId}-${column}`} className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">
+                          <StandardTableCell key={`${rowId}-${column}`} className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">
                             {stringifyValue((device as Record<string, unknown>)[column])}
-                          </td>
+                          </StandardTableCell>
                         ))}
-                        <td className="px-4 py-4">
+                        <StandardTableCell className="px-4 py-4">
                           <div className="flex justify-end">
                             <button
                               type="button"
@@ -1272,12 +1273,12 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
                               <Trash2Icon className="h-4 w-4" />
                             </button>
                           </div>
-                        </td>
-                      </tr>
+                        </StandardTableCell>
+                      </StandardTableRow>
                     )
                   })}
-                </tbody>
-              </table>
+                </StandardTableBody>
+              </StandardTable>
             </TableScrollContainer>
           </div>
         ) : null}
@@ -1314,38 +1315,38 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
             </div>
 
             <TableScrollContainer>
-              <table className="w-full min-w-[720px] text-sm">
-                <thead className="bg-slate-50/90">
-                  <tr>
+              <StandardTable className="w-full min-w-[720px] text-sm">
+                <StandardTableHeader className="bg-slate-50/90">
+                  <StandardTableRow>
                     {employeeColumns.map((column) => (
-                      <th
+                      <StandardTableHead
                         key={column}
                         className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap"
                       >
                         {prettifyLabel(column)}
-                      </th>
+                      </StandardTableHead>
                     ))}
-                    <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">
+                    <StandardTableHead className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 whitespace-nowrap">
                       Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
+                    </StandardTableHead>
+                  </StandardTableRow>
+                </StandardTableHeader>
+                <StandardTableBody className="[&_tr:nth-child(odd)]:bg-slate-50/35 [&_tr]:border-t [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/80">
                   {!loading && filteredEmployeeRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={Math.max(employeeColumns.length + 1, 1)} className="px-4 py-10 text-sm text-slate-500">
+                    <StandardTableRow>
+                      <StandardTableCell colSpan={Math.max(employeeColumns.length + 1, 1)} className="px-4 py-10 text-sm text-slate-500">
                         {employeeSearch.trim()
                           ? "No assigned employees matched your search."
                           : "No employees assigned to this group yet."}
-                      </td>
-                    </tr>
+                      </StandardTableCell>
+                    </StandardTableRow>
                   ) : null}
                   {filteredEmployeeRows.map((employee, index) => {
                     const rowId =
                       readNumberFromRecord(employee, ["id", "employee_id", "employeeId"]) ??
                       `employee-${index}`
                     return (
-                      <tr
+                      <StandardTableRow
                         key={String(rowId)}
                         style={
                           employeeSearchActive
@@ -1357,16 +1358,16 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
                         }
                       >
                         {employeeColumns.map((column) => (
-                          <td
+                          <StandardTableCell
                             key={`${rowId}-${column}`}
                             className={`px-4 py-4 text-sm text-slate-700 whitespace-nowrap ${
                               column === "employee_name" && employeeSearchActive ? "font-medium" : ""
                             }`}
                           >
                             {stringifyValue((employee as Record<string, unknown>)[column])}
-                          </td>
+                          </StandardTableCell>
                         ))}
-                        <td className="px-4 py-4">
+                        <StandardTableCell className="px-4 py-4">
                           <div className="flex justify-end">
                             <button
                               type="button"
@@ -1386,12 +1387,12 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
                               <Trash2Icon className="h-4 w-4" />
                             </button>
                           </div>
-                        </td>
-                      </tr>
+                        </StandardTableCell>
+                      </StandardTableRow>
                     )
                   })}
-                </tbody>
-              </table>
+                </StandardTableBody>
+              </StandardTable>
             </TableScrollContainer>
           </div>
         ) : null}

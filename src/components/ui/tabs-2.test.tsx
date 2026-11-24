@@ -28,14 +28,14 @@ afterEach(async () => {
 describe("employee workspace navigation", () => {
   it("makes joining reachable from the directory and keeps joining tabs together", async () => {
     await act(async () => root.render(<Tabs2 groups={employeeSectionTabGroups} currentPath="/dashboard/employees/all" showGroupNavigation />))
-    const joining = [...container.querySelectorAll("nav button")].find((button) => button.textContent === "Joining & onboarding") as HTMLButtonElement
+    const joining = [...container.querySelectorAll('[role="tablist"][aria-label="Workspace areas"] [role="tab"]')].find((button) => button.textContent?.includes("Joining & onboarding")) as HTMLButtonElement
     expect(joining).toBeDefined()
-    expect(joining.hasAttribute("data-hrms-button-tone")).toBe(false)
+    expect(joining.getAttribute("aria-selected")).toBe("false")
     await act(async () => joining.click())
     expect(push).toHaveBeenCalledWith("/dashboard/employees/invite")
     await act(async () => root.render(<Tabs2 groups={employeeSectionTabGroups} currentPath="/dashboard/employees/invite" showGroupNavigation />))
-    expect(joining.getAttribute("data-hrms-button-tone")).toBe("brand")
-    const tabs = [...container.querySelectorAll('[role="tab"]')]
+    expect(joining.getAttribute("aria-selected")).toBe("true")
+    const tabs = [...container.querySelectorAll('[role="tablist"][aria-label="Section pages"] [role="tab"]')]
     expect(tabs).toHaveLength(6)
     for (const [index, label] of ["Invite", "Registration", "Onboarding", "Contracts", "Salary approvals", "Recruitment"].entries()) {
       expect(tabs[index].textContent).toContain(label)
@@ -48,9 +48,9 @@ describe("employee workspace navigation", () => {
 describe("KPI workspace navigation", () => {
   it("shows the active task group despite the KPI Library parent route", async () => {
     await act(async () => root.render(<Tabs2 groups={managementKpiSectionTabGroups} currentPath="/dashboard/kpi/assignments" showGroupNavigation />))
-    const group = [...container.querySelectorAll("nav button")].find((button) => button.textContent === "Assign & review")
-    expect(group?.getAttribute("data-hrms-button-tone")).toBe("brand")
-    const tabs = [...container.querySelectorAll('[role="tab"]')]
+    const group = [...container.querySelectorAll('[role="tablist"][aria-label="Workspace areas"] [role="tab"]')].find((button) => button.textContent === "Assign & review")
+    expect(group?.getAttribute("aria-selected")).toBe("true")
+    const tabs = [...container.querySelectorAll('[role="tablist"][aria-label="Section pages"] [role="tab"]')]
     expect(tabs).toHaveLength(3)
     for (const [index, label] of ["Assignments", "Scorecards", "Achievement Reviews"].entries()) {
       expect(tabs[index].textContent).toContain(label)

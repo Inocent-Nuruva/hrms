@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import * as React from "react"
 import { GitCompareIcon, HistoryIcon, UsersIcon } from "lucide-react"
 
@@ -158,30 +159,30 @@ export function LeavePolicyVersionsPanel({
             <Input type="date" className="w-44" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} />
           </label>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm" data-testid="policy-versions">
-              <thead className="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="py-2">Version</th>
-                  <th>Status</th>
-                  <th>Effective</th>
-                  <th>Reason</th>
+            <StandardTable className="w-full min-w-[720px] text-sm" data-testid="policy-versions">
+              <StandardTableHeader className="text-left text-xs text-muted-foreground">
+                <StandardTableRow>
+                  <StandardTableHead className="py-2">Version</StandardTableHead>
+                  <StandardTableHead>Status</StandardTableHead>
+                  <StandardTableHead>Effective</StandardTableHead>
+                  <StandardTableHead>Reason</StandardTableHead>
                   <th />
-                </tr>
-              </thead>
-              <tbody>
+                </StandardTableRow>
+              </StandardTableHeader>
+              <StandardTableBody>
                 {versions.map((version) => (
-                  <tr key={version.id} className="border-t border-border align-top">
-                    <td className="py-2 font-medium">v{version.version_no}</td>
-                    <td>
+                  <StandardTableRow key={version.id} className="border-t border-border align-top">
+                    <StandardTableCell className="py-2 font-medium">v{version.version_no}</StandardTableCell>
+                    <StandardTableCell>
                       <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", statusTone(version.lifecycle_status))}>
                         {POLICY_STATUS_LABEL[version.lifecycle_status]}
                       </span>
-                    </td>
-                    <td className="text-xs">
+                    </StandardTableCell>
+                    <StandardTableCell className="text-xs">
                       {version.effective_from ?? "Since the start"} → {version.effective_to ?? "open"}
-                    </td>
-                    <td className="max-w-xs text-xs">{version.change_reason ?? "—"}</td>
-                    <td className="py-2">
+                    </StandardTableCell>
+                    <StandardTableCell className="max-w-xs text-xs">{version.change_reason ?? "—"}</StandardTableCell>
+                    <StandardTableCell className="py-2">
                       <div className="flex flex-wrap justify-end gap-1">
                         <Button size="sm" variant="outline" onClick={() => void showCompare(version)}>
                           <GitCompareIcon className="mr-1 size-3.5" /> Compare
@@ -218,11 +219,11 @@ export function LeavePolicyVersionsPanel({
                           </Button>
                         ) : null}
                       </div>
-                    </td>
-                  </tr>
+                    </StandardTableCell>
+                  </StandardTableRow>
                 ))}
-              </tbody>
-            </table>
+              </StandardTableBody>
+            </StandardTable>
           </div>
         </>
       ) : null}
@@ -237,21 +238,21 @@ export function LeavePolicyVersionsPanel({
             <p className="text-xs text-muted-foreground">No differences.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[520px] text-xs">
-                <thead className="text-left text-muted-foreground">
-                  <tr><th className="py-1">Setting</th><th>Leave type</th><th>Before</th><th>After</th></tr>
-                </thead>
-                <tbody>
+              <StandardTable className="w-full min-w-[520px] text-xs">
+                <StandardTableHeader className="text-left text-muted-foreground">
+                  <StandardTableRow><StandardTableHead className="py-1">Setting</StandardTableHead><StandardTableHead>Leave type</StandardTableHead><StandardTableHead>Before</StandardTableHead><StandardTableHead>After</StandardTableHead></StandardTableRow>
+                </StandardTableHeader>
+                <StandardTableBody>
                   {compare.changes.map((change, index) => (
-                    <tr key={index} className="border-t border-border">
-                      <td className="py-1">{change.field.replace(/_/g, " ")}</td>
-                      <td>{change.leave_type_name ?? (change.leave_type_id ? `#${change.leave_type_id}` : "Policy")}</td>
-                      <td className="text-rose-700 dark:text-rose-300">{show(change.before)}</td>
-                      <td className="text-emerald-700 dark:text-emerald-300">{show(change.after)}</td>
-                    </tr>
+                    <StandardTableRow key={index} className="border-t border-border">
+                      <StandardTableCell className="py-1">{change.field.replace(/_/g, " ")}</StandardTableCell>
+                      <StandardTableCell>{change.leave_type_name ?? (change.leave_type_id ? `#${change.leave_type_id}` : "Policy")}</StandardTableCell>
+                      <StandardTableCell className="text-rose-700 dark:text-rose-300">{show(change.before)}</StandardTableCell>
+                      <StandardTableCell className="text-emerald-700 dark:text-emerald-300">{show(change.after)}</StandardTableCell>
+                    </StandardTableRow>
                   ))}
-                </tbody>
-              </table>
+                </StandardTableBody>
+              </StandardTable>
             </div>
           )}
         </div>
@@ -266,29 +267,29 @@ export function LeavePolicyVersionsPanel({
             <Button size="sm" variant="outline" onClick={() => setImpact(null)}>Close</Button>
           </div>
           <div className="max-h-96 overflow-auto">
-            <table className="w-full min-w-[720px] text-xs">
-              <thead className="sticky top-0 bg-background text-left text-muted-foreground">
-                <tr>
-                  <th className="py-1">Employee</th><th>Leave type</th>
-                  <th className="text-right">Entitlement now</th><th className="text-right">Proposed</th>
-                  <th className="text-right">Balance now</th><th>Warnings</th>
-                </tr>
-              </thead>
-              <tbody>
+            <StandardTable className="w-full min-w-[720px] text-xs">
+              <StandardTableHeader className="sticky top-0 bg-background text-left text-muted-foreground">
+                <StandardTableRow>
+                  <StandardTableHead className="py-1">Employee</StandardTableHead><StandardTableHead>Leave type</StandardTableHead>
+                  <StandardTableHead className="text-right">Entitlement now</StandardTableHead><StandardTableHead className="text-right">Proposed</StandardTableHead>
+                  <StandardTableHead className="text-right">Balance now</StandardTableHead><StandardTableHead>Warnings</StandardTableHead>
+                </StandardTableRow>
+              </StandardTableHeader>
+              <StandardTableBody>
                 {impact.data.map((row, index) => (
-                  <tr key={index} className="border-t border-border align-top">
-                    <td className="py-1">{row.employee_name || row.employee_no}</td>
-                    <td>{row.leave_type_name}</td>
-                    <td className="text-right">{show(row.current_entitlement)}</td>
-                    <td className={cn("text-right", row.entitlement_change < 0 && "text-rose-600", row.entitlement_change > 0 && "text-emerald-600")}>
+                  <StandardTableRow key={index} className="border-t border-border align-top">
+                    <StandardTableCell className="py-1">{row.employee_name || row.employee_no}</StandardTableCell>
+                    <StandardTableCell>{row.leave_type_name}</StandardTableCell>
+                    <StandardTableCell className="text-right">{show(row.current_entitlement)}</StandardTableCell>
+                    <StandardTableCell className={cn("text-right", row.entitlement_change < 0 && "text-rose-600", row.entitlement_change > 0 && "text-emerald-600")}>
                       {show(row.proposed_entitlement)}
-                    </td>
-                    <td className="text-right">{show(row.current_available)}</td>
-                    <td className="text-amber-700 dark:text-amber-300">{row.warnings.join(" ")}</td>
-                  </tr>
+                    </StandardTableCell>
+                    <StandardTableCell className="text-right">{show(row.current_available)}</StandardTableCell>
+                    <StandardTableCell className="text-amber-700 dark:text-amber-300">{row.warnings.join(" ")}</StandardTableCell>
+                  </StandardTableRow>
                 ))}
-              </tbody>
-            </table>
+              </StandardTableBody>
+            </StandardTable>
           </div>
         </div>
       ) : null}

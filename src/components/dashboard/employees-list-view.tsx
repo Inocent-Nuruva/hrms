@@ -1257,7 +1257,7 @@ export function EmployeesListView({
     <section
       className={cn(
         pageBleedClass,
-        "mt-2 overflow-hidden border-y border-border bg-background shadow-sm sm:border-x",
+        "overflow-hidden border-y border-border bg-background shadow-sm sm:border-x",
       )}
     >
       <PageHeader

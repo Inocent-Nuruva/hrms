@@ -1,5 +1,6 @@
 "use client";
 
+import { SharedDashboardHeroBackground } from "@/components/dashboard/welcome-card-background"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import * as React from "react";
 import { ApiError } from "@/lib/request-json";
@@ -1330,34 +1331,27 @@ export function FinanceSelfView() {
       <TalentDoodleSprites />
       <div className={pageBleedClass}>
       <FluentCard
-        className={`relative overflow-hidden !rounded-none !border-x-0 !border-y !border-border !bg-primary !p-0 shadow-sm`}
+        className={`relative overflow-hidden !rounded-none !border-x-0 !border-y !border-border !bg-card !p-0 shadow-sm`}
       >
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden bg-gradient-to-r from-primary via-primary to-primary/90">
-          <div className="finance-hero-drift absolute -right-16 -top-24 size-80 rounded-full border-[42px] border-primary-foreground/[0.12]" />
-          <div className="finance-hero-orbit absolute right-16 top-[calc(50%-4.5rem)] size-36 rounded-full border border-primary-foreground/15" />
-          <div className="finance-hero-band absolute bottom-0 right-28 h-32 w-56 bg-primary-foreground/[0.08]" />
-          <div className="finance-hero-line absolute left-[46%] top-5 h-24 w-px bg-primary-foreground/15" />
-          <div className="finance-hero-dot absolute left-[49%] top-9 size-2 rounded-full bg-primary-foreground/25" />
-          <div className="finance-hero-dot finance-hero-dot-delayed absolute left-[51%] top-16 size-1.5 rounded-full bg-primary-foreground/20" />
-        </div>
-        <header className="relative flex flex-wrap items-center justify-between gap-5 px-5 py-5 text-primary-foreground sm:px-6">
+        <SharedDashboardHeroBackground />
+        <header className="relative flex flex-wrap items-center justify-between gap-5 px-5 py-5 text-foreground sm:px-6">
           <div className="flex min-w-0 items-center gap-4">
-            <Wallet24Regular className="size-9 shrink-0 text-primary-foreground/90" />
+            <Wallet24Regular className="size-9 shrink-0 text-muted-foreground" />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl font-semibold tracking-tight text-primary-foreground sm:text-2xl">Loans &amp; advances</h1>
+                <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">Loans &amp; advances</h1>
                 <FluentBadge
                   appearance="ghost"
                   color="informative"
-                  className="!gap-2 !rounded-none !px-1 !font-medium !text-primary-foreground"
+                  className="!gap-2 !rounded-none !px-1 !font-medium !text-foreground"
                   icon={<span aria-hidden="true" className="inline-block size-1.5 rounded-full bg-current ring-[3px] ring-current/10" />}
                 >
                   {applications.length ? `${applications.length} applications` : "Ready for your first application"}
                 </FluentBadge>
               </div>
-              <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm text-primary-foreground/90">
+              <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm text-muted-foreground">
                 <span>Welcome back,</span>
-                <span className="relative isolate inline-block break-words pb-1 text-xl font-semibold tracking-tight text-primary-foreground after:absolute after:inset-x-0 after:bottom-1 after:-z-10 after:h-2 after:-rotate-2 after:rounded-sm after:bg-primary-foreground/20 sm:text-2xl">
+                <span className="relative isolate inline-block break-words pb-1 text-xl font-semibold tracking-tight text-foreground after:absolute after:inset-x-0 after:bottom-1 after:-z-10 after:h-2 after:-rotate-2 after:rounded-sm after:bg-primary/15 sm:text-2xl">
                   {session.user?.fullName?.split(" ")[0] || "there"}
                 </span>
               </p>
@@ -1366,7 +1360,7 @@ export function FinanceSelfView() {
           <Button
             appearance="subtle"
             size="large"
-            className="!ml-auto !size-11 !min-w-11 !shrink-0 !text-primary-foreground hover:!bg-primary-foreground/10 disabled:!opacity-50 [&_svg]:!size-6"
+            className="!ml-auto !size-11 !min-w-11 !shrink-0 !text-foreground hover:!bg-primary/10 disabled:!opacity-50 [&_svg]:!size-6"
             aria-label={mounted && loading ? "Refreshing loans and advances" : "Refresh loans and advances"}
             title="Refresh loans and advances"
             aria-busy={mounted && loading}

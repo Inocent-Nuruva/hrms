@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import * as React from "react"
 
 import { Button } from "@/components/ui/button"
@@ -106,67 +107,67 @@ export function LeaveCycleSchedulePanel({ canManage }: { canManage: boolean }) {
         </select>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] text-sm">
-          <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2">Employee</th>
-              <th className="px-3 py-2">Leave type</th>
-              <th className="px-3 py-2">Current cycle</th>
-              <th className="px-3 py-2">Next rollover</th>
-              <th className="px-3 py-2 text-right">Balance (est.)</th>
-              <th className="px-3 py-2 text-right">Carry / encash / lapse</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Last run</th>
+        <StandardTable className="w-full min-w-[900px] text-sm">
+          <StandardTableHeader className="bg-muted/40 text-left text-xs text-muted-foreground">
+            <StandardTableRow>
+              <StandardTableHead className="px-3 py-2">Employee</StandardTableHead>
+              <StandardTableHead className="px-3 py-2">Leave type</StandardTableHead>
+              <StandardTableHead className="px-3 py-2">Current cycle</StandardTableHead>
+              <StandardTableHead className="px-3 py-2">Next rollover</StandardTableHead>
+              <StandardTableHead className="px-3 py-2 text-right">Balance (est.)</StandardTableHead>
+              <StandardTableHead className="px-3 py-2 text-right">Carry / encash / lapse</StandardTableHead>
+              <StandardTableHead className="px-3 py-2">Status</StandardTableHead>
+              <StandardTableHead className="px-3 py-2">Last run</StandardTableHead>
               <th className="px-3 py-2" />
-            </tr>
-          </thead>
-          <tbody>
+            </StandardTableRow>
+          </StandardTableHeader>
+          <StandardTableBody>
             {rows.map((row) => {
               const s = STATUS[row.processing_status]
               const errors = [row.last_error, ...(row.last_exceptions ?? []).map((x) => x.message)].filter(Boolean)
               return (
-                <tr key={row.balance_id} className="border-t border-border align-top">
-                  <td className="px-3 py-2">
+                <StandardTableRow key={row.balance_id} className="border-t border-border align-top">
+                  <StandardTableCell className="px-3 py-2">
                     <div className="font-medium">{row.employee_name}</div>
                     <div className="text-xs text-muted-foreground">{row.employee_no ?? "—"}</div>
-                  </td>
-                  <td className="px-3 py-2">{row.leave_type_name}</td>
-                  <td className="whitespace-nowrap px-3 py-2">
+                  </StandardTableCell>
+                  <StandardTableCell className="px-3 py-2">{row.leave_type_name}</StandardTableCell>
+                  <StandardTableCell className="whitespace-nowrap px-3 py-2">
                     {date(row.cycle_start)} – {date(row.cycle_end)}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2">{row.closed_at ? "—" : date(row.next_rollover_date)}</td>
-                  <td className="px-3 py-2 text-right">{days(row.eligible_balance_estimate)}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right">
+                  </StandardTableCell>
+                  <StandardTableCell className="whitespace-nowrap px-3 py-2">{row.closed_at ? "—" : date(row.next_rollover_date)}</StandardTableCell>
+                  <StandardTableCell className="px-3 py-2 text-right">{days(row.eligible_balance_estimate)}</StandardTableCell>
+                  <StandardTableCell className="whitespace-nowrap px-3 py-2 text-right">
                     {row.last_line_status
                       ? `${days(row.carry_forward_days)} / ${days(row.encash_days)} / ${days(row.lapse_days)}`
                       : "—"}
-                  </td>
-                  <td className="px-3 py-2">
+                  </StandardTableCell>
+                  <StandardTableCell className="px-3 py-2">
                     <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", s.tone)}>{s.label}</span>
                     {errors.length ? <div className="mt-1 max-w-xs text-xs text-red-700">{errors.join("; ")}</div> : null}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
+                  </StandardTableCell>
+                  <StandardTableCell className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
                     {row.last_run_id ? `#${row.last_run_id} · ${date(row.last_execution_at)}` : "Never"}
-                  </td>
-                  <td className="px-3 py-2">
+                  </StandardTableCell>
+                  <StandardTableCell className="px-3 py-2">
                     {canManage && row.retry_available ? (
                       <Button size="sm" variant="outline" onClick={() => void retry(row)}>
                         {row.processing_status === "failed" ? "Retry" : "Prepare"}
                       </Button>
                     ) : null}
-                  </td>
-                </tr>
+                  </StandardTableCell>
+                </StandardTableRow>
               )
             })}
             {!rows.length ? (
-              <tr>
-                <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
+              <StandardTableRow>
+                <StandardTableCell colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
                   {loading ? "Loading…" : "No leave cycles match."}
-                </td>
-              </tr>
+                </StandardTableCell>
+              </StandardTableRow>
             ) : null}
-          </tbody>
-        </table>
+          </StandardTableBody>
+        </StandardTable>
       </div>
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>{total} balance(s)</span>

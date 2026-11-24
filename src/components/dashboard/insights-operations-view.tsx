@@ -1,5 +1,6 @@
 "use client";
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import * as React from "react";
 import Link from "next/link";
@@ -11,6 +12,12 @@ import { DatePickerPresets } from "@/components/ui/date-picker-presets";
 import { FluentSelect } from "@/components/ui/fluent-select";
 import { Input } from "@/components/ui/input";
 import { DashboardIdentitySummary } from "@/components/dashboard/dashboard-identity";
+import { useDashboardIdentity } from "@/components/dashboard/dashboard-identity";
+import { WelcomeCardBackground } from "@/components/dashboard/welcome-card-background";
+import { useDashboardHeroBackground } from "@/hooks/use-dashboard-hero-background";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ArrowClockwise20Regular, PaintBrush20Regular, PeopleTeam24Regular, PersonAvailable24Regular, ClipboardTask24Regular, DocumentBulletList24Regular } from "@fluentui/react-icons";
+import { MessageBar, MessageBarBody, MessageBarTitle } from "@fluentui/react-components";
 import {
   HeroBand,
   MetricTile,
@@ -22,6 +29,7 @@ import {
   formatDateTime,
   heroGhostButtonClass,
   inputClass,
+  isPermissionError,
   optionLabel,
   prettify,
   primaryButtonClass,
@@ -73,7 +81,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { describeSecurityEvent } from "@/lib/security-event-plain";
-import { cn } from "@/lib/utils";
 import {
   isEmployeeReady,
   parseReadinessChecks,
@@ -197,6 +204,13 @@ function friendlyStatus(value: string) {
     return "Needs attention";
   }
   return value;
+}
+
+function isCompanyTimezoneError(error: unknown) {
+  const record = error && typeof error === "object" ? error as Record<string, unknown> : null;
+  const payload = record?.payload && typeof record.payload === "object" ? record.payload as Record<string, unknown> : null;
+  return ["COMPANY_TIMEZONE_NOT_CONFIGURED", "COMPANY_TIMEZONE_INVALID"].includes(String(payload?.code ?? "")) ||
+    /company timezone|IANA timezone/i.test(error instanceof Error ? error.message : String(error ?? ""));
 }
 
 function metricEntries(record: AdminRecord | null) {
@@ -1366,22 +1380,22 @@ function DashboardMetricPanels({
                       <>
                         {detailRows.length ? (
                           <div className="mt-3 overflow-x-auto">
-                            <table className="min-w-full text-left text-xs">
-                              <thead>
-                                <tr className="border-b border-border">
+                            <StandardTable className="min-w-full text-left text-xs">
+                              <StandardTableHeader>
+                                <StandardTableRow className="border-b border-border">
                                   {columns.map(([key, label]) => (
-                                    <th
+                                    <StandardTableHead
                                       key={key}
                                       className="px-2 py-2 font-semibold"
                                     >
                                       {label}
-                                    </th>
+                                    </StandardTableHead>
                                   ))}
-                                </tr>
-                              </thead>
-                              <tbody>
+                                </StandardTableRow>
+                              </StandardTableHeader>
+                              <StandardTableBody>
                                 {detailRows.map((row, index) => (
-                                  <tr
+                                  <StandardTableRow
                                     key={String(
                                       row.plan_item_id ??
                                         row.visit_id ??
@@ -1391,7 +1405,7 @@ function DashboardMetricPanels({
                                     className="border-b border-border/60"
                                   >
                                     {columns.map(([key]) => (
-                                      <td
+                                      <StandardTableCell
                                         key={key}
                                         className="max-w-64 px-2 py-2 text-muted-foreground"
                                       >
@@ -1402,12 +1416,12 @@ function DashboardMetricPanels({
                                           : row[key] == null
                                             ? "—"
                                             : String(row[key])}
-                                      </td>
+                                      </StandardTableCell>
                                     ))}
-                                  </tr>
+                                  </StandardTableRow>
                                 ))}
-                              </tbody>
-                            </table>
+                              </StandardTableBody>
+                            </StandardTable>
                           </div>
                         ) : (
                           <p className="mt-3 text-sm text-muted-foreground">
@@ -1540,6 +1554,34 @@ function ManagerStatList({
   );
 }
 
+function ManagerAttendancePanel({ attendance }: { attendance: AdminRecord | null }) {
+  const present = readNumber(attendance, ["present"]) ?? 0;
+  const late = readNumber(attendance, ["late"]) ?? 0;
+  const absent = readNumber(attendance, ["absent"]) ?? 0;
+  const total = present + late + absent;
+  const attendanceRate = total > 0 ? Math.round(((present + late) / total) * 100) : null;
+  const segments = [
+    { label: "Present", value: present, color: "bg-emerald-500" },
+    { label: "Late", value: late, color: "bg-amber-500" },
+    { label: "Absent", value: absent, color: "bg-rose-500" },
+  ];
+  return (
+    <section className="rounded-xl border border-border bg-card p-5" aria-label="Team attendance">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><h2 className="text-lg font-semibold text-foreground">Team attendance</h2><p className="mt-0.5 text-sm text-muted-foreground">Attendance for the selected dates</p></div>
+        <div className="text-right"><p className="text-3xl font-semibold tabular-nums text-primary" style={{ fontFamily: "var(--font-fredoka), sans-serif" }}>{attendanceRate === null ? "—" : `${attendanceRate}%`}</p><p className="text-xs text-muted-foreground">attendance rate</p></div>
+      </div>
+      <div className="mt-5 flex h-3 overflow-hidden rounded-full bg-muted" role="img" aria-label={total > 0 ? `${present} present, ${late} late, ${absent} absent` : "No attendance records yet"}>
+        {segments.map((item) => <span key={item.label} className={item.color} style={{ width: `${total > 0 ? (item.value / total) * 100 : 0}%` }} />)}
+      </div>
+      <dl className="mt-4 grid grid-cols-3 gap-2 border-t border-border pt-4">
+        {segments.map((item) => <div key={item.label}><dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><span className={`size-2 rounded-full ${item.color}`} />{item.label}</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{item.value}</dd></div>)}
+      </dl>
+      <p className="mt-3 text-xs text-muted-foreground">Early departures: {managerMetric(attendance, ["early_departure", "earlyDeparture"])}</p>
+    </section>
+  );
+}
+
 function ScopedInsightPanels({ dashboard }: { dashboard: AdminRecord | null }) {
   const attendance = asRecord(dashboard?.attendance) ?? dashboard;
   const present = readNumber(attendance, ["present", "present_today", "presentToday"]) ?? 0;
@@ -1553,6 +1595,61 @@ function ScopedInsightPanels({ dashboard }: { dashboard: AdminRecord | null }) {
       <p className="mt-3 text-3xl font-semibold tabular-nums text-foreground">{rate}%</p>
       <p className="mt-1 text-xs text-muted-foreground">Attendance rate for the selected period</p>
     </section>
+  );
+}
+
+function ManagerWelcomeHeader({
+  dateFrom,
+  dateTo,
+  onDateFromChange,
+  onDateToChange,
+  onRefresh,
+  loading,
+  generatedAt,
+}: {
+  dateFrom: string;
+  dateTo: string;
+  onDateFromChange: (value: string) => void;
+  onDateToChange: (value: string) => void;
+  onRefresh: () => void;
+  loading: boolean;
+  generatedAt: Date | null;
+}) {
+  const identity = useDashboardIdentity();
+  const [background, saveBackground] = useDashboardHeroBackground();
+  const nextBackground = background === "aurora" ? "geometric" : background === "geometric" ? "glow" : "aurora";
+  const firstName = identity.name?.trim().split(/\s+/)[0] || "Manager";
+  const initials = (identity.name ?? "M").trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "M";
+
+  return (
+    <header className="relative isolate -mx-3 overflow-hidden border-y border-border bg-card px-5 py-5 shadow-sm sm:-mx-4 sm:px-7 sm:py-6" aria-label="Manager dashboard welcome">
+      <WelcomeCardBackground background={background} />
+      <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-center gap-4">
+          <Avatar className="size-14 shrink-0 border-2 border-primary/15 bg-primary/10 shadow-sm sm:size-16">
+            {identity.photoUrl && <AvatarImage src={identity.photoUrl} alt={identity.name ?? "Manager"} />}
+            <AvatarFallback className="bg-primary/10 font-semibold text-primary">{initials}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Welcome back</p>
+            <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground sm:text-3xl" style={{ fontFamily: "var(--font-fredoka), sans-serif" }}>{firstName}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Your team, attendance, and work that needs your review.</p>
+            <span className="mt-2 inline-flex rounded-full border border-primary/20 bg-background/75 px-2.5 py-0.5 text-xs font-medium text-primary">{identity.rolesLabel || "Manager"}</span>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end lg:justify-end">
+          <div className="grid grid-cols-2 gap-2 sm:w-[18rem]">
+            <label className="min-w-0 space-y-1"><span className="text-xs font-semibold text-muted-foreground">From</span><DatePickerPresets value={dateFrom} onChange={onDateFromChange} placeholder="Start date" className="w-full" /></label>
+            <label className="min-w-0 space-y-1"><span className="text-xs font-semibold text-muted-foreground">To</span><DatePickerPresets value={dateTo} onChange={onDateToChange} placeholder="End date" className="w-full" /></label>
+          </div>
+          <div className="flex items-center gap-1 sm:pb-0.5">
+            <button type="button" className="inline-flex size-9 items-center justify-center rounded-md text-primary hover:bg-primary/10" aria-label={`Change welcome background from ${background} to ${nextBackground}`} title="Change background" onClick={() => saveBackground(nextBackground)}><PaintBrush20Regular aria-hidden="true" /></button>
+            <button type="button" className="inline-flex size-9 items-center justify-center rounded-md text-primary hover:bg-primary/10 disabled:opacity-50" aria-label="Refresh manager dashboard" title="Refresh dashboard" onClick={onRefresh} disabled={loading}><ArrowClockwise20Regular aria-hidden="true" className={loading ? "animate-spin" : ""} /></button>
+          </div>
+        </div>
+      </div>
+      {generatedAt && Number.isFinite(generatedAt.getTime()) && <p className="relative z-10 mt-3 text-right text-xs text-muted-foreground">Updated {generatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>}
+    </header>
   );
 }
 
@@ -1600,6 +1697,7 @@ function ManagerDashboardPanels({
   const summaryItems = [
     {
       label: "Team members",
+      icon: <PeopleTeam24Regular aria-hidden="true" />,
       value: managerMetric(team, ["total_members", "totalMembers"]),
       hintValue: managerMetric(team, [
         "employees_on_leave",
@@ -1608,13 +1706,15 @@ function ManagerDashboardPanels({
       hintLabel: "currently on leave",
     },
     {
-      label: "Present today",
+      label: "Present",
+      icon: <PersonAvailable24Regular aria-hidden="true" />,
       value: managerMetric(attendance, ["present"]),
       hintValue: managerMetric(attendance, ["total_records", "totalRecords"]),
       hintLabel: "attendance records",
     },
     {
       label: "Open action items",
+      icon: <ClipboardTask24Regular aria-hidden="true" />,
       value: managerMetric(approvals, ["open_action_items", "openActionItems"]),
       hintValue: managerMetric(approvals, [
         "pending_attendance_corrections",
@@ -1624,6 +1724,7 @@ function ManagerDashboardPanels({
     },
     {
       label: "Activity reviews",
+      icon: <DocumentBulletList24Regular aria-hidden="true" />,
       value: managerMetric(activities, [
         "pending_activity_reviews",
         "pendingActivityReviews",
@@ -1638,19 +1739,18 @@ function ManagerDashboardPanels({
 
   return (
     <>
-      <ScopedInsightPanels dashboard={dashboard} />
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <dl className="grid sm:grid-cols-2 xl:grid-cols-4">
-          {summaryItems.map((item, index) => (
+      <section className="space-y-3" aria-label="Team overview">
+        <div><h2 className="text-xl font-semibold text-foreground" style={{ fontFamily: "var(--font-fredoka), sans-serif" }}>Your team at a glance</h2><p className="mt-1 text-sm text-muted-foreground">Key figures and work needing your attention</p></div>
+        <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {summaryItems.map((item) => (
             <div
               key={item.label}
-              className={`min-w-0 px-4 py-3 ${index === 1 || index === 3 ? "sm:border-l sm:border-border/70" : ""} ${index === 2 ? "xl:border-l xl:border-border/70" : ""}`}
+              className="min-w-0 rounded-xl border border-border bg-card px-4 py-4"
             >
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {item.label}
-              </dt>
+              <dt className="flex items-center gap-2 text-sm font-medium text-muted-foreground"><span className="text-primary">{item.icon}</span>{item.label}</dt>
               <dd
-                className={`mt-1 text-2xl font-semibold tracking-tight ${managerAttentionClass(item.value)}`}
+                className={`mt-3 text-3xl font-semibold tracking-tight tabular-nums ${item.label === "Open action items" || item.label === "Activity reviews" ? managerAttentionClass(item.value) : "text-foreground"}`}
+                style={{ fontFamily: "var(--font-fredoka), sans-serif" }}
               >
                 {item.value}
               </dd>
@@ -1665,24 +1765,10 @@ function ManagerDashboardPanels({
             </div>
           ))}
         </dl>
-      </div>
+      </section>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <ManagerStatList
-          title="Attendance"
-          items={[
-            { label: "Present", value: managerMetric(attendance, ["present"]) },
-            { label: "Absent", value: managerMetric(attendance, ["absent"]) },
-            { label: "Late", value: managerMetric(attendance, ["late"]) },
-            {
-              label: "Early departure",
-              value: managerMetric(attendance, [
-                "early_departure",
-                "earlyDeparture",
-              ]),
-            },
-          ]}
-        />
+      <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+        <ManagerAttendancePanel attendance={attendance} />
         <ManagerStatList
           title="Work activities"
           items={[
@@ -1974,9 +2060,15 @@ export function InsightsOperationsView({
         return;
       }
       setError(
-        first.reason instanceof Error
-          ? first.reason.message
-          : "Could not load insights.",
+        isCompanyTimezoneError(first.reason)
+          ? "Company timezone setup is required before this dashboard can calculate dates. A platform administrator can set it under Companies → Edit company. Use Africa/Dar_es_Salaam if that matches your company. Refresh this page after it is saved."
+          : isPermissionError(first.reason)
+          ? activeTab === "manager"
+            ? "Your manager dashboard access is not enabled for this account. Ask an administrator to grant manager self-service access."
+            : "You do not have access to this dashboard. Ask an administrator to review your permissions."
+          : first.reason instanceof Error
+            ? first.reason.message
+            : "Could not load insights.",
       );
     }
     setLoading(false);
@@ -2319,8 +2411,18 @@ export function InsightsOperationsView({
       animate="show"
     >
       <TalentDoodleSprites />
-      <HeroBand
-        identity={<DashboardIdentitySummary compact />}
+      {activeTab === "manager" && embedded ? (
+        <ManagerWelcomeHeader
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+          onRefresh={() => void load()}
+          loading={loading}
+          generatedAt={generatedAtDate}
+        />
+      ) : <HeroBand
+        identity={<DashboardIdentitySummary compact tone="default" />}
         eyebrow={embedded ? "Home" : "Insights"}
         title={
           <>
@@ -2553,13 +2655,9 @@ export function InsightsOperationsView({
             </button>
           </div>
         }
-      />
-      {error ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-          {error}
-        </div>
-      ) : null}
-      {generatedAtDate && Number.isFinite(generatedAtDate.getTime()) ? (
+      />}
+      {error ? <MessageBar intent={error.startsWith("Company timezone setup") ? "warning" : "error"} role="alert"><MessageBarBody><MessageBarTitle>{error.startsWith("Company timezone setup") ? "Company setup needed" : "Dashboard unavailable"}</MessageBarTitle>{error}</MessageBarBody></MessageBar> : null}
+      {generatedAtDate && Number.isFinite(generatedAtDate.getTime()) && !(activeTab === "manager" && embedded) ? (
         <p className="text-xs text-muted-foreground" aria-live="polite">
           Dashboard generated {generatedAtDate.toLocaleString()}
           {dashboardTimezone !== "-"
@@ -2588,7 +2686,7 @@ export function InsightsOperationsView({
             </div>
           ) : null}
           {activeTab === "manager" ? (
-            <ManagerDashboardPanels dashboard={dashboard} />
+            dashboard ? <ManagerDashboardPanels dashboard={dashboard} /> : null
           ) : (
             <>
               <DashboardMetricPanels

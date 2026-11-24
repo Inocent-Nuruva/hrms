@@ -186,6 +186,17 @@ describe("forbidden route memory", () => {
     ).toBe(true)
   })
 
+  it("lets a self-scoped employee open shared Reports for personal KPI reports", () => {
+    expect(canAccessDashboardRoute("/dashboard/operations/reports", ["data_scope:self"], "employee")).toBe(true)
+    expect(canSeeDashboardPage("/dashboard/operations/reports?tab=kpi", ["data_scope:self"], "employee", { scope: "company", roleNames: ["EMPLOYEE"] })).toBe(true)
+    expect(canAccessDashboardRoute("/dashboard/operations/scheduled-reporting", ["data_scope:self"], "employee")).toBe(false)
+  })
+
+  it("recognizes manager self-service access to the manager insights route", () => {
+    expect(canAccessDashboardRoute("/dashboard/insights/manager", ["manager_self_service:read"], "employee")).toBe(true)
+    expect(canAccessDashboardRoute("/dashboard/insights/manager", [], "employee")).toBe(false)
+  })
+
   it("hides Companies until GET /api/companies is confirmed", () => {
     stubSession()
     expect(

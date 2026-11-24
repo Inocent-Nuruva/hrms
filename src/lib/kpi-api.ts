@@ -5,7 +5,7 @@ export type KpiDefinitionForm = {
   measurementType: string; measurementUnit?: string; direction: string; frequency: string; ownerEmployeeId?: number;
 }
 export type KpiDefinition = { id: number; code: string; status: string; currentVersion?: KpiVersion | null; draftVersion?: KpiVersion | null; versions?: KpiVersion[] }
-export type KpiVersion = { id: number; version: number; name: string; description: string | null; category: string; strategicObjective: string | null; measurementType: string; measurementUnit: string | null; direction: string; frequency: string; publishedAt: string | null }
+export type KpiVersion = { id: number; version: number; name: string; description: string | null; category: string; strategicObjective: string | null; measurementType: string; measurementUnit: string | null; direction: string; frequency: string; publishedAt: string | null; ownerEmployeeId?: number | null }
 export type KpiTemplate = KpiDefinitionForm & { id: number; status: string; departmentClassification: string | null }
 export type KpiPeriod = { id: number; label: string; frequency: string; startDate: string; endDate: string; timezone: string | null }
 export type KpiAssignment = { id: number; periodId: number; subjectType: string; subjectId: number; organizationSnapshot?: { departmentId?: number | null; branchId?: number | null }; status: string; managerEmployeeId: number | null; definitionVersion: KpiVersion; period: KpiPeriod; currentTarget: { revision: number; target: Record<string, unknown> } | null; targetHistory?: { revision: number; target: Record<string, unknown>; reason: string; changedAt: string }[] }

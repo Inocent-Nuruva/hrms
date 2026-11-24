@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -77,31 +78,31 @@ function CreditsTable({
   ]
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[620px] text-left text-xs">
-        <thead className="text-muted-foreground">
-          <tr>
+      <StandardTable className="w-full min-w-[620px] text-left text-xs">
+        <StandardTableHeader className="text-muted-foreground">
+          <StandardTableRow>
             {headers.map((h) => (
-              <th key={h} className="px-2 py-1.5 font-semibold">
+              <StandardTableHead key={h} className="px-2 py-1.5 font-semibold">
                 {h}
-              </th>
+              </StandardTableHead>
             ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
+          </StandardTableRow>
+        </StandardTableHeader>
+        <StandardTableBody className="divide-y divide-border">
           {rows.map((row) => (
-            <tr key={String(row.id)}>
-              {showEmployee ? <td className="px-2 py-1.5">#{text(row.employee_id)}</td> : null}
-              <td className="px-2 py-1.5">{text(row.work_date)}</td>
-              <td className="px-2 py-1.5">{text(row.hours)}</td>
-              <td className="px-2 py-1.5">{days(row.days)}</td>
-              <td className="px-2 py-1.5">{text(row.expires_on)}</td>
-              <td className="px-2 py-1.5">{STATUS_LABEL[String(row.status)] ?? text(row.status)}</td>
-              <td className="px-2 py-1.5">{Number(row.expired_days) ? days(row.expired_days) : "—"}</td>
-              <td className="px-2 py-1.5 text-right">{actions?.(row)}</td>
-            </tr>
+            <StandardTableRow key={String(row.id)}>
+              {showEmployee ? <StandardTableCell className="px-2 py-1.5">#{text(row.employee_id)}</StandardTableCell> : null}
+              <StandardTableCell className="px-2 py-1.5">{text(row.work_date)}</StandardTableCell>
+              <StandardTableCell className="px-2 py-1.5">{text(row.hours)}</StandardTableCell>
+              <StandardTableCell className="px-2 py-1.5">{days(row.days)}</StandardTableCell>
+              <StandardTableCell className="px-2 py-1.5">{text(row.expires_on)}</StandardTableCell>
+              <StandardTableCell className="px-2 py-1.5">{STATUS_LABEL[String(row.status)] ?? text(row.status)}</StandardTableCell>
+              <StandardTableCell className="px-2 py-1.5">{Number(row.expired_days) ? days(row.expired_days) : "—"}</StandardTableCell>
+              <StandardTableCell className="px-2 py-1.5 text-right">{actions?.(row)}</StandardTableCell>
+            </StandardTableRow>
           ))}
-        </tbody>
-      </table>
+        </StandardTableBody>
+      </StandardTable>
     </div>
   )
 }
@@ -356,29 +357,29 @@ function HrView({ token, canManagePolicy }: { token: string; canManagePolicy: bo
       {usage.length ? (
         <div>
           <h4 className="mb-1 text-xs font-semibold">Usage {year}</h4>
-          <table className="w-full text-left text-xs">
-            <thead className="text-muted-foreground">
-              <tr>
+          <StandardTable className="w-full text-left text-xs">
+            <StandardTableHeader className="text-muted-foreground">
+              <StandardTableRow>
                 {["Employee", "Earned", "Expired", "Reversed", "Pending", "Used (leave taken)"].map((h) => (
-                  <th key={h} className="px-2 py-1.5">
+                  <StandardTableHead key={h} className="px-2 py-1.5">
                     {h}
-                  </th>
+                  </StandardTableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+              </StandardTableRow>
+            </StandardTableHeader>
+            <StandardTableBody className="divide-y divide-border">
               {usage.map((u, i) => (
-                <tr key={i}>
-                  <td className="px-2 py-1.5">#{text(u.employee_id)}</td>
-                  <td className="px-2 py-1.5">{days(u.earned_days)}</td>
-                  <td className="px-2 py-1.5">{days(u.expired_days)}</td>
-                  <td className="px-2 py-1.5">{days(u.reversed_days)}</td>
-                  <td className="px-2 py-1.5">{days(u.pending_days)}</td>
-                  <td className="px-2 py-1.5">{days(u.used_days)}</td>
-                </tr>
+                <StandardTableRow key={i}>
+                  <StandardTableCell className="px-2 py-1.5">#{text(u.employee_id)}</StandardTableCell>
+                  <StandardTableCell className="px-2 py-1.5">{days(u.earned_days)}</StandardTableCell>
+                  <StandardTableCell className="px-2 py-1.5">{days(u.expired_days)}</StandardTableCell>
+                  <StandardTableCell className="px-2 py-1.5">{days(u.reversed_days)}</StandardTableCell>
+                  <StandardTableCell className="px-2 py-1.5">{days(u.pending_days)}</StandardTableCell>
+                  <StandardTableCell className="px-2 py-1.5">{days(u.used_days)}</StandardTableCell>
+                </StandardTableRow>
               ))}
-            </tbody>
-          </table>
+            </StandardTableBody>
+          </StandardTable>
         </div>
       ) : null}
 

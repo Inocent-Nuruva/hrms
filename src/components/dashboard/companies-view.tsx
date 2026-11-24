@@ -1301,17 +1301,19 @@ export function CompaniesView() {
     try {
       const name = companyForm.name.trim();
       const timezone = companyForm.timezone.trim();
-      if (timezone) {
-        try {
-          new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(
-            new Date(),
-          );
-        } catch {
-          setError(
-            "Enter a valid IANA timezone, such as Africa/Dar_es_Salaam.",
-          );
-          return;
-        }
+      if (!timezone) {
+        setError("Company timezone is required for dashboards. Enter an IANA timezone, such as Africa/Dar_es_Salaam.");
+        return;
+      }
+      try {
+        new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(
+          new Date(),
+        );
+      } catch {
+        setError(
+          "Enter a valid IANA timezone, such as Africa/Dar_es_Salaam.",
+        );
+        return;
       }
       const existingMetadata =
         editingCompany.metadata &&
@@ -1322,7 +1324,7 @@ export function CompaniesView() {
       await updateCompanyById(token, companyId, {
         name,
         company_name: name,
-        metadata: { ...existingMetadata, timezone: timezone || null },
+        metadata: { ...existingMetadata, timezone },
       });
       const modules = toCompanyModulesPayload(companyForm.modules);
       await updateCompanyModules(token, companyId, modules);
@@ -1960,7 +1962,7 @@ export function CompaniesView() {
                     className="text-xs text-muted-foreground"
                   >
                     Required for dashboard date boundaries. Enter an IANA
-                    timezone; leave blank to mark it unconfigured.
+                    timezone, such as Africa/Dar_es_Salaam.
                   </span>
                 </label>
                 <CompanyModulesFields

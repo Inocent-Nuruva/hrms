@@ -1,5 +1,6 @@
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { clearPublishedCompanyModules } from "@/lib/company-modules"
+import { reportsEnabled } from "@/lib/kpi-session"
 import { asRecord, readString } from "@/utils/token-utils"
 import type { AuthScope } from "@/types"
 
@@ -436,7 +437,10 @@ export const INSIGHTS_MANAGEMENT_PERMISSION: PermissionRequirement = {
 }
 
 export const INSIGHTS_MANAGER_PERMISSION: PermissionRequirement = {
-  permissions: ["analytics:dashboards-manager"],
+  permissions: [
+    "manager_self_service:read",
+    "analytics:dashboards-manager",
+  ],
   mode: "any",
 }
 
@@ -1595,6 +1599,9 @@ export function canAccessDashboardRoute(
   const normalizedLabels = normalizePermissionLabels(permissionLabels)
   const selfOnly = normalizedLabels.includes("data_scope:self") &&
     !["data_scope:company", "data_scope:branch", "data_scope:department", "data_scope:team"].some((scope) => normalizedLabels.includes(scope))
+  // The shared Reports page also hosts personal KPI reports. Self-scoped
+  // employees may enter it, while the page keeps operational data out of view.
+  if (path === "/dashboard/operations/reports" && selfOnly && reportsEnabled) return true
   const personalAttendance = ["today", "punch-action", "attendance-history", "schedule-preview", "corrections", "work-from-home-requests"]
   if (selfOnly && (path === "/dashboard/employees" || path.startsWith("/dashboard/employees/") || path === "/dashboard/leave-management" || path.startsWith("/dashboard/leave-management/") || path === "/dashboard/operations" || path.startsWith("/dashboard/operations/") || (path.startsWith("/dashboard/attendance/") && !personalAttendance.some((part) => path === `/dashboard/attendance/${part}` || path.startsWith(`/dashboard/attendance/${part}/`))))) {
     return false

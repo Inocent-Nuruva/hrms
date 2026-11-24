@@ -1,4 +1,5 @@
 "use client";
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { RecalculateLeaveBalanceButton } from "@/components/leave/leave-recalculation-dialog"
 import { downloadLeavePdfWithFallback } from "@/lib/leave-pdf-download"
 import { ActingEmployeePanel, type ActingDraft } from "@/components/leave/acting-employee-panel"
@@ -8521,38 +8522,38 @@ export function LeaveManagementView({
                 ) : balanceHistory.length === 0 ? (
                   <p className="p-2">No transactions found.</p>
                 ) : (
-                  <table className="w-full text-left text-[11px]">
-                    <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      <tr>
-                        <th className="px-2 py-1">Date</th>
-                        <th className="px-2 py-1">Type</th>
-                        <th className="px-2 py-1">Leave</th>
-                        <th className="px-2 py-1 text-right">Days</th>
-                        <th className="px-2 py-1">By</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <StandardTable className="w-full text-left text-[11px]">
+                    <StandardTableHeader className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      <StandardTableRow>
+                        <StandardTableHead className="px-2 py-1">Date</StandardTableHead>
+                        <StandardTableHead className="px-2 py-1">Type</StandardTableHead>
+                        <StandardTableHead className="px-2 py-1">Leave</StandardTableHead>
+                        <StandardTableHead className="px-2 py-1 text-right">Days</StandardTableHead>
+                        <StandardTableHead className="px-2 py-1">By</StandardTableHead>
+                      </StandardTableRow>
+                    </StandardTableHeader>
+                    <StandardTableBody>
                       {balanceHistory.map((row, index) => (
-                        <tr
+                        <StandardTableRow
                           key={String(row.id ?? index)}
                           className="border-t border-slate-100"
                           title={`Reason: ${readString(row, ["reason"])}`}
                         >
-                          <td className="whitespace-nowrap px-2 py-1">
+                          <StandardTableCell className="whitespace-nowrap px-2 py-1">
                             {readString(row, ["effective_date", "created_at"]).slice(0, 10)}
-                          </td>
-                          <td className="px-2 py-1">{readString(row, ["transaction_type"])}</td>
-                          <td className="px-2 py-1">{leaveTypeLabelFromRow(row)}</td>
-                          <td className="px-2 py-1 text-right tabular-nums">
+                          </StandardTableCell>
+                          <StandardTableCell className="px-2 py-1">{readString(row, ["transaction_type"])}</StandardTableCell>
+                          <StandardTableCell className="px-2 py-1">{leaveTypeLabelFromRow(row)}</StandardTableCell>
+                          <StandardTableCell className="px-2 py-1 text-right tabular-nums">
                             {readString(row, ["amount_days"])}
-                          </td>
-                          <td className="px-2 py-1">
+                          </StandardTableCell>
+                          <StandardTableCell className="px-2 py-1">
                             {personName(asRecord(row.created_by) ?? {}, "System")}
-                          </td>
-                        </tr>
+                          </StandardTableCell>
+                        </StandardTableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </StandardTableBody>
+                  </StandardTable>
                 )}
               </div>
             </section>
@@ -8978,20 +8979,20 @@ export function LeaveManagementView({
                 </button>
               </div>
               <div className="overflow-x-auto rounded-md border border-border">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="bg-muted/50 text-xs text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2">Employee</th>
-                      <th className="px-3 py-2">Leave type / year</th>
-                      <th className="px-3 py-2">Days</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">Payroll handoff reference</th>
-                      <th className="px-3 py-2">Payroll period</th>
-                      <th className="px-3 py-2">Amount</th>
-                      <th className="px-3 py-2">Payment status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <StandardTable className="min-w-full text-left text-sm">
+                  <StandardTableHeader className="bg-muted/50 text-xs text-muted-foreground">
+                    <StandardTableRow>
+                      <StandardTableHead className="px-3 py-2">Employee</StandardTableHead>
+                      <StandardTableHead className="px-3 py-2">Leave type / year</StandardTableHead>
+                      <StandardTableHead className="px-3 py-2">Days</StandardTableHead>
+                      <StandardTableHead className="px-3 py-2">Status</StandardTableHead>
+                      <StandardTableHead className="px-3 py-2">Payroll handoff reference</StandardTableHead>
+                      <StandardTableHead className="px-3 py-2">Payroll period</StandardTableHead>
+                      <StandardTableHead className="px-3 py-2">Amount</StandardTableHead>
+                      <StandardTableHead className="px-3 py-2">Payment status</StandardTableHead>
+                    </StandardTableRow>
+                  </StandardTableHeader>
+                  <StandardTableBody>
                     {encashmentRows
                       .filter((row) => {
                         const created = readString(row, ["created_at"]).slice(0, 10);
@@ -9003,15 +9004,15 @@ export function LeaveManagementView({
                       .map((row) => {
                       const type = asRecord(row.leave_type) ?? {};
                       return (
-                        <tr key={readString(row, ["id"])} className="border-t border-border">
-                          <td className="px-3 py-2">{employeeLabelFromRow(row)}</td>
-                          <td className="px-3 py-2">
+                        <StandardTableRow key={readString(row, ["id"])} className="border-t border-border">
+                          <StandardTableCell className="px-3 py-2">{employeeLabelFromRow(row)}</StandardTableCell>
+                          <StandardTableCell className="px-3 py-2">
                             {readString(type, ["name", "code"])} · FY {readString(row, ["fiscal_year"])}
-                          </td>
-                          <td className="px-3 py-2">
+                          </StandardTableCell>
+                          <StandardTableCell className="px-3 py-2">
                             {String(row.approved_days ?? "—")} / {String(row.requested_days ?? "—")}
-                          </td>
-                          <td className="px-3 py-2">
+                          </StandardTableCell>
+                          <StandardTableCell className="px-3 py-2">
                             {readString(row, ["status"])}
                             {canBulkDecide && readString(row, ["status"]).toLowerCase() === "pending" ? (
                               <span className="ml-2 inline-flex gap-1">
@@ -9031,8 +9032,8 @@ export function LeaveManagementView({
                                 </button>
                               </span>
                             ) : null}
-                          </td>
-                          <td className="px-3 py-2">
+                          </StandardTableCell>
+                          <StandardTableCell className="px-3 py-2">
                             {readString(row, ["payroll_handoff_reference"]) !== "-" ? readString(row, ["payroll_handoff_reference"]) :
                               (readString(row, ["status"]).toLowerCase() === "approved" && canAdjustBalances ? (
                                 <button
@@ -9045,10 +9046,10 @@ export function LeaveManagementView({
                               ) : (
                                 "Not handed off"
                               ))}
-                          </td>
-                          <td className="px-3 py-2">{readString(row, ["payroll_period_code"]) !== "-" ? readString(row, ["payroll_period_code"]) : "—"}</td>
-                          <td className="px-3 py-2">{row.payable_amount != null && row.payable_amount !== "" ? `${String(row.payable_amount)} ${readString(row, ["currency"]) !== "-" ? readString(row, ["currency"]) : ""}` : "—"}</td>
-                          <td className="px-3 py-2">
+                          </StandardTableCell>
+                          <StandardTableCell className="px-3 py-2">{readString(row, ["payroll_period_code"]) !== "-" ? readString(row, ["payroll_period_code"]) : "—"}</StandardTableCell>
+                          <StandardTableCell className="px-3 py-2">{row.payable_amount != null && row.payable_amount !== "" ? `${String(row.payable_amount)} ${readString(row, ["currency"]) !== "-" ? readString(row, ["currency"]) : ""}` : "—"}</StandardTableCell>
+                          <StandardTableCell className="px-3 py-2">
                             {(() => {
                               const payment = readString(row, ["payment_status"]).toUpperCase();
                               const approved = readString(row, ["status"]).toLowerCase() === "approved";
@@ -9089,8 +9090,8 @@ export function LeaveManagementView({
                                 </span>
                               );
                             })()}
-                          </td>
-                        </tr>
+                          </StandardTableCell>
+                        </StandardTableRow>
                       );
                       })}
                     {!encashmentRows.filter((row) => {
@@ -9100,14 +9101,14 @@ export function LeaveManagementView({
                         (!leaveReportTo || created <= leaveReportTo)
                       );
                     }).length ? (
-                      <tr>
-                        <td className="px-3 py-4 text-muted-foreground" colSpan={8}>
+                      <StandardTableRow>
+                        <StandardTableCell className="px-3 py-4 text-muted-foreground" colSpan={8}>
                           {encashmentLoading ? "Loading encashments…" : "Load the list to view company encashment requests."}
-                        </td>
-                      </tr>
+                        </StandardTableCell>
+                      </StandardTableRow>
                     ) : null}
-                  </tbody>
-                </table>
+                  </StandardTableBody>
+                </StandardTable>
               </div>
             </div>
           ) : null}
@@ -9813,9 +9814,9 @@ export function LeaveManagementView({
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-[65vh] overflow-auto rounded-md border border-border">
-            <table className="w-full min-w-[850px] text-left text-xs">
-              <thead className="sticky top-0 bg-muted text-muted-foreground">
-                <tr>
+            <StandardTable className="w-full min-w-[850px] text-left text-xs">
+              <StandardTableHeader className="sticky top-0 bg-muted text-muted-foreground">
+                <StandardTableRow>
                   {[
                     "Employee",
                     "Leave type",
@@ -9826,42 +9827,42 @@ export function LeaveManagementView({
                     "Status",
                     "Opening review",
                   ].map((heading) => (
-                    <th key={heading} className="px-3 py-2 font-semibold">
+                    <StandardTableHead key={heading} className="px-3 py-2 font-semibold">
                       {heading}
-                    </th>
+                    </StandardTableHead>
                   ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
+                </StandardTableRow>
+              </StandardTableHeader>
+              <StandardTableBody className="divide-y divide-border">
                 {reconciliationRows.map((row, index) => {
                   const status = readString(row, ["status"]);
                   return (
-                    <tr
+                    <StandardTableRow
                       key={`${readString(row, ["employee_id"])}-${readString(row, ["leave_type_id"])}-${index}`}
                     >
-                      <td className="px-3 py-2">
+                      <StandardTableCell className="px-3 py-2">
                         {readString(row, ["employee_name"]) ||
                           readString(row, ["employee_no"])}
-                      </td>
-                      <td className="px-3 py-2">
+                      </StandardTableCell>
+                      <StandardTableCell className="px-3 py-2">
                         {readString(row, ["leave_type"])}
-                      </td>
-                      <td className="px-3 py-2">
+                      </StandardTableCell>
+                      <StandardTableCell className="px-3 py-2">
                         {readString(row, ["available_days"])}
-                      </td>
-                      <td className="px-3 py-2">
+                      </StandardTableCell>
+                      <StandardTableCell className="px-3 py-2">
                         {readString(row, ["balance_used_days"])} /{" "}
                         {readString(row, ["ledger_used_days"])}
-                      </td>
-                      <td className="px-3 py-2">
+                      </StandardTableCell>
+                      <StandardTableCell className="px-3 py-2">
                         {readString(row, ["balance_pending_days"])} /{" "}
                         {readString(row, ["ledger_pending_days"])}
-                      </td>
-                      <td className="px-3 py-2">
+                      </StandardTableCell>
+                      <StandardTableCell className="px-3 py-2">
                         {readString(row, ["balance_adjusted_days"])} /{" "}
                         {readString(row, ["ledger_adjusted_days"])}
-                      </td>
-                      <td
+                      </StandardTableCell>
+                      <StandardTableCell
                         className={`px-3 py-2 font-semibold ${status === "mismatch" ? "text-rose-600" : status === "legacy_no_ledger" ? "text-amber-600" : "text-emerald-600"}`}
                       >
                         {status === "legacy_no_ledger"
@@ -9869,8 +9870,8 @@ export function LeaveManagementView({
                           : status === "mismatch"
                             ? "Mismatch"
                             : "Reconciled"}
-                      </td>
-                      <td className="px-3 py-2">
+                      </StandardTableCell>
+                      <StandardTableCell className="px-3 py-2">
                         {canAdjustBalances &&
                         readString(row, ["opening_preview_fingerprint"]) !== "-" ? (
                           <button
@@ -9882,22 +9883,22 @@ export function LeaveManagementView({
                             Record review
                           </button>
                         ) : null}
-                      </td>
-                    </tr>
+                      </StandardTableCell>
+                    </StandardTableRow>
                   );
                 })}
                 {reconciliationRows.length === 0 ? (
-                  <tr>
-                    <td
+                  <StandardTableRow>
+                    <StandardTableCell
                       className="px-3 py-8 text-center text-muted-foreground"
                       colSpan={8}
                     >
                       No balances found for FY {reconciliationYear}.
-                    </td>
-                  </tr>
+                    </StandardTableCell>
+                  </StandardTableRow>
                 ) : null}
-              </tbody>
-            </table>
+              </StandardTableBody>
+            </StandardTable>
           </div>
           <DialogFooter>
             <button

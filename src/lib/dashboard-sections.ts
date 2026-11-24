@@ -266,7 +266,6 @@ export const personalKpiSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "My KPIs", url: "/dashboard/me/kpi" },
       { title: "My Scorecards", url: "/dashboard/me/scorecards" },
       { title: "My Reviews", url: "/dashboard/me/evaluations" },
-      { title: "My KPI Report", url: "/dashboard/me/kpi/reports" },
     ],
   },
 ];
@@ -300,7 +299,6 @@ export const managementKpiSectionTabGroups: DashboardSectionTabGroup[] = [
     title: "Insights",
     items: [
       { title: "Analytics", url: "/dashboard/kpi/analytics" },
-      { title: "Reports", url: "/dashboard/kpi/reports" },
     ],
   },
   {

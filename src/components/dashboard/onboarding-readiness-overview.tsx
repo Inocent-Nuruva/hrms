@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import * as React from "react"
 import { createPortal } from "react-dom"
 import { Avatar, Badge, Button, Card, CardHeader, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, MessageBar, MessageBarBody, ProgressBar, Spinner, Text, Tooltip } from "@fluentui/react-components"
@@ -171,21 +172,21 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ow
                 </article>)}
               </div>
               <div className="hidden max-w-full overflow-x-auto rounded-b-xl md:block">
-                <table className="w-full min-w-[850px] border-collapse text-left text-sm">
+                <StandardTable className="w-full min-w-[850px] border-collapse text-left text-sm">
                   <caption className="sr-only">All required onboarding steps and their responsible owners</caption>
-                  <thead className="bg-muted/40 text-xs text-muted-foreground"><tr>
-                    <th scope="col" className="w-[37%] px-3 py-2 font-semibold">Requirement</th>
-                    <th scope="col" className="w-[21%] px-2 py-2 font-semibold">Responsible</th>
-                    <th scope="col" className="w-[12%] px-2 py-2 font-semibold">Status</th>
-                    <th scope="col" className="px-3 py-2 text-right font-semibold">Actions</th>
-                  </tr></thead>
-                  <tbody className="divide-y divide-border/70">{outstanding.map((requirement) => <tr key={requirement.id} className="hover:bg-muted/20">
-                    <th scope="row" className="px-3 py-1.5 text-left font-normal"><span className="font-medium">{requirement.label}</span>{requirement.due_date ? <span className="block text-xs text-muted-foreground">Due {new Date(requirement.due_date).toLocaleDateString()}</span> : null}</th>
-                    <td className="px-2 py-1.5"><div className="flex items-center gap-2"><Avatar size={24} name={requirement.owner} image={ownerPhotos.get(requirement.owner.trim().toLocaleLowerCase()) ? { src: ownerPhotos.get(requirement.owner.trim().toLocaleLowerCase())! } : undefined} /><span className="min-w-0 truncate" title={requirement.owner}>{requirement.owner}</span></div></td>
-                    <td className="px-2 py-1.5"><Badge appearance="tint" color={requirement.status === "blocked" ? "danger" : "warning"} size="small">{requirement.status === "blocked" ? "Needs attention" : "Awaiting"}</Badge></td>
-                    <td className="px-3 py-1.5"><div className="flex items-center justify-end gap-0.5 whitespace-nowrap"><Button appearance="primary" size="small" icon={<ArrowRight20Regular />} onClick={() => onNavigate(requirement.action, requirement.id)} aria-label={`${requirementActionLabel(requirement)} for ${requirement.label}`}>{requirementActionLabel(requirement)}</Button><Tooltip relationship="description" content={requirement.waiting_reason ? `Waiting on a prerequisite: ${requirement.waiting_reason}` : requirementGuidance(requirement)}><Button appearance="subtle" size="small" icon={<Info20Regular />} aria-label={`More information about ${requirement.label}`} /></Tooltip>{onDiscuss ? <Button appearance="subtle" size="small" onClick={() => onDiscuss(requirement.id, requirement.label)}>Handoff</Button> : null}</div></td>
-                  </tr>)}</tbody>
-                </table>
+                  <StandardTableHeader className="bg-muted/40 text-xs text-muted-foreground"><StandardTableRow>
+                    <StandardTableHead scope="col" className="w-[37%] px-3 py-2 font-semibold">Requirement</StandardTableHead>
+                    <StandardTableHead scope="col" className="w-[21%] px-2 py-2 font-semibold">Responsible</StandardTableHead>
+                    <StandardTableHead scope="col" className="w-[12%] px-2 py-2 font-semibold">Status</StandardTableHead>
+                    <StandardTableHead scope="col" className="px-3 py-2 text-right font-semibold">Actions</StandardTableHead>
+                  </StandardTableRow></StandardTableHeader>
+                  <StandardTableBody className="divide-y divide-border/70">{outstanding.map((requirement) => <StandardTableRow key={requirement.id} className="hover:bg-muted/20">
+                    <StandardTableHead scope="row" className="px-3 py-1.5 text-left font-normal"><span className="font-medium">{requirement.label}</span>{requirement.due_date ? <span className="block text-xs text-muted-foreground">Due {new Date(requirement.due_date).toLocaleDateString()}</span> : null}</StandardTableHead>
+                    <StandardTableCell className="px-2 py-1.5"><div className="flex items-center gap-2"><Avatar size={24} name={requirement.owner} image={ownerPhotos.get(requirement.owner.trim().toLocaleLowerCase()) ? { src: ownerPhotos.get(requirement.owner.trim().toLocaleLowerCase())! } : undefined} /><span className="min-w-0 truncate" title={requirement.owner}>{requirement.owner}</span></div></StandardTableCell>
+                    <StandardTableCell className="px-2 py-1.5"><Badge appearance="tint" color={requirement.status === "blocked" ? "danger" : "warning"} size="small">{requirement.status === "blocked" ? "Needs attention" : "Awaiting"}</Badge></StandardTableCell>
+                    <StandardTableCell className="px-3 py-1.5"><div className="flex items-center justify-end gap-0.5 whitespace-nowrap"><Button appearance="primary" size="small" icon={<ArrowRight20Regular />} onClick={() => onNavigate(requirement.action, requirement.id)} aria-label={`${requirementActionLabel(requirement)} for ${requirement.label}`}>{requirementActionLabel(requirement)}</Button><Tooltip relationship="description" content={requirement.waiting_reason ? `Waiting on a prerequisite: ${requirement.waiting_reason}` : requirementGuidance(requirement)}><Button appearance="subtle" size="small" icon={<Info20Regular />} aria-label={`More information about ${requirement.label}`} /></Tooltip>{onDiscuss ? <Button appearance="subtle" size="small" onClick={() => onDiscuss(requirement.id, requirement.label)}>Handoff</Button> : null}</div></StandardTableCell>
+                  </StandardTableRow>)}</StandardTableBody>
+                </StandardTable>
               </div>
             </section> : null}
             {completed.length ? <section aria-label="Completed onboarding steps" className="rounded-xl border border-border/70 bg-muted/15 px-4 py-3">

@@ -1,5 +1,6 @@
 "use client"
 
+import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import * as React from "react"
 import Link from "next/link"
 import {
@@ -576,36 +577,36 @@ export function LeaveRequestsPanel(props: LeaveRequestsPanelProps) {
       {/* Table (md+) */}
       <div className="hidden overflow-hidden rounded-xl border border-border bg-card md:block">
         <div className="max-h-[70vh] overflow-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="sticky top-0 z-10 bg-muted/80 text-xs font-medium text-muted-foreground backdrop-blur">
-              <tr>
-                <th scope="col" className="px-4 py-2.5 font-medium">Request</th>
-                {isQueue ? <th scope="col" className="px-4 py-2.5 font-medium">Employee</th> : null}
-                <th scope="col" className="px-4 py-2.5 font-medium">Leave period</th>
-                <th scope="col" className="hidden px-4 py-2.5 font-medium lg:table-cell">Days</th>
-                <th scope="col" className="px-4 py-2.5 font-medium">Approval progress</th>
-                <th scope="col" className="px-4 py-2.5 font-medium">Status</th>
-                <th scope="col" className="px-4 py-2.5 text-right font-medium">
+          <StandardTable className="w-full text-left text-sm">
+            <StandardTableHeader className="sticky top-0 z-10 bg-muted/80 text-xs font-medium text-muted-foreground backdrop-blur">
+              <StandardTableRow>
+                <StandardTableHead scope="col" className="px-4 py-2.5 font-medium">Request</StandardTableHead>
+                {isQueue ? <StandardTableHead scope="col" className="px-4 py-2.5 font-medium">Employee</StandardTableHead> : null}
+                <StandardTableHead scope="col" className="px-4 py-2.5 font-medium">Leave period</StandardTableHead>
+                <StandardTableHead scope="col" className="hidden px-4 py-2.5 font-medium lg:table-cell">Days</StandardTableHead>
+                <StandardTableHead scope="col" className="px-4 py-2.5 font-medium">Approval progress</StandardTableHead>
+                <StandardTableHead scope="col" className="px-4 py-2.5 font-medium">Status</StandardTableHead>
+                <StandardTableHead scope="col" className="px-4 py-2.5 text-right font-medium">
                   <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+                </StandardTableHead>
+              </StandardTableRow>
+            </StandardTableHeader>
+            <StandardTableBody className="divide-y divide-border">
               {loading
                 ? Array.from({ length: 5 }, (_, i) => (
-                    <tr key={`skeleton-${i}`} aria-hidden>
+                    <StandardTableRow key={`skeleton-${i}`} aria-hidden>
                       {Array.from({ length: isQueue ? 7 : 6 }, (__, j) => (
-                        <td key={j} className="px-4 py-3.5">
+                        <StandardTableCell key={j} className="px-4 py-3.5">
                           <div className="h-3.5 w-full max-w-28 animate-pulse rounded bg-muted" />
-                        </td>
+                        </StandardTableCell>
                       ))}
-                    </tr>
+                    </StandardTableRow>
                   ))
                 : rows.map((row) => (
                     <DesktopRow key={String(row.id)} row={row} view={view} panel={props} busy={busy} highlighted={isHighlighted(row, highlightedRequestId)} />
                   ))}
-            </tbody>
-          </table>
+            </StandardTableBody>
+          </StandardTable>
         </div>
       </div>
 

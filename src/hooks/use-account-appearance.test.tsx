@@ -32,6 +32,12 @@ it("restores the account colour on a device with no local cache", async () => {
   await act(async () => root.render(<Harness />))
   expect(apply).toHaveBeenLastCalledWith("#0078D4")
 })
+it("keeps the default quietly when saved appearance cannot be loaded", async () => {
+  mocks.request.mockRejectedValue(new Error("offline"))
+  await act(async () => root.render(<Harness />))
+  expect(apply).toHaveBeenLastCalledWith("#303194")
+  expect(mocks.error).not.toHaveBeenCalled()
+})
 it("patches only the changed field and reports failed persistence", async () => {
   mocks.request.mockResolvedValueOnce({ accent: "#0078D4" }).mockRejectedValueOnce(new Error("offline"))
   await act(async () => root.render(<Harness />))

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { NotificationsView } from "@/components/dashboard/notifications-view"
 import { PayrollOperationsView } from "@/components/dashboard/payroll-operations-view"
-import { ReportsAnalyticsView } from "@/components/dashboard/reports-analytics-view"
+import { UnifiedReportsView } from "@/components/dashboard/unified-reports-view"
 import { ScheduledReportingView } from "@/components/dashboard/scheduled-reporting-view"
 import { RecruitmentView } from "@/components/dashboard/recruitment-view"
 import { MovementOperationsView } from "@/components/dashboard/movement-operations-view"
@@ -44,7 +44,7 @@ export default async function OperationsViewPage({
   }
 
   if (normalized === "reports") {
-    return <ReportsAnalyticsView />
+    return <UnifiedReportsView />
   }
 
   if (normalized === "scheduled-reporting") {

@@ -52,8 +52,9 @@ export function DashboardLandingPage() {
   if (INSIGHTS_HOME_TABS.has(kind)) {
     return (
       <>
-        <KpiHomeWidget personal={false} />
+        {kind !== "manager" && <KpiHomeWidget personal={false} />}
         <InsightsOperationsView activeTab={kind} embedded />
+        {kind === "manager" && <KpiHomeWidget personal={false} />}
       </>
     );
   }

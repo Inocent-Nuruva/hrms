@@ -143,19 +143,18 @@ export function Tabs2({ groups, currentPath, className, showGroupNavigation = fa
   return (
     <div
       className={cn(
-        "flex min-w-0 flex-nowrap items-center border-b border-border/80",
+        "flex min-w-0 flex-nowrap items-center",
         className,
       )}
     >
       <div className="tab-rail-scroll min-w-0 flex-1">
-        {showGroupNavigation && groups.length > 1 ? <nav aria-label="Workspace areas" className="flex min-w-max items-center gap-1 border-b border-border/70 py-1">
+        {showGroupNavigation && groups.length > 1 ? <TabList aria-label="Workspace areas" size="small" selectedValue={activeGroup?.items[0]?.url ?? ""} onTabSelect={navigateToTab} className={cn(styles.tabList, "border-b border-border/70")}>
           {groups.map((group) => {
             const first = group.items[0]
             if (!first) return null
-            const active = group === activeGroup
-            return <button key={group.title ?? first.url} type="button" aria-current={active ? "page" : undefined} data-hrms-button-tone={active ? "brand" : undefined} onClick={() => router.push(first.url)} className={cn("rounded-md px-3 py-1 text-xs font-medium transition-colors", active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>{group.title ?? first.title}</button>
+            return <Tab key={group.title ?? first.url} value={first.url} className={cn(styles.tab, "!bg-transparent hover:!bg-transparent")}>{group.title ?? first.title}</Tab>
           })}
-        </nav> : null}
+        </TabList> : null}
         <TabList
           aria-label="Section pages"
           size="small"

@@ -1,10 +1,12 @@
 "use client";
 
-import { KpiFluentInput, KpiFluentSelect } from "./kpi-fluent-fields";
+import { KpiFluentSelect } from "./kpi-fluent-fields";
 import * as React from "react";
+import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Input } from "@fluentui/react-components";
 import { KpiFluentButton } from "./kpi-fluent-button";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ChartMultiple24Regular, ClipboardTaskListLtr24Regular, Dismiss24Regular, Filter24Regular, PeopleTeam24Regular } from "@fluentui/react-icons";
 import {
   Bar,
   BarChart,
@@ -46,15 +48,16 @@ import {
   type AnalyticsSubjects,
 } from "@/lib/kpi-analytics-api";
 import { analyticsEnabled, readKpiToken } from "@/lib/kpi-session";
+import { SharedDashboardHeroBackground } from "@/components/dashboard/welcome-card-background";
 
-const colors = [
-  "#16a34a",
-  "#f59e0b",
-  "#94a3b8",
-  "#3b82f6",
-  "#ef4444",
-  "#a855f7",
-];
+const statusColors: Record<string, string> = {
+  approved: "#16a34a",
+  pending: "#f59e0b",
+  missing: "#94a3b8",
+  draft: "#3b82f6",
+  returned: "#ef4444",
+  rejected: "#a855f7",
+};
 function label(value: string) {
   return value
     .replaceAll("_", " ")
@@ -62,6 +65,8 @@ function label(value: string) {
 }
 function display(value: unknown): string {
   if (value == null) return "—";
+  if (typeof value === "object" && value !== null && "value" in value && Object.keys(value).length === 1)
+    return String((value as { value: unknown }).value);
   if (typeof value === "object")
     return Object.entries(value)
       .map(([key, item]) => `${key}: ${String(item)}`)
@@ -73,12 +78,13 @@ function getScorecardPageSummary(page: ScorecardPage) {
   return {
     complete:
       page.pageSummary?.complete ??
-      rows.filter((row) => row.performanceStatus === "scored").length,
+      rows.filter((row) => row.performanceStatus === "scored" || row.performanceStatus === "status_only").length,
     incomplete:
       page.pageSummary?.incomplete ??
       rows.filter(
         (row) =>
           row.performanceStatus !== "scored" &&
+          row.performanceStatus !== "status_only" &&
           row.performanceStatus !== "withheld",
       ).length,
     withheld:
@@ -96,17 +102,11 @@ function Metric({
   detail?: string;
 }) {
   return (
-    <Card size="sm">
-      <CardHeader>
-        <CardDescription>{title}</CardDescription>
-        <CardTitle className="text-2xl">{value}</CardTitle>
-      </CardHeader>
-      {detail && (
-        <CardContent className="text-xs text-muted-foreground">
-          {detail}
-        </CardContent>
-      )}
-    </Card>
+    <div className="min-w-0 border-l-2 border-primary/25 py-1 pl-4">
+      <p className="text-base font-semibold leading-snug text-foreground">{title}</p>
+      <p className="mt-1 text-3xl font-bold leading-tight text-foreground" style={{ fontFamily: "var(--font-fredoka), sans-serif" }}>{value}</p>
+      {detail && <p className="mt-1 text-xs text-muted-foreground">{detail}</p>}
+    </div>
   );
 }
 function StatusChart({ counts }: { counts: AnalyticsOverview["assignments"] }) {
@@ -121,62 +121,46 @@ function StatusChart({ counts }: { counts: AnalyticsOverview["assignments"] }) {
     .map((key) => ({
       name: label(key),
       value: counts[key as keyof typeof counts],
+      color: statusColors[key],
     }))
     .filter((row) => row.value > 0);
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Achievement data status</CardTitle>
-        <CardDescription>
-          Active KPI assignments; approved results are the only scored actuals.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <section className="min-w-0 border-t border-border pt-5" aria-label="Achievement data status">
+      <h2 className="text-2xl font-bold">Achievement data status</h2>
+      <p className="text-sm text-muted-foreground">Only approved results count toward a score.</p>
+      <div className="mt-4">
         {values.length ? (
-          <>
-            <div
-              className="h-64"
-              role="img"
-              aria-label={values
-                .map((row) => `${row.name}: ${row.value}`)
-                .join(", ")}
-            >
+          <div className="flex flex-wrap items-center gap-5 sm:flex-nowrap">
+            <div className="relative size-40 shrink-0" role="img" aria-label={values.map((row) => `${row.name}: ${row.value}`).join(", ")}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie
-                    data={values}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={55}
-                    outerRadius={85}
-                  >
-                    {values.map((row, index) => (
-                      <Cell key={row.name} fill={colors[index]} />
-                    ))}
+                  <Pie data={values} dataKey="value" nameKey="name" innerRadius={49} outerRadius={70} stroke="none">
+                    {values.map((row) => <Cell key={row.name} fill={row.color} />)}
                   </Pie>
                   <Tooltip />
                 </PieChart>
               </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-2xl font-semibold" style={{ fontFamily: "var(--font-fredoka), sans-serif" }}>{counts.total}</span>
+                <span className="text-xs text-muted-foreground">assigned</span>
+              </div>
             </div>
-            <ul className="grid grid-cols-2 gap-2 text-sm">
-              {values.map((row, index) => (
-                <li key={row.name}>
-                  <span
-                    className="mr-2 inline-block size-2 rounded-full"
-                    style={{ backgroundColor: colors[index] }}
-                  />
-                  {row.name}: {row.value}
+            <ul className="grid min-w-0 flex-1 gap-2 text-sm">
+              {values.map((row) => (
+                <li key={row.name} className="flex items-center justify-between gap-4 border-b border-border/70 pb-1 last:border-0">
+                  <span className="flex items-center gap-2"><span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: row.color }} />{row.name}</span>
+                  <span className="font-semibold tabular-nums">{row.value}</span>
                 </li>
               ))}
             </ul>
-          </>
+          </div>
         ) : (
           <p className="text-sm text-muted-foreground">
             No KPI assignments in this scope or period.
           </p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
 function EvaluationChart({
@@ -186,34 +170,23 @@ function EvaluationChart({
 }) {
   if (summary.suppressed)
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Evaluation progress</CardTitle>
-          <CardDescription>
-            Confidential evaluation aggregates withheld pending an approved
-            disclosure policy.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <section className="min-w-0 border-t border-border pt-5">
+        <h2 className="text-2xl font-bold">Evaluation progress</h2>
+        <p className="text-sm text-muted-foreground">Confidential evaluation totals are unavailable.</p>
+      </section>
     );
-  const values = Object.entries(summary.byStatus).map(([status, count]) => ({
-    status: label(status),
-    count,
-  }));
+  const values = Object.entries(summary.byStatus)
+    .filter(([, count]) => count > 0)
+    .map(([status, count]) => ({ status: label(status), count }));
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Evaluation progress</CardTitle>
-        <CardDescription>
-          Finalized evaluations count toward completion; drafts and reviews do
-          not.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <section className="min-w-0 border-t border-border pt-5" aria-label="Evaluation progress">
+      <h2 className="text-2xl font-bold">Evaluation progress</h2>
+      <p className="text-sm text-muted-foreground">Finalized evaluations count toward completion.</p>
+      <div className="mt-3">
         {values.length ? (
           <>
             <div
-              className="h-64"
+              className="h-44"
               role="img"
               aria-label={values
                 .map((row) => `${row.status}: ${row.count}`)
@@ -244,32 +217,30 @@ function EvaluationChart({
             </ul>
           </>
         ) : (
-          <p className="text-sm text-muted-foreground">
-            No evaluations in this scope or period.
-          </p>
+          <div className="flex min-h-40 items-center gap-3 rounded-lg border border-dashed border-border bg-muted/20 px-4 py-5">
+            <ChartMultiple24Regular className="shrink-0 text-primary" />
+            <p className="text-sm text-muted-foreground">No evaluations in this scope or period.</p>
+          </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
 function ScorecardPanel({
   row,
   personal,
+  subjectName,
 }: {
   row: AnalyticsScorecard;
   personal: boolean;
+  subjectName?: string;
 }) {
   if (row.performanceStatus === "withheld")
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{row.name}</CardTitle>
-          <CardDescription>
-            {row.periodLabel} · Details withheld pending an approved disclosure
-            policy.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <section className="border-t border-border py-4">
+        <h3 className="text-xl font-bold">{row.name}</h3>
+        <p className="text-sm text-muted-foreground">{row.periodLabel} · Details withheld pending an approved disclosure policy.</p>
+      </section>
     );
   const link = personal
     ? "/dashboard/me/scorecards"
@@ -281,25 +252,29 @@ function ScorecardPanel({
       contribution: Number(entry.weightedContribution),
     }));
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
+    <section className="min-w-0 border-t border-border py-5">
+      <div>
+        <h3 className="text-xl font-bold">
           <Link
             className="underline underline-offset-2"
             href={`${link}/${row.id}`}
           >
             {row.name}
           </Link>
-        </CardTitle>
-        <CardDescription>
-          {label(row.subjectType)} #{row.subjectId} · {row.periodLabel} ·{" "}
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          {subjectName ?? `${label(row.subjectType)} #${row.subjectId}`} · {row.periodLabel} ·{" "}
           {row.performanceStatus === "scored"
             ? `Score ${row.overallScore}%`
+            : row.performanceStatus === "status_only"
+              ? "Complete · status only"
+            : row.performanceStatus === "needs_revision"
+              ? "Scorecard revision needed"
             : "Awaiting complete approved data"}{" "}
           · {row.completenessPercent}% complete
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+        </p>
+      </div>
+      <div className="mt-4 flex flex-col gap-4">
         {contributions.length > 0 && (
           <div
             className="h-52"
@@ -334,7 +309,7 @@ function ScorecardPanel({
             </ResponsiveContainer>
           </div>
         )}
-        <Table>
+        <div className="overflow-x-auto"><Table>
           <TableHeader>
             <TableRow>
               <TableHead>KPI</TableHead>
@@ -384,9 +359,9 @@ function ScorecardPanel({
               </TableRow>
             ))}
           </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+        </Table></div>
+      </div>
+    </section>
   );
 }
 function numericValue(value: Record<string, unknown> | null): number | null {
@@ -417,7 +392,7 @@ function TrendPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Approved KPI trend</CardTitle>
+        <CardTitle className="text-xl font-bold">Approved KPI trend</CardTitle>
         <CardDescription>
           Only matching definition versions and frequencies are charted. Missing
           periods are left blank.
@@ -493,7 +468,7 @@ function ComparisonPanel({ comparison }: { comparison: ComparisonPage }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{label(comparison.comparisonType)} scorecards</CardTitle>
+        <CardTitle className="text-xl font-bold">{label(comparison.comparisonType)} scorecards</CardTitle>
         <CardDescription>{comparison.note}</CardDescription>
       </CardHeader>
       <CardContent>
@@ -549,21 +524,17 @@ function ComparisonPanel({ comparison }: { comparison: ComparisonPage }) {
 function TeamPanel({
   team,
   onPageChange,
+  onEmployeeSelect,
 }: {
   team: TeamPage;
   onPageChange: (page: number) => void;
+  onEmployeeSelect: (employeeId: number) => void;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>My reporting team</CardTitle>
-        <CardDescription>
-          Only employees in your reporting tree are included. KPI counts use the
-          selected assignment filters; scorecard results retain their full
-          configuration.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <section className="border-t border-border pt-6" aria-label="My reporting team">
+      <h2 className="flex items-center gap-2 text-2xl font-bold"><PeopleTeam24Regular className="text-primary" /> My reporting team</h2>
+      <p className="mt-1 text-sm text-muted-foreground">Employees you manage. Select a name to see their details.</p>
+      <div className="mt-4 overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -573,13 +544,12 @@ function TeamPanel({
               <TableHead>Completeness</TableHead>
               <TableHead>Scorecard</TableHead>
               <TableHead>Evaluation</TableHead>
-              <TableHead>Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {team.rows.map((row) => (
               <TableRow key={row.employeeId}>
-                <TableCell>{row.name}</TableCell>
+                <TableCell><button type="button" className="font-medium text-primary hover:underline" onClick={() => onEmployeeSelect(row.employeeId)}>{row.name}</button></TableCell>
                 <TableCell>{row.assignedKpis}</TableCell>
                 <TableCell>{row.approvedKpis}</TableCell>
                 <TableCell>
@@ -603,14 +573,6 @@ function TeamPanel({
                 </TableCell>
                 <TableCell>
                   {row.evaluationStatus ? label(row.evaluationStatus) : "None"}
-                </TableCell>
-                <TableCell>
-                  <Link
-                    className="underline"
-                    href={`/dashboard/kpi/analytics?employeeId=${row.employeeId}`}
-                  >
-                    Open details
-                  </Link>
                 </TableCell>
               </TableRow>
             ))}
@@ -644,8 +606,8 @@ function TeamPanel({
             </KpiFluentButton>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
 
@@ -669,7 +631,7 @@ function RatingPanel({ ratings }: { ratings: RatingDistribution }) {
       ].map((group) => (
         <Card key={group.title}>
           <CardHeader>
-            <CardTitle>{group.title}</CardTitle>
+            <CardTitle className="text-xl font-bold">{group.title}</CardTitle>
             <CardDescription>{ratings.note}</CardDescription>
           </CardHeader>
           <CardContent>
@@ -743,7 +705,7 @@ function ScorecardTrendPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Scorecard history</CardTitle>
+        <CardTitle className="text-xl font-bold">Scorecard history</CardTitle>
         <CardDescription>{trend.note}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -820,6 +782,7 @@ export function KpiAnalyticsWorkspace({
   personal?: boolean;
 }) {
   const actor = useDashboardActor();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const token = readKpiToken();
   const [periods, setPeriods] = React.useState<KpiPeriod[]>([]);
@@ -839,10 +802,12 @@ export function KpiAnalyticsWorkspace({
   const [approvalStatus, setApprovalStatus] = React.useState("");
   const [scorecardType, setScorecardType] = React.useState("");
   const [evaluationStatus, setEvaluationStatus] = React.useState("");
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
   const [managerId, setManagerId] = React.useState("");
   const [subjectSearch, setSubjectSearch] = React.useState("");
   const [subjectOptions, setSubjectOptions] =
     React.useState<AnalyticsSubjects | null>(null);
+  const [knownEmployeeNames, setKnownEmployeeNames] = React.useState<Record<number, string>>({});
   const [selectedEmployeeId, setSelectedEmployeeId] = React.useState("");
   const [overview, setOverview] = React.useState<AnalyticsOverview | null>(
     null,
@@ -893,11 +858,15 @@ export function KpiAnalyticsWorkspace({
       false);
   const requestedEmployeeId = searchParams?.get("employeeId") ?? "";
   const employeeId = selectedEmployeeId;
+  const activeFilterCount = [periodId, departmentId, branchId, cycleId, category, definitionId, approvalStatus, scorecardType, evaluationStatus, managerId, employeeId].filter(Boolean).length;
   React.useEffect(() => {
     setSelectedEmployeeId(
       /^\d+$/.test(requestedEmployeeId) ? requestedEmployeeId : "",
     );
   }, [requestedEmployeeId]);
+  React.useEffect(() => {
+    setKnownEmployeeNames({});
+  }, [token]);
   React.useEffect(() => {
     if (personal || !token || (!isAdmin && !isManager)) return;
     let live = true;
@@ -905,7 +874,13 @@ export function KpiAnalyticsWorkspace({
       void kpiAnalyticsApi
         .subjects(token, { search: subjectSearch })
         .then((result) => {
-          if (live) setSubjectOptions(result);
+          if (live) {
+            setSubjectOptions(result);
+            setKnownEmployeeNames((current) => ({
+              ...current,
+              ...Object.fromEntries(result.employees.map((employee) => [employee.id, employee.name])),
+            }));
+          }
         })
         .catch(() => {
           if (live) setSubjectOptions(null);
@@ -936,7 +911,10 @@ export function KpiAnalyticsWorkspace({
       .catch(() => setDefinitions([]));
   }, [personal, token, canManage, isAdmin]);
   React.useEffect(() => {
-    if (!analyticsEnabled || !actor.ready || !token || (!personal && !canManage)) return;
+    if (!analyticsEnabled || !actor.ready || !token || (!personal && !canManage) || (!personal && !isExecutive && !employeeId)) {
+      setCoverage(null);
+      return;
+    }
     let live = true;
     void kpiAnalyticsApi.coverage(token, {
       ...(periodId ? { periodId: Number(periodId) } : {}),
@@ -949,7 +927,7 @@ export function KpiAnalyticsWorkspace({
       ...(evaluationStatus ? { evaluationStatus: evaluationStatus as "self_draft" | "self_submitted" | "self_returned" | "manager_draft" | "manager_submitted" | "hr_reviewed" | "approved" | "finalized" | "cancelled" } : {}),
     }).then((result) => { if (live) setCoverage(result); }).catch(() => { if (live) setCoverage(null); });
     return () => { live = false; };
-  }, [actor.ready, token, personal, canManage, periodId, departmentId, branchId, employeeId, managerId, cycleId, scorecardType, evaluationStatus]);
+  }, [actor.ready, token, personal, canManage, isExecutive, periodId, departmentId, branchId, employeeId, managerId, cycleId, scorecardType, evaluationStatus]);
   React.useEffect(() => {
     if (personal || !token || !canManage) return;
     let live = true;
@@ -981,7 +959,8 @@ export function KpiAnalyticsWorkspace({
       !analyticsEnabled ||
       !actor.ready ||
       !token ||
-      (!personal && !canManage)
+      (!personal && !canManage) ||
+      (!personal && !isExecutive && !employeeId)
     ) {
       setLoading(false);
       return;
@@ -1110,6 +1089,7 @@ export function KpiAnalyticsWorkspace({
     definitionId,
     departmentId,
     employeeId,
+    isExecutive,
     page,
     periodId,
     personal,
@@ -1124,7 +1104,6 @@ export function KpiAnalyticsWorkspace({
         ...(departmentId ? { departmentId: Number(departmentId) } : {}),
         ...(branchId ? { branchId: Number(branchId) } : {}),
         ...(cycleId ? { cycleId: Number(cycleId) } : {}),
-        ...(employeeId ? { employeeId: Number(employeeId) } : {}),
         ...(managerId ? { managerId: Number(managerId) } : {}),
         ...(category ? { category } : {}),
         ...(definitionId ? { definitionId: Number(definitionId) } : {}),
@@ -1311,20 +1290,50 @@ export function KpiAnalyticsWorkspace({
       live = false;
     };
   }, [employeeId, isAdmin, isManager, personal, token]);
-  const trendOptions =
-    scorecards?.rows
+  const trendOptions = Array.from(new Map((scorecards?.rows
       .filter((row) => row.subjectType === "employee")
       .flatMap((row) =>
         row.entries
           .filter((entry) => entry.definitionId)
           .map((entry) => ({
             key: `${entry.definitionId}:${row.subjectId}`,
-            name: `${entry.kpiName} · employee #${row.subjectId}`,
+            name: `${entry.kpiName} · ${personal ? "Me" : knownEmployeeNames[row.subjectId] ?? team?.rows.find((employee) => employee.employeeId === row.subjectId)?.name ?? `Employee #${row.subjectId}`}`,
           })),
-      ) ?? [];
+      ) ?? []).map((option) => [option.key, option] as const)).values());
   const scorecardSummary = scorecards
     ? getScorecardPageSummary(scorecards)
     : null;
+  const selectedEmployeeName = subjectOptions?.employees.find((item) => String(item.id) === employeeId)?.name
+    ?? knownEmployeeNames[Number(employeeId)]
+    ?? team?.rows.find((item) => String(item.employeeId) === employeeId)?.name
+    ?? `Employee #${employeeId}`;
+  const openEmployee = (id: number) => {
+    setOverview(null);
+    setScorecards(null);
+    setEvaluations(null);
+    setSelectedEmployeeId(String(id));
+    setPage(1);
+    router.replace(`/dashboard/kpi/analytics?employeeId=${id}`);
+  };
+  const closeEmployee = () => {
+    setSelectedEmployeeId("");
+    setTrendKey("");
+    router.replace("/dashboard/kpi/analytics");
+  };
+  const renderDetails = (content: React.ReactNode) => {
+    if (personal || isExecutive) return content;
+    return (
+      <Dialog open={Boolean(employeeId)} onOpenChange={(_, data) => { if (!data.open) closeEmployee(); }}>
+        <DialogSurface style={{ width: "min(1080px, calc(100vw - 24px))", maxWidth: "calc(100vw - 24px)" }} className="max-h-[calc(100dvh-24px)] overflow-y-auto">
+          <DialogBody>
+            <DialogTitle action={<Button appearance="subtle" icon={<Dismiss24Regular />} aria-label="Close employee analytics" onClick={closeEmployee} />}><span className="text-3xl font-bold" style={{ fontFamily: "var(--font-fredoka), sans-serif" }}>{selectedEmployeeName}</span></DialogTitle>
+            <DialogContent className="min-w-0 space-y-6 pt-4">{content}</DialogContent>
+            <DialogActions><Button appearance="secondary" onClick={closeEmployee}>Close</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    );
+  };
   if (!analyticsEnabled)
     return (
       <p className="p-6">KPI analytics are disabled in this environment.</p>
@@ -1334,23 +1343,41 @@ export function KpiAnalyticsWorkspace({
       <p className="p-6">You do not have access to management analytics.</p>
     );
   return (
-    <main className="flex flex-col gap-4 pt-3">
-      <header className="flex flex-wrap items-end justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-sm">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">
-            {personal ? "My performance overview" : "KPI performance analytics"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Approved results, scorecard completeness, and evaluation progress
-          </p>
+    <main className="flex flex-col gap-8">
+      <header className="relative isolate -mx-3 overflow-hidden border-y border-border bg-card px-5 py-6 shadow-sm sm:-mx-4 sm:px-7 sm:py-8">
+        <SharedDashboardHeroBackground />
+        <div className="relative z-10 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+            <ChartMultiple24Regular className="size-10 shrink-0 text-primary sm:size-12" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">KPI management</p>
+              <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl" style={{ fontFamily: "var(--font-fredoka), sans-serif" }}>
+                {personal ? "My performance overview" : "KPI performance analytics"}
+              </h1>
+              <p className="mt-2 text-sm text-muted-foreground sm:text-base">Approved results, scorecard completeness, and evaluation progress</p>
+            </div>
+          </div>
+          {!personal && <Button appearance="secondary" className="self-start sm:self-auto" icon={<Filter24Regular />} onClick={() => setFiltersOpen(true)}>
+            Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
+          </Button>}
         </div>
-        {!personal && (
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="flex flex-col gap-1 text-sm">
+      </header>
+      {!personal && (
+        <Dialog open={filtersOpen} onOpenChange={(_, data) => setFiltersOpen(data.open)}>
+          <DialogSurface style={{ width: "min(900px, calc(100vw - 32px))", maxWidth: "calc(100vw - 32px)" }} className="max-h-[calc(100dvh-32px)] overflow-y-auto">
+            <DialogBody>
+              <DialogTitle><span className="text-2xl font-bold">Filter KPI analytics</span></DialogTitle>
+              <DialogContent className="space-y-6 pt-2">
+                <p className="text-sm text-muted-foreground">Choose a scope or KPI to narrow these results. Changes appear as you select them.</p>
+          <section className="space-y-3 border-b border-border pb-5" aria-label="Reporting scope">
+          <h2 className="mb-3 flex items-center gap-2 text-xl font-bold"><Filter24Regular className="text-primary" /> Scope and period</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="flex min-w-0 flex-col gap-1 text-sm">
               Reporting period
               <KpiFluentSelect
                 aria-label="Reporting period"
-                className="rounded-md border bg-background px-3 py-2"
+                appearance="underline"
+                className="w-full"
                 value={periodId}
                 onChange={(event) => {
                   setPeriodId(event.target.value);
@@ -1365,21 +1392,22 @@ export function KpiAnalyticsWorkspace({
                 ))}
               </KpiFluentSelect>
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className="flex min-w-0 flex-col gap-1 text-sm">
               Find department
-              <KpiFluentInput
+              <Input appearance="underline"
                 aria-label="Find department"
-                className="rounded-md border bg-background px-3 py-2"
+                className="w-full"
                 value={departmentSearch}
                 onChange={(event) => setDepartmentSearch(event.target.value)}
                 placeholder="Search departments"
               />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className="flex min-w-0 flex-col gap-1 text-sm">
               Department
               <KpiFluentSelect
                 aria-label="Department"
-                className="rounded-md border bg-background px-3 py-2"
+                appearance="underline"
+                className="w-full"
                 value={departmentId}
                 onChange={(event) => {
                   setDepartmentId(event.target.value);
@@ -1398,21 +1426,22 @@ export function KpiAnalyticsWorkspace({
                 ))}
               </KpiFluentSelect>
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className="flex min-w-0 flex-col gap-1 text-sm">
               Find branch
-              <KpiFluentInput
+              <Input appearance="underline"
                 aria-label="Find branch"
-                className="rounded-md border bg-background px-3 py-2"
+                className="w-full"
                 value={branchSearch}
                 onChange={(event) => setBranchSearch(event.target.value)}
                 placeholder="Search branches"
               />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className="flex min-w-0 flex-col gap-1 text-sm">
               Branch
               <KpiFluentSelect
                 aria-label="Branch"
-                className="rounded-md border bg-background px-3 py-2"
+                appearance="underline"
+                className="w-full"
                 value={branchId}
                 onChange={(event) => {
                   setBranchId(event.target.value);
@@ -1430,11 +1459,12 @@ export function KpiAnalyticsWorkspace({
               </KpiFluentSelect>
             </label>
             {cycles.length > 0 && (
-              <label className="flex flex-col gap-1 text-sm">
+              <label className="flex min-w-0 flex-col gap-1 text-sm">
                 Evaluation cycle
                 <KpiFluentSelect
                   aria-label="Evaluation cycle"
-                  className="rounded-md border bg-background px-3 py-2"
+                  appearance="underline"
+                className="w-full"
                   value={cycleId}
                   onChange={(event) => {
                     setCycleId(event.target.value);
@@ -1451,39 +1481,35 @@ export function KpiAnalyticsWorkspace({
               </label>
             )}
           </div>
-        )}
-      </header>
-      {!personal && (
-        <section
-          className="flex flex-wrap items-end gap-2"
-          aria-label="Analytics scope filters"
+          </section>
+          <section
+          className="grid gap-4 border-b border-border pb-5 sm:grid-cols-2 lg:grid-cols-3"
+          aria-label="People and scorecard filters"
         >
-          <p className="basis-full text-xs text-muted-foreground">
-            Company scope follows your active HRMS company membership. Switch
-            company through the existing account control. Filters are enforced
-            again by the API.
-          </p>
+          <h2 className="col-span-full text-xl font-bold">People and evaluation</h2>
           {(isAdmin || isManager) && (
             <>
-              <label className="flex flex-col gap-1 text-sm">
+              <label className="flex min-w-0 flex-col gap-1 text-sm">
                 Find a person
-                <KpiFluentInput
+                <Input appearance="underline"
                   aria-label="Find a person"
-                  className="rounded-md border bg-background px-3 py-2"
+                  className="w-full"
                   value={subjectSearch}
                   onChange={(event) => setSubjectSearch(event.target.value)}
                   placeholder="Search by name"
                 />
               </label>
-              <label className="flex flex-col gap-1 text-sm">
+              <label className="flex min-w-0 flex-col gap-1 text-sm">
                 Employee
                 <KpiFluentSelect
                   aria-label="Employee"
-                  className="rounded-md border bg-background px-3 py-2"
+                  appearance="underline"
+                className="w-full"
                   value={employeeId}
                   onChange={(event) => {
-                    setSelectedEmployeeId(event.target.value);
-                    setPage(1);
+                    setFiltersOpen(false);
+                    if (event.target.value) openEmployee(Number(event.target.value));
+                    else closeEmployee();
                   }}
                 >
                   <option value="">All authorized employees</option>
@@ -1495,11 +1521,12 @@ export function KpiAnalyticsWorkspace({
                 </KpiFluentSelect>
               </label>
               {isAdmin && (
-                <label className="flex flex-col gap-1 text-sm">
+                <label className="flex min-w-0 flex-col gap-1 text-sm">
                   Responsible manager
                   <KpiFluentSelect
                     aria-label="Responsible manager"
-                    className="rounded-md border bg-background px-3 py-2"
+                    appearance="underline"
+                className="w-full"
                     value={managerId}
                     onChange={(event) => {
                       setManagerId(event.target.value);
@@ -1517,11 +1544,12 @@ export function KpiAnalyticsWorkspace({
               )}
             </>
           )}
-          <label className="flex flex-col gap-1 text-sm">
+          <label className="flex min-w-0 flex-col gap-1 text-sm">
             Scorecard type
             <KpiFluentSelect
               aria-label="Scorecard type"
-              className="rounded-md border bg-background px-3 py-2"
+              appearance="underline"
+                className="w-full"
               value={scorecardType}
               onChange={(event) => {
                 setScorecardType(event.target.value);
@@ -1544,11 +1572,12 @@ export function KpiAnalyticsWorkspace({
                 ))}
             </KpiFluentSelect>
           </label>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className="flex min-w-0 flex-col gap-1 text-sm">
             Evaluation status
             <KpiFluentSelect
               aria-label="Evaluation status"
-              className="rounded-md border bg-background px-3 py-2"
+              appearance="underline"
+                className="w-full"
               value={evaluationStatus}
               onChange={(event) => {
                 setEvaluationStatus(event.target.value);
@@ -1573,25 +1602,20 @@ export function KpiAnalyticsWorkspace({
               ))}
             </KpiFluentSelect>
           </label>
-        </section>
-      )}
-      {!personal && (
-        <section
-          className="flex flex-wrap items-end gap-2"
+          </section>
+          <section
+          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
           aria-label="KPI assignment filters"
         >
-          <p className="basis-full text-xs text-muted-foreground">
-            KPI filters select matching assignments and scorecards. A scorecard
-            always shows its full approved configuration and score; evaluation
-            totals use their own status and cycle filters.
-          </p>
+          <h2 className="col-span-full text-xl font-bold">KPI filters</h2>
           {definitions.length > 0 && (
             <>
-              <label className="flex flex-col gap-1 text-sm">
+              <label className="flex min-w-0 flex-col gap-1 text-sm">
                 KPI category
                 <KpiFluentSelect
                   aria-label="KPI category"
-                  className="rounded-md border bg-background px-3 py-2"
+                  appearance="underline"
+                className="w-full"
                   value={category}
                   onChange={(event) => {
                     setCategory(event.target.value);
@@ -1614,11 +1638,12 @@ export function KpiAnalyticsWorkspace({
                     ))}
                 </KpiFluentSelect>
               </label>
-              <label className="flex flex-col gap-1 text-sm">
+              <label className="flex min-w-0 flex-col gap-1 text-sm">
                 KPI definition
                 <KpiFluentSelect
                   aria-label="KPI definition"
-                  className="rounded-md border bg-background px-3 py-2"
+                  appearance="underline"
+                className="w-full"
                   value={definitionId}
                   onChange={(event) => setDefinitionId(event.target.value)}
                 >
@@ -1637,11 +1662,12 @@ export function KpiAnalyticsWorkspace({
               </label>
             </>
           )}
-          <label className="flex flex-col gap-1 text-sm">
+          <label className="flex min-w-0 flex-col gap-1 text-sm">
             Submission status
             <KpiFluentSelect
               aria-label="Submission status"
-              className="rounded-md border bg-background px-3 py-2"
+              appearance="underline"
+                className="w-full"
               value={approvalStatus}
               onChange={(event) => setApprovalStatus(event.target.value)}
             >
@@ -1660,23 +1686,37 @@ export function KpiAnalyticsWorkspace({
               ))}
             </KpiFluentSelect>
           </label>
+          </section>
+              </DialogContent>
+              <DialogActions>
+                {activeFilterCount > 0 && (
+                  <Button appearance="subtle" onClick={() => {
+                    setPeriodId(""); setDepartmentId(""); setBranchId(""); setCycleId("");
+                    setCategory(""); setDefinitionId(""); setApprovalStatus("");
+                    setScorecardType(""); setEvaluationStatus(""); setManagerId("");
+                    closeEmployee(); setDepartmentSearch(""); setBranchSearch(""); setSubjectSearch("");
+                    setPage(1);
+                  }}>Clear all</Button>
+                )}
+                <Button appearance="primary" onClick={() => setFiltersOpen(false)}>Done</Button>
+              </DialogActions>
+            </DialogBody>
+          </DialogSurface>
+        </Dialog>
+      )}
+      {isAdmin && !personal && (
+        <section className="max-w-xl space-y-3" aria-label="Select employee">
+          <h2 className="text-2xl font-bold">Employee performance</h2>
+          <p className="text-sm text-muted-foreground">Select an employee to open their KPI results.</p>
+          <Input aria-label="Find employee" placeholder="Search employees" value={subjectSearch} onChange={(_, data) => setSubjectSearch(data.value)} />
+          <KpiFluentSelect aria-label="Select employee" className="w-full" value={employeeId} onChange={(event) => { if (event.target.value) openEmployee(Number(event.target.value)); else closeEmployee(); }}>
+            <option value="">Select an employee</option>
+            {subjectOptions?.employees.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </KpiFluentSelect>
         </section>
       )}
-      {(isManager || isAdmin) && !personal && employeeId && (
-        <Alert>
-          <AlertTitle>Employee #{employeeId}</AlertTitle>
-          <AlertDescription>
-            Showing only this employee within your authorized scope.{" "}
-            <KpiFluentButton
-              type="button"
-              className="underline"
-              onClick={() => setSelectedEmployeeId("")}
-            >
-              Clear employee filter
-            </KpiFluentButton>
-          </AlertDescription>
-        </Alert>
-      )}
+      {isManager && !personal && team && <TeamPanel team={team} onPageChange={setTeamPage} onEmployeeSelect={openEmployee} />}
+      {renderDetails(<>
       {loading && <p role="status">Loading authorized performance data…</p>}
       {error && (
         <Alert variant="destructive">
@@ -1686,16 +1726,16 @@ export function KpiAnalyticsWorkspace({
       )}
       {!loading && !error && overview && evaluations && scorecards && (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <section aria-label="Performance at a glance" className="space-y-5 rounded-xl bg-primary/5 p-5">
+            <h2 className="flex items-center gap-2 text-2xl font-bold"><ChartMultiple24Regular className="text-primary" /> At a glance</h2>
+          <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
             <Metric
               title="Assigned KPIs"
               value={overview.assignments.total}
-              detail="Active assignments in the selected scope"
             />
             <Metric
               title="Approved actuals"
               value={overview.assignments.approved}
-              detail="Only approved values feed live scorecards"
             />
             <Metric
               title="KPI data completeness"
@@ -1704,37 +1744,76 @@ export function KpiAnalyticsWorkspace({
                   ? "N/A"
                   : `${overview.completenessPercent}%`
               }
-              detail="Approved actuals / active assignments"
             />
             <Metric
               title="Finalized evaluations"
               value={evaluations.summary.finalized ?? "N/A"}
-              detail={
-                evaluations.summary.suppressed
-                  ? "Small-group result withheld"
-                  : `${evaluations.summary.total} enrolled evaluations`
-              }
             />
           </div>
-          {coverage && (
-            <section aria-label="Scorecard coverage" className="space-y-3 rounded-lg border p-4">
-              <h2 className="font-semibold">Scorecard coverage</h2>
-              {coverage.suppressed ? <p className="text-sm text-muted-foreground">{coverage.reason}</p> : <>
-                <p className="text-xs text-muted-foreground">{coverage.note}</p>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Metric title="Active or onboarding employees in scope" value={coverage.eligibleEmployees ?? 0} />
-                  <Metric title="Employees with scorecards" value={coverage.employeesWithScorecards ?? 0} />
-                  <Metric title="Employees without scorecards" value={coverage.employeesWithoutScorecards ?? 0} />
-                  <Metric title="Published scorecards" value={coverage.scorecards ?? 0} />
-                  <Metric title="Complete scorecards" value={coverage.completeScorecards ?? 0} detail="All required entries have approved actuals" />
-                  <Metric title="Incomplete scorecards" value={coverage.incompleteScorecards ?? 0} />
-                  <Metric title="Awaiting approved data" value={coverage.awaitingApprovedAchievements ?? 0} detail="Subset of incomplete scorecards" />
-                  <Metric title="Evaluations in progress" value={coverage.evaluationsInProgress ?? "N/A"} />
-                </div>
-              </>}
+          </section>
+          {!isExecutive && trendOptions.length > 0 && (
+            <section className="space-y-4 border-t border-border pt-6" aria-label="KPI historical trend">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="flex items-center gap-2 text-2xl font-bold"><ChartMultiple24Regular className="text-primary" /> KPI historical trend</h2>
+                <KpiFluentSelect
+                  aria-label="KPI historical trend"
+                  className="w-full sm:w-72"
+                  value={trendKey}
+                  onChange={(event) => setTrendKey(event.target.value)}
+                >
+                  <option value="">{personal || employeeId ? "Select a KPI" : "Select a KPI and employee"}</option>
+                  {trendOptions.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.name}
+                    </option>
+                  ))}
+                </KpiFluentSelect>
+              </div>
+              {trend ? <TrendPanel trend={trend} personal={personal} /> : <p className="text-sm text-muted-foreground">Choose a KPI to view its approved results over time.</p>}
             </section>
           )}
-          {!personal && (
+          {coverage && (
+            <section aria-label="Scorecard coverage" className="space-y-5 border-t border-border pt-6">
+              <h2 className="flex items-center gap-2 text-2xl font-bold"><ClipboardTaskListLtr24Regular className="text-primary" /> {personal || employeeId ? "Scorecard status" : "Published scorecard coverage"}</h2>
+              {coverage.suppressed ? <p className="text-sm text-muted-foreground">{coverage.reason}</p> : personal || employeeId ? (
+                (coverage.scorecards ?? 0) === 0 ? (
+                  <div className="flex items-start gap-4 rounded-xl border border-dashed border-border bg-muted/30 p-5">
+                    <ClipboardTaskListLtr24Regular className="mt-0.5 shrink-0 text-primary" />
+                    <div>
+                      <h3 className="text-xl font-bold">No published scorecard yet</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">Draft scorecards, if any, appear in the scorecard list below. Once published, their completion status will appear here.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-muted-foreground">Published scorecards for this employee. Drafts appear in the list below and are excluded from these totals.</p>
+                    <div className="grid gap-x-5 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+                      <Metric title="Published" value={coverage.scorecards ?? 0} />
+                      <Metric title="Complete" value={coverage.completeScorecards ?? 0} detail="All required results approved" />
+                      <Metric title="Incomplete" value={coverage.incompleteScorecards ?? 0} />
+                      <Metric title="Awaiting approved data" value={coverage.awaitingApprovedAchievements ?? 0} detail="Included in incomplete" />
+                    </div>
+                  </>
+                )
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">How many employees have published scorecards, and how many have approved results. Draft scorecards appear in the list below but are excluded here.</p>
+                  <div className="grid gap-x-5 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+                    <Metric title="Active or onboarding employees in scope" value={coverage.eligibleEmployees ?? 0} />
+                    <Metric title="Employees with scorecards" value={coverage.employeesWithScorecards ?? 0} />
+                    <Metric title="Employees without scorecards" value={coverage.employeesWithoutScorecards ?? 0} />
+                    <Metric title="Published scorecards" value={coverage.scorecards ?? 0} />
+                    <Metric title="Complete scorecards" value={coverage.completeScorecards ?? 0} detail="All required entries have approved actuals" />
+                    <Metric title="Incomplete scorecards" value={coverage.incompleteScorecards ?? 0} />
+                    <Metric title="Awaiting approved data" value={coverage.awaitingApprovedAchievements ?? 0} detail="Subset of incomplete scorecards" />
+                    <Metric title="Evaluations in progress" value={coverage.evaluationsInProgress ?? "N/A"} />
+                  </div>
+                  <details className="text-xs text-muted-foreground"><summary className="cursor-pointer">How coverage is counted</summary><p className="mt-2">{coverage.note}</p></details>
+                </>
+              )}
+            </section>
+          )}
+          {!personal && !employeeId && (
             <Alert>
               <AlertTitle>{overview.overallIndexStatus}</AlertTitle>
               <AlertDescription>
@@ -1781,7 +1860,9 @@ export function KpiAnalyticsWorkspace({
               )}
             </p>
           )}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <section className="space-y-4 border-t border-border pt-6" aria-label="Items needing attention">
+          <h2 className="text-2xl font-bold">Needs attention</h2>
+          <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
             <Metric
               title="Awaiting review"
               value={overview.assignments.pendingReview}
@@ -1805,7 +1886,10 @@ export function KpiAnalyticsWorkspace({
               }
             />
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          </section>
+          <section className="space-y-4 border-t border-border pt-6" aria-label="Evaluation workflow">
+          <h2 className="text-2xl font-bold">Evaluation workflow</h2>
+          <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
             <Metric
               title="Active evaluation cycles"
               value={evaluations.summary.activeCycles ?? "N/A"}
@@ -1842,9 +1926,7 @@ export function KpiAnalyticsWorkspace({
               />
             )}
           </div>
-          {isManager && !personal && team && (
-            <TeamPanel team={team} onPageChange={setTeamPage} />
-          )}
+          </section>
           {isAdmin && !personal && ratings && <RatingPanel ratings={ratings} />}
           {(isAdmin || isExecutive) && !personal && periods.length > 0 && (
             <section className="flex flex-col gap-3">
@@ -1874,48 +1956,27 @@ export function KpiAnalyticsWorkspace({
               )}
             </section>
           )}
-          {!isExecutive && trendOptions.length > 0 && (
-            <section className="flex flex-col gap-3">
-              <label className="flex flex-col gap-1 text-sm">
-                KPI historical trend
-                <KpiFluentSelect
-                  aria-label="KPI historical trend"
-                  className="w-fit max-w-full rounded-md border bg-background px-3 py-2"
-                  value={trendKey}
-                  onChange={(event) => setTrendKey(event.target.value)}
-                >
-                  <option value="">Select a KPI and employee</option>
-                  {trendOptions.map((option) => (
-                    <option key={option.key} value={option.key}>
-                      {option.name}
-                    </option>
-                  ))}
-                </KpiFluentSelect>
-              </label>
-              {trend && <TrendPanel trend={trend} personal={personal} />}
-            </section>
-          )}
           {scorecardTrend && (
             <ScorecardTrendPanel trend={scorecardTrend} personal={personal} />
           )}
-          <section className="flex flex-col gap-3">
+          <section className="flex flex-col gap-3 border-t border-border pt-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">
+              <h2 className="text-2xl font-bold">
                 {personal ? "My scorecards" : "Authorized scorecards"}
               </h2>
               <span className="text-sm text-muted-foreground">
-                {scorecards.total} total
+                {scorecards.total} in this view
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
               {scorecardSummary?.withheld
                 ? `${scorecardSummary.withheld} scorecard details withheld on this page.`
-                : `This page: ${scorecardSummary?.complete ?? 0} complete, ${scorecardSummary?.incomplete ?? 0} awaiting data.`}{" "}
+                : `This page: ${scorecardSummary?.complete ?? 0} complete, ${scorecardSummary?.incomplete ?? 0} awaiting approved data. Draft scorecards can appear here.`}{" "}
               {overview.riskStatusStatus}.
             </p>
             {scorecards.rows.length ? (
               scorecards.rows.map((row) => (
-                <ScorecardPanel key={row.id} row={row} personal={personal} />
+                <ScorecardPanel key={row.id} row={row} personal={personal} subjectName={row.subjectType === "employee" ? subjectOptions?.employees.find((item) => String(item.id) === String(row.subjectId))?.name ?? team?.rows.find((item) => String(item.employeeId) === String(row.subjectId))?.name : undefined} />
               ))
             ) : (
               <Card>
@@ -1954,6 +2015,7 @@ export function KpiAnalyticsWorkspace({
           </footer>
         </>
       )}
+      </>)}
     </main>
   );
 }
