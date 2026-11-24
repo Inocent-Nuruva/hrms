@@ -177,6 +177,7 @@ import { LeaveRequestsPanel } from "@/components/leave/leave-requests-panel"
 import { LeaveDelegationsPanel } from "@/components/leave/leave-delegations-panel"
 import { LeaveRequestPreviewPanel, useLeaveRequestPreview } from "@/components/leave/leave-request-preview"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
+import { movementAcknowledgement } from "@/lib/movement-acknowledgement"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 
@@ -859,12 +860,7 @@ function readMovementAcknowledgedAt(row: AdminRecord | null | undefined) {
 }
 
 function needsMovementAcknowledgement(row: AdminRecord | null | undefined) {
-  if (!row) return false
-  const requiresAcknowledgement = Boolean(
-    row.employeeAcknowledgementRequired ?? row.employee_acknowledgement_required
-  )
-  if (!requiresAcknowledgement) return false
-  return !readMovementAcknowledgedAt(row)
+  return movementAcknowledgement(row) === "Needed"
 }
 
 function stringifyMovementValue(value: unknown): string {

@@ -56,6 +56,7 @@ import {
   listEmployeeGrades,
   listEmployeeMovementOperations,
   listEmployeeMovements,
+  listTeamMovements,
   listEmployees,
   listPayrollSalaryStructures,
   listPositions,
@@ -395,7 +396,7 @@ export function MovementOperationsView({
     setLoading(true);
     setError(null);
     const tasks: Array<Promise<unknown>> = [
-      listEmployeeMovements(token)
+      (workspace === "team" ? listTeamMovements(token) : listEmployeeMovements(token))
         .then(setRows)
         .catch((errorObject) => {
           setRows([]);
@@ -442,7 +443,7 @@ export function MovementOperationsView({
       );
     }
     setLoading(false);
-  }, [activeTab, canCreateMovement, leaveIfForbidden]);
+  }, [activeTab, canCreateMovement, leaveIfForbidden, workspace]);
 
   React.useEffect(() => {
     if (!canAccess) return;
@@ -1068,7 +1069,7 @@ export function MovementOperationsView({
             </h1>
             <p className="text-sm text-muted-foreground">
               {workspace === "team"
-                ? "Movements for employees in your reporting scope."
+                ? "Movements for your direct and indirect reports within your authorized employee scope."
                 : activeTab === "cases"
                   ? "Create, submit, decide, and apply movements."
                   : "Retry operations that run after a movement is applied."}
