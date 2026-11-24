@@ -139,11 +139,16 @@ for (const [device, width, height] of [
           .getByRole("heading", { name: "My insights", exact: true })
           .locator("..")
           .screenshot({ path: info.outputPath("my-insights.png") })
-      if (device === "mobile")
-        await page.getByRole("button", { name: "Open navigation" }).click()
-      const allQueues = page.getByText("All queues", { exact: true })
+      const open = page.getByRole("button", { name: "Open navigation" })
+      if (await open.isVisible()) await open.click()
+      const allQueues = page.getByRole("button", {
+        name: "All queues",
+        exact: true,
+      })
       if (!(await allQueues.isVisible()))
-        await page.getByText("To do", { exact: true }).first().click()
+        await page
+          .getByRole("button", { name: /^To do Pinned by default/ })
+          .click()
       await allQueues.click()
       await expect(page).toHaveURL(/\/dashboard\/to-do$/)
       const queues = page.getByRole("navigation", { name: "To do queues" })
@@ -178,7 +183,7 @@ for (const [device, width, height] of [
       await page.getByLabel("Proposed branch").selectOption("4")
       await page.getByLabel("Proposed department").selectOption("2")
       await page
-        .getByLabel("Rationale", { exact: true })
+        .getByRole("textbox", { name: "Rationale", exact: true })
         .fill("Matching this assignment to the Operations vacancy.")
       if (device === "desktop")
         await page
@@ -201,7 +206,7 @@ for (const [device, width, height] of [
         .click()
       await expect(page.getByLabel("Team member")).toBeDisabled()
       await page
-        .getByLabel("Rationale", { exact: true })
+        .getByRole("textbox", { name: "Rationale", exact: true })
         .fill("Delivered the migration and coached three analysts.")
       await page.getByRole("button", { name: "Submit revision" }).click()
       await expect(page.getByText(/Revision of #51/)).toBeVisible()
@@ -226,7 +231,7 @@ for (const [device, width, height] of [
       const card = page.getByRole("article")
       await expect(card).toContainText("Senior analyst")
       await card.getByRole("button", { name: "Return", exact: true }).click()
-      await expect(page.getByRole("alert")).toContainText("five characters")
+      await expect(card.getByRole("alert")).toContainText("five characters")
       await card
         .getByLabel("Feedback to the manager")
         .fill("Add the delivery results.")
