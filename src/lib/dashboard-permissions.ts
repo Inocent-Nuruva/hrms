@@ -847,6 +847,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   // Backed by /api/hr/profile-change-requests (profile_change_request:view_all).
   "/dashboard/employees/profile-change-requests": "profile_change_request:view_all",
   "/dashboard/attendance": ATTENDANCE_ROUTE_PERMISSIONS,
+  "/dashboard/attendance/business-trips": ATTENDANCE_BUSINESS_TRIPS_ROUTE_PERMISSION,
   "/dashboard/attendance/biometric-access": {
     permissions: [
       "employee_access_credentials:read",
