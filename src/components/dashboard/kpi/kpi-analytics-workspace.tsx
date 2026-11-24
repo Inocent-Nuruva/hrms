@@ -6,7 +6,7 @@ import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface
 import { KpiFluentButton } from "./kpi-fluent-button";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChartMultiple24Regular, ClipboardTaskListLtr24Regular, Dismiss24Regular, Filter24Regular, PeopleTeam24Regular } from "@fluentui/react-icons";
+import { ChartMultiple24Regular, ClipboardTaskListLtr24Regular, Dismiss24Regular, Filter24Regular, PeopleTeam24Regular, Search20Regular } from "@fluentui/react-icons";
 import {
   Bar,
   BarChart,
@@ -523,10 +523,16 @@ function ComparisonPanel({ comparison }: { comparison: ComparisonPage }) {
 
 function TeamPanel({
   team,
+  employeeNames,
+  search,
+  onSearchChange,
   onPageChange,
   onEmployeeSelect,
 }: {
   team: TeamPage;
+  employeeNames: Record<number, string>;
+  search: string;
+  onSearchChange: (value: string) => void;
   onPageChange: (page: number) => void;
   onEmployeeSelect: (employeeId: number) => void;
 }) {
@@ -534,6 +540,16 @@ function TeamPanel({
     <section className="border-t border-border pt-6" aria-label="My reporting team">
       <h2 className="flex items-center gap-2 text-2xl font-bold"><PeopleTeam24Regular className="text-primary" /> My reporting team</h2>
       <p className="mt-1 text-sm text-muted-foreground">Employees you manage. Select a name to see their details.</p>
+      <div className="mt-4 max-w-sm">
+        <Input
+          aria-label="Search reporting team"
+          contentBefore={<Search20Regular aria-hidden="true" />}
+          placeholder="Search name or employee number"
+          maxLength={80}
+          value={search}
+          onChange={(_, data) => onSearchChange(data.value)}
+        />
+      </div>
       <div className="mt-4 overflow-x-auto">
         <Table>
           <TableHeader>
@@ -549,7 +565,7 @@ function TeamPanel({
           <TableBody>
             {team.rows.map((row) => (
               <TableRow key={row.employeeId}>
-                <TableCell><button type="button" className="font-medium text-primary hover:underline" onClick={() => onEmployeeSelect(row.employeeId)}>{row.name}</button></TableCell>
+                <TableCell><button type="button" className="font-medium text-primary hover:underline" onClick={() => onEmployeeSelect(row.employeeId)}>{row.name?.trim() || employeeNames[row.employeeId]?.trim() || `Employee #${row.employeeId}`}</button></TableCell>
                 <TableCell>{row.assignedKpis}</TableCell>
                 <TableCell>{row.approvedKpis}</TableCell>
                 <TableCell>
@@ -580,7 +596,7 @@ function TeamPanel({
         </Table>
         {team.rows.length === 0 && (
           <p className="p-4 text-muted-foreground">
-            No employees in your reporting scope.
+            {search.trim() ? "No employees match your search." : "No employees in your reporting scope."}
           </p>
         )}
         {team.total > team.limit && (
@@ -831,6 +847,7 @@ export function KpiAnalyticsWorkspace({
     React.useState<ScorecardTrend | null>(null);
   const [page, setPage] = React.useState(1);
   const [teamPage, setTeamPage] = React.useState(1);
+  const [teamSearch, setTeamSearch] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const canManage =
@@ -1098,8 +1115,9 @@ export function KpiAnalyticsWorkspace({
   React.useEffect(() => {
     if (!analyticsEnabled || !token || !isManager || personal) return;
     let live = true;
-    void kpiAnalyticsApi
-      .team(token, {
+    const timeout = setTimeout(() => {
+      void kpiAnalyticsApi
+        .team(token, {
         ...(periodId ? { periodId: Number(periodId) } : {}),
         ...(departmentId ? { departmentId: Number(departmentId) } : {}),
         ...(branchId ? { branchId: Number(branchId) } : {}),
@@ -1134,15 +1152,18 @@ export function KpiAnalyticsWorkspace({
           : {}),
         limit: 20,
         page: teamPage,
-      })
-      .then((data) => {
-        if (live) setTeam(data);
-      })
-      .catch(() => {
-        if (live) setTeam(null);
-      });
+        ...(teamSearch.trim() ? { search: teamSearch.trim() } : {}),
+        })
+        .then((data) => {
+          if (live) setTeam(data);
+        })
+        .catch(() => {
+          if (live) setTeam(null);
+        });
+    }, 250);
     return () => {
       live = false;
+      clearTimeout(timeout);
     };
   }, [
     branchId,
@@ -1158,6 +1179,7 @@ export function KpiAnalyticsWorkspace({
     personal,
     periodId,
     teamPage,
+    teamSearch,
     token,
   ]);
   React.useEffect(() => {
@@ -1715,7 +1737,7 @@ export function KpiAnalyticsWorkspace({
           </KpiFluentSelect>
         </section>
       )}
-      {isManager && !personal && team && <TeamPanel team={team} onPageChange={setTeamPage} onEmployeeSelect={openEmployee} />}
+      {isManager && !personal && team && <TeamPanel team={team} employeeNames={knownEmployeeNames} search={teamSearch} onSearchChange={(value) => { setTeamSearch(value); setTeamPage(1); }} onPageChange={setTeamPage} onEmployeeSelect={openEmployee} />}
       {renderDetails(<>
       {loading && <p role="status">Loading authorized performance data…</p>}
       {error && (
