@@ -4,7 +4,8 @@ import { DASHBOARD_AUTH_COOKIE } from "../../src/lib/dashboard-permissions"
 export async function installDashboardFixture(
   page: Page,
   scope: "platform" | "company" | "employee",
-  grants: string[]
+  grants: string[],
+  includeLegacyToken = true
 ) {
   const platform = scope === "platform"
   const employee = scope === "employee"
@@ -23,7 +24,12 @@ export async function installDashboardFixture(
       : [employee ? "EMPLOYEE" : "HR"],
     permissions: platform
       ? grants
-      : [...(employee ? ["data_scope:self"] : ["data_scope:company", "company_dashboard:read"]), ...grants],
+      : [
+          ...(employee
+            ? ["data_scope:self"]
+            : ["data_scope:company", "company_dashboard:read"]),
+          ...grants,
+        ],
     ...(platform ? {} : { companyId: 17, companyMembershipId: 33 }),
     dashboardType: employee ? "employee" : "admin",
     accessContextResolved: true,
@@ -37,7 +43,7 @@ export async function installDashboardFixture(
     },
   ])
   await page.addInitScript(
-    ({ user, token }) => {
+    ({ user, token, includeLegacyToken }) => {
       localStorage.setItem(
         "hrms.auth.session.v1",
         JSON.stringify({
@@ -46,14 +52,15 @@ export async function installDashboardFixture(
           credentialVersion: "test-fixture",
         })
       )
-      localStorage.setItem("hrms.admin.accessToken", token)
+      if (includeLegacyToken)
+        localStorage.setItem("hrms.admin.accessToken", token)
       localStorage.setItem("ess.auth.user", JSON.stringify(user))
       sessionStorage.setItem(
         "hrms.dashboard.actorPermissions",
         JSON.stringify(user.permissions)
       )
     },
-    { user, token }
+    { user, token, includeLegacyToken }
   )
 
   return user

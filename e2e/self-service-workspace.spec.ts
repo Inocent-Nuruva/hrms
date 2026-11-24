@@ -6,7 +6,7 @@ async function workspace(
   scope: "employee" | "company",
   grants: string[]
 ) {
-  const user = await installDashboardFixture(page, scope, grants)
+  const user = await installDashboardFixture(page, scope, grants, false)
   const employee = { id: 14, name: "Robin Vale (E014)" }
   const data = {
     id: 51,
@@ -123,7 +123,9 @@ for (const [device, width, height] of [
     async ({ page }, info) => {
       await page.setViewportSize({ width, height })
       await workspace(page, "employee", [])
-      await page.goto("/dashboard/me/insights")
+      await page.goto("/dashboard/me/insights", {
+        waitUntil: "domcontentloaded",
+      })
       await expect(
         page.getByRole("heading", { name: "My insights", exact: true })
       ).toBeVisible()
@@ -161,9 +163,13 @@ for (const [device, width, height] of [
       await expect(
         queues.getByRole("link", { name: "Profile Update Approvals" })
       ).toHaveCount(0)
-      await page.goto("/dashboard/to-do/recommendations")
+      await page.goto("/dashboard/to-do/recommendations", {
+        waitUntil: "domcontentloaded",
+      })
       await expect(page).not.toHaveURL(/\/to-do\/recommendations$/)
-      await page.goto("/dashboard/me/team/recommendations")
+      await page.goto("/dashboard/me/team/recommendations", {
+        waitUntil: "domcontentloaded",
+      })
       await expect(page).not.toHaveURL(/\/team\/recommendations$/)
     }
   )
@@ -174,7 +180,9 @@ for (const [device, width, height] of [
       const writes = await workspace(page, "company", [
         "manager_recommendations:submit",
       ])
-      await page.goto("/dashboard/me/team/recommendations")
+      await page.goto("/dashboard/me/team/recommendations", {
+        waitUntil: "domcontentloaded",
+      })
       await expect(
         page.getByRole("heading", { name: "Team recommendations", exact: true })
       ).toBeVisible()
@@ -228,7 +236,7 @@ for (const [device, width, height] of [
         "manager_recommendations:review",
         "self_service_requests:final_approve",
       ])
-      await page.goto("/dashboard/to-do")
+      await page.goto("/dashboard/to-do", { waitUntil: "domcontentloaded" })
       const queues = page.getByRole("navigation", { name: "To do queues" })
       await queues.getByRole("link", { name: "Review recommendations" }).click()
       const card = page.getByRole("article")
@@ -247,9 +255,10 @@ for (const [device, width, height] of [
         comment: "Add the delivery results.",
       })
       await page.goto(
-        "/dashboard/employees/profile-update-approvals?highlight=61"
+        "/dashboard/employees/profile-update-approvals?highlight=61",
+        { waitUntil: "domcontentloaded" }
       )
-      const dialog = page.getByRole("dialog")
+      const dialog = page.getByRole("alertdialog", { name: "PR-61" })
       await expect(
         dialog.getByRole("button", { name: "Reject", exact: true })
       ).toBeVisible()
@@ -261,7 +270,9 @@ for (const [device, width, height] of [
           new URL(response.url()).pathname ===
           "/api/hr/self-service/approvals/attendance-corrections"
       )
-      await page.goto("/dashboard/attendance/correction-requests")
+      await page.goto("/dashboard/attendance/correction-requests", {
+        waitUntil: "domcontentloaded",
+      })
       expect((await corrections).ok()).toBe(true)
     }
   )
