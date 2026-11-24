@@ -2,7 +2,6 @@
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
-import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
 import {
   Add20Regular,
@@ -29,14 +28,12 @@ import {
   StatusChip,
   actionButtonClass,
   formatDate,
-  inputClass,
   optionLabel,
   pageBleedClass,
   prettify,
   readString,
   rowId,
   secondaryButtonClass,
-  textareaClass,
 } from "@/components/dashboard/talent-visuals"
 import {
   Dialog,
@@ -73,6 +70,7 @@ import { cn } from "@/lib/utils"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { RequestActionInbox } from "./request-action-inbox"
+import { useRecordForm } from "@/components/dashboard/profile-records/record-form-dialog"
 import { EMPLOYEE_LIFECYCLE_REQUESTS_CHANGED } from "@/lib/employee-lifecycle-events"
 import { listAllMyActionItems } from "@/lib/admin-api"
 import { resignationStage } from "./resignation-progress"
@@ -298,6 +296,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
   const leaveIfForbidden = useLeaveIfForbidden()
   const copy = TAB_COPY[activeTab]
   const [actions, setActions] = React.useState<AdminRecord[]>([])
+  const documentForm = useRecordForm()
   const [resignations, setResignations] = React.useState<AdminRecord[]>([])
   const resignation = resignations.find((request) => {
     const type = readString(request, ["offboarding_type", "offboardingType"]).toLowerCase()
@@ -405,7 +404,49 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
     return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh) }
   }, [activeTab, load])
 
+  async function uploadDocument() {
+    const result = await documentForm.open(
+      [
+        { name: "title", label: "Title", required: true },
+        {
+          name: "document_type_code",
+          label: "Document type",
+          required: true,
+          options: DOCUMENT_TYPES.filter((type) => type.value).map((type) => ({ value: type.value, label: type.label })),
+        },
+        { name: "expiry_date", label: "Expiry date" },
+        { name: "notes", label: "Notes" },
+      ],
+      {
+        title: "Upload a document",
+        description: "Give the file a clear name so HR can find it later.",
+        confirmLabel: "Upload",
+        file: { label: "Attachment" },
+      },
+    )
+    const token = readStoredToken()
+    if (!result?.file || !token) return
+    const { values, file: chosen } = result
+    try {
+      await uploadMyDocument(token, {
+        title: values.title.trim(),
+        description: values.notes?.trim() || undefined,
+        document_type_code: values.document_type_code || undefined,
+        expiry_date: values.expiry_date || undefined,
+        file: await fileToBase64UploadDto(chosen),
+      })
+      toast.success("Document uploaded.")
+      await load()
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not upload the document.")
+    }
+  }
+
   function openCreate(mode: "document" | "change" | "resign") {
+    if (mode === "document") {
+      void uploadDocument()
+      return
+    }
     setCreateMode(mode)
     setForm(mode === "change" ? { request_type: "CONTACT_INFORMATION" } : {})
     setFile(null)
@@ -419,17 +460,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
     setSaving(true)
     setFormError(null)
     try {
-      if (mode === "document") {
-        if (!form.title || !file) throw new Error("Add a title and choose a file.")
-        await uploadMyDocument(token, {
-          title: form.title,
-          description: form.description || undefined,
-          document_type_code: form.document_type_code || undefined,
-          expiry_date: form.expiry_date || undefined,
-          file: await fileToBase64UploadDto(file),
-        })
-        toast.success("Document uploaded.")
-      } else if (mode === "change") {
+      if (mode === "change") {
         const requestType = form.request_type || "CONTACT_INFORMATION"
         if (requestType === "PROFILE_PHOTO") {
           if (!file) throw new Error("Choose a photo to send for HR approval.")
@@ -787,6 +818,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
 
   return (
     <section className={cn("w-full min-w-0", activeTab === "actions" ? "flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden" : "space-y-4")}>
+      {documentForm.dialog}
       <header
         className={cn(
           "flex min-w-0 flex-col gap-3 bg-background px-3 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-4",
@@ -1039,67 +1071,15 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
         <DialogPopup className="max-w-xl">
           <DialogHeader>
             <DialogTitle>
-              {createMode === "document"
-                ? "Upload a document"
-                : createMode === "change"
-                  ? "Ask HR to update your details"
-                  : "Send a resignation"}
+              {createMode === "change" ? "Ask HR to update your details" : "Send a resignation"}
             </DialogTitle>
             <DialogDescription>
-              {createMode === "document"
-                ? "Give the file a clear name so HR can find it later."
-                : createMode === "change"
-                  ? "Fill in only the fields that should change. HR will review before anything is updated."
-                  : "Tell HR your last working day."}
+              {createMode === "change"
+                ? "Fill in only the fields that should change. HR will review before anything is updated."
+                : "Tell HR your last working day."}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
-            {createMode === "document" ? (
-              <>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Title</span>
-                  <input
-                    className={inputClass}
-                    value={form.title ?? ""}
-                    onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
-                    placeholder="e.g. National ID"
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Type</span>
-                  <FluentSelect
-                    ariaLabel="Type"
-                    className="w-full"
-                    value={form.document_type_code ?? ""}
-                    onChange={(value) =>
-                      setForm((current) => ({ ...current, document_type_code: value }))
-                    }
-                    options={DOCUMENT_TYPES.map((type) => ({ value: type.value, label: type.label }))}
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Expires (optional)</span>
-                  <DateInput
-
-                    className={inputClass}
-                    value={form.expiry_date ?? ""}
-                    onChange={(event) => setForm((current) => ({ ...current, expiry_date: event.target.value }))}
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Notes (optional)</span>
-                  <Textarea
-                    className={textareaClass}
-                    value={form.description ?? ""}
-                    onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">File</span>
-                  <input type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
-                </label>
-              </>
-            ) : null}
             {createMode === "change" ? (
               <>
                 <FluentField label="What should change">
