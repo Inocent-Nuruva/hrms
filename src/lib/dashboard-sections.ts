@@ -454,6 +454,7 @@ const movementOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Overview", url: "/dashboard/movements/overview" },
       { title: "Cases", url: "/dashboard/movements/cases" },
       { title: "Operations", url: "/dashboard/movements/operations" },
+      { title: "Settings", url: "/dashboard/movements/settings" },
     ],
   },
 ];

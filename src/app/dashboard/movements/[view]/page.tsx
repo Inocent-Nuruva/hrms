@@ -1,3 +1,4 @@
+import { MovementSettingsView } from "@/components/dashboard/movement-settings-view"
 import { redirect } from "next/navigation"
 
 import {
@@ -19,6 +20,7 @@ interface MovementsViewPageProps {
 
 export default async function MovementsViewPage({ params }: MovementsViewPageProps) {
   const { view } = await params
+  if (view.toLowerCase() === "settings") return <MovementSettingsView />
   const normalized = view?.toLowerCase() as MovementOpsTab
   if (!ALLOWED_VIEWS.has(normalized)) {
     redirect("/dashboard/movements/overview")

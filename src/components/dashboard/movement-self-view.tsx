@@ -15,7 +15,6 @@ import {
   asRecordArray,
   formatDate,
   prettify,
-  readBoolean,
   readString,
   rowId,
 } from "@/components/dashboard/talent-visuals"
@@ -30,21 +29,10 @@ import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import Link from "next/link"
+import { movementAcknowledgement } from "@/lib/movement-acknowledgement"
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
-}
-
-function needsAcknowledgement(row: AdminRecord) {
-  const required = readBoolean(row, ["employeeAcknowledgementRequired", "employee_acknowledgement_required"])
-  const acknowledged = readString(row, ["employeeAcknowledgedAt", "employee_acknowledged_at"])
-  return required && !acknowledged
-}
-
-function acknowledgementLabel(row: AdminRecord) {
-  if (needsAcknowledgement(row)) return "Needed"
-  if (readString(row, ["employeeAcknowledgedAt", "employee_acknowledged_at"])) return "Acknowledged"
-  return "Not required"
 }
 
 export function MovementSelfView() {
@@ -117,7 +105,7 @@ export function MovementSelfView() {
     }
   }
 
-  const awaiting = rows.filter((row) => needsAcknowledgement(row)).length
+  const awaiting = rows.filter((row) => movementAcknowledgement(row) === "Needed").length
   const applied = rows.filter((row) => readString(row, ["status"]).toUpperCase() === "APPLIED").length
   const selectedChanges = asRecordArray(detail?.changes)
   const profileRequired = Boolean(error?.toLowerCase().includes("employee profile"))
@@ -207,12 +195,12 @@ export function MovementSelfView() {
                         <StatusChip value={readString(row, ["status"], "DRAFT")} />
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {[typeLabel, effective !== "—" ? `Effective ${effective}` : "", acknowledgementLabel(row)]
+                        {[typeLabel, effective !== "—" ? `Effective ${effective}` : "", movementAcknowledgement(row)]
                           .filter(Boolean)
                           .join(" · ")}
                       </p>
                     </button>
-                    {needsAcknowledgement(row) ? (
+                    {movementAcknowledgement(row) === "Needed" ? (
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
