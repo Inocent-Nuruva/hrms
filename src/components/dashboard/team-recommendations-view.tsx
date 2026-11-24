@@ -206,9 +206,10 @@ function SubmissionForm({
             onChange={(e) => setDate(e.target.value)}
           />
         </label>
-        <label className="sm:col-span-2">
-          Rationale
+        <div className="sm:col-span-2">
+          <label htmlFor="recommendation-rationale">Rationale</label>
           <textarea
+            id="recommendation-rationale"
             className={selectClass}
             rows={3}
             minLength={20}
@@ -217,7 +218,7 @@ function SubmissionForm({
             value={rationale}
             onChange={(e) => setRationale(e.target.value)}
           />
-        </label>
+        </div>
       </fieldset>
       {error && <p role="alert">{error}</p>}
       <div className="flex flex-wrap gap-2">
@@ -274,16 +275,19 @@ function ReviewForm({
   }
   return (
     <div className="mt-3 space-y-2">
-      <label>
-        Feedback to the manager
+      <div>
+        <label htmlFor={`manager-feedback-${row.id}`}>
+          Feedback to the manager
+        </label>
         <textarea
+          id={`manager-feedback-${row.id}`}
           className={selectClass}
           rows={2}
           maxLength={2000}
           value={comment}
           onChange={(e) => setComment(e.target.value)}
         />
-      </label>
+      </div>
       <p className="text-sm text-muted-foreground">
         Feedback is required for Return and Reject.
       </p>
