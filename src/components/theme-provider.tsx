@@ -40,7 +40,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     const saved = (window.localStorage.getItem(THEME_STORAGE_KEY) ?? "").trim()
     const initialTheme: ThemeMode =
-      saved === "light" || saved === "dark" || saved === "system" ? saved : "light"
+      window.location.pathname === "/login" ? "light" : saved === "light" || saved === "dark" || saved === "system" ? saved : "light"
+    if (window.location.pathname === "/login") window.localStorage.setItem(THEME_STORAGE_KEY, "light")
     setThemeState(initialTheme)
     const resolved = applyThemeClass(initialTheme)
     setResolvedTheme(resolved)

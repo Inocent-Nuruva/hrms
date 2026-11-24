@@ -12,6 +12,7 @@ export default function LoginPage() {
 
   const handleSuccess = (redirectUrl: string) => {
     if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem("hrms:unread-reminder-shown");
       window.location.assign(redirectUrl);
       return;
     }

@@ -1,41 +1,235 @@
 "use client"
-import { kpiIdentifierFromName } from "./kpi-identifier"
 
-import { KpiFluentInput, KpiFluentSelect } from "./kpi-fluent-fields";
 import * as React from "react"
-import { KpiFluentButton } from "./kpi-fluent-button"
-import { KpiFeedback, KpiPageHeader } from "./kpi-page-elements"
-import { KpiModeSelector, KpiWizardControls, KpiWizardProgress, type KpiEntryMode } from "./kpi-guided-flow"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import {
+  Badge, Button, Dialog, DialogBody, DialogContent, DialogSurface, DialogTitle,
+  Dropdown, Field, Input, Option, ProgressBar, Table, TableBody, TableCell,
+  TableHeader, TableHeaderCell, TableRow,
+} from "@fluentui/react-components"
+import { Add20Regular, Delete16Regular, Dismiss20Regular } from "@fluentui/react-icons"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { listBranches, listDepartments, listEmployees, type AdminRecord } from "@/lib/admin-api"
 import { kpiApi, type KpiDefinition, type KpiPeriod } from "@/lib/kpi-api"
 import { readKpiToken, scorecardsEnabled } from "@/lib/kpi-session"
 import { scorecardApi, type ScorecardTemplate, type ScoringPolicy } from "@/lib/scorecard-api"
+import { KpiFeedback, KpiPageHeader } from "./kpi-page-elements"
+import { kpiIdentifierFromName } from "./kpi-identifier"
+import { KpiSearchSelect, type KpiChoice } from "./kpi-search-select"
 
-const input = "w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+type TemplateItem = ScorecardTemplate["items"][number]
+const steps = ["Details", "Select KPIs", "Weights and policy", "Review"] as const
+const subjects = ["employee", "department", "branch", "manager_group", "organization"]
+const totalWeight = (items: TemplateItem[]) => items.reduce((sum, item) => sum + (Number(item.weight) || 0), 0)
+const errorText = (error: unknown) => error instanceof Error ? error.message : "Request failed."
+
 export function ScorecardTemplates() {
-  const router = useRouter(), actor = useDashboardActor(), token = readKpiToken()
-  const [rows, setRows] = React.useState<ScorecardTemplate[]>([]), [definitions, setDefinitions] = React.useState<KpiDefinition[]>([]), [periods, setPeriods] = React.useState<KpiPeriod[]>([]), [policies, setPolicies] = React.useState<ScoringPolicy[]>([])
-  const [loading, setLoading] = React.useState(true), [busy, setBusy] = React.useState(false), [error, setError] = React.useState(""), [notice, setNotice] = React.useState("")
-  const [editing, setEditing] = React.useState<number | null>(null), [code, setCode] = React.useState(""), [name, setName] = React.useState(""), [mode, setMode] = React.useState<"weighted" | "strategic">("weighted"), [policyId, setPolicyId] = React.useState(""), [items, setItems] = React.useState<Array<{ definitionId: number; weight: string }>>([]), [selected, setSelected] = React.useState("")
-  const [useId, setUseId] = React.useState<number | null>(null), [newCode, setNewCode] = React.useState(""), [subjectType, setSubjectType] = React.useState("employee"), [subjectId, setSubjectId] = React.useState(""), [periodId, setPeriodId] = React.useState("")
-  const [entryMode, setEntryMode] = React.useState<KpiEntryMode>("choose"), [wizardStep, setWizardStep] = React.useState(0)
-  const formRef = React.useRef<HTMLFormElement>(null)
-  const steps = [
-    { title: "Template details", description: "Name this reusable scorecard structure." },
-    { title: "Select KPIs", description: "Choose published KPI definitions for the template." },
-    { title: "Weights and policy", description: "Configure weights and an existing published scoring policy." },
-    { title: "Review", description: "Confirm the structure before saving a draft." },
-  ]
+  const router = useRouter()
+  const actor = useDashboardActor()
+  const token = readKpiToken()
+  const [rows, setRows] = React.useState<ScorecardTemplate[]>([])
+  const [definitions, setDefinitions] = React.useState<KpiDefinition[]>([])
+  const [periods, setPeriods] = React.useState<KpiPeriod[]>([])
+  const [policies, setPolicies] = React.useState<ScoringPolicy[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [busy, setBusy] = React.useState(false)
+  const [error, setError] = React.useState("")
+  const [notice, setNotice] = React.useState("")
+  const [open, setOpen] = React.useState(false)
+  const [editing, setEditing] = React.useState<number | null>(null)
+  const [step, setStep] = React.useState(0)
+  const [name, setName] = React.useState("")
+  const [code, setCode] = React.useState("")
+  const [mode, setMode] = React.useState<"weighted" | "strategic">("weighted")
+  const [policyId, setPolicyId] = React.useState("")
+  const [items, setItems] = React.useState<TemplateItem[]>([])
+  const [selectedKpi, setSelectedKpi] = React.useState("")
+  const [useId, setUseId] = React.useState<number | null>(null)
+  const [newCode, setNewCode] = React.useState("")
+  const [subjectType, setSubjectType] = React.useState("employee")
+  const [subjectId, setSubjectId] = React.useState("")
+  const [periodId, setPeriodId] = React.useState("")
   const loadSequence = React.useRef(0)
-  const load = React.useCallback(async () => { if (!token || !scorecardsEnabled) return; const sequence = ++loadSequence.current; setLoading(true); try { const [t, d, p, s] = await Promise.all([scorecardApi.templates(token), kpiApi.definitions(token, "", "assignment"), kpiApi.periods(token), scorecardApi.policies(token)]); if (sequence === loadSequence.current) { setRows(t); setDefinitions(d); setPeriods(p); setPolicies(s); setError("") } } catch (e) { if (sequence === loadSequence.current) setError(e instanceof Error ? e.message : "Unable to load templates") } finally { if (sequence === loadSequence.current) setLoading(false) } }, [token])
+  const saving = React.useRef(false)
+  const canEdit = actor.roleNames.some((role) => ["COMPANY_ADMIN", "HR_MANAGER"].includes(role))
+  const publishedPolicies = policies.flatMap((policy) => policy.versions.filter((version) => version.publishedAt).map((version) => ({ id: version.id, label: version.name + " · v" + version.version })))
+  const kpiName = (id: number) => definitions.find((row) => row.id === id)?.currentVersion?.name ?? "KPI #" + id
+  const loadSubjects = React.useCallback(async (search: string): Promise<KpiChoice[]> => {
+    const result = subjectType === "employee" ? await listEmployees(token, { limit: 100, search }) : subjectType === "department" ? await listDepartments(token, { limit: 100, search }) : await listBranches(token, { limit: 100, search })
+    return result.rows.map((row: AdminRecord) => {
+      const id = Number(row.id)
+      const fullName = [row.first_name ?? row.firstName, row.last_name ?? row.lastName].filter(Boolean).join(" ")
+      return { id, label: String(row.full_name ?? row.fullName ?? (fullName || row.name || row.email || subjectType + " #" + id)) }
+    }).filter((choice) => Number.isInteger(choice.id) && choice.id > 0)
+  }, [subjectType, token])
+
+  const load = React.useCallback(async () => {
+    if (!token || !scorecardsEnabled) return
+    const sequence = ++loadSequence.current
+    setLoading(true)
+    try {
+      const [templates, nextDefinitions, nextPeriods, nextPolicies] = await Promise.all([
+        scorecardApi.templates(token), kpiApi.definitions(token, "", "assignment"),
+        kpiApi.periods(token), scorecardApi.policies(token),
+      ])
+      if (sequence === loadSequence.current) {
+        setRows(templates); setDefinitions(nextDefinitions); setPeriods(nextPeriods); setPolicies(nextPolicies); setError("")
+      }
+    } catch (cause) {
+      if (sequence === loadSequence.current) setError(errorText(cause))
+    } finally {
+      if (sequence === loadSequence.current) setLoading(false)
+    }
+  }, [token])
   React.useEffect(() => { if (actor.ready) void load() }, [actor.ready, load])
-  const canEdit = actor.roleNames.some((r) => ["COMPANY_ADMIN", "HR_MANAGER"].includes(r))
-  async function action(task: () => Promise<ScorecardTemplate | void>, message: string) { if (busy) return false; setBusy(true); setError(""); setNotice(""); try { const updated = await task(); if (updated) { ++loadSequence.current; setRows((rows) => [updated, ...rows.filter((row) => row.id !== updated.id)]) } setNotice(message); return true } catch (e) { setError(e instanceof Error ? e.message : "Action failed"); return false } finally { setBusy(false) } }
-  function edit(row: ScorecardTemplate) { setEntryMode("manual"); setEditing(row.id); setCode(row.code); setName(row.name); setMode(row.mode); setPolicyId(row.policyVersionId ? String(row.policyVersionId) : ""); setItems(row.items) }
-  function advanceWizard() { if (wizardStep === 0 && (!code.trim() || !name.trim())) { setError("Enter a template identifier and name."); return } if (wizardStep === 1 && !items.length) { setError("Add at least one published KPI definition."); return } if (wizardStep === 2 && (items.some((item) => !Number.isFinite(Number(item.weight)) || Number(item.weight) < 0) || (mode === "weighted" && items.reduce((sum, item) => sum + Number(item.weight), 0) !== 100))) { setError("Weighted template entries must total 100%."); return } setError(""); setWizardStep((step) => step + 1) }
-  async function save(event: React.FormEvent) { event.preventDefault(); if (!items.length) { setError("Add at least one KPI definition"); return } const body = { code, name, mode, policyVersionId: policyId ? Number(policyId) : null, items }; const success = await action(() => editing ? scorecardApi.updateTemplate(token, editing, body) : scorecardApi.createTemplate(token, body), "Template draft saved"); if (success) { setEntryMode("choose"); setWizardStep(0); setEditing(null); setCode(""); setName(""); setItems([]) } }
+
+  function reset() {
+    setEditing(null); setStep(0); setName(""); setCode(""); setMode("weighted")
+    setPolicyId(""); setItems([]); setSelectedKpi(""); setError("")
+  }
+  function close() { if (!busy) { setOpen(false); reset() } }
+  function edit(row: ScorecardTemplate) {
+    reset(); setEditing(row.id); setName(row.name); setCode(row.code); setMode(row.mode)
+    setPolicyId(row.policyVersionId ? String(row.policyVersionId) : "")
+    setItems(row.items.map((item) => ({ ...item }))); setNotice(""); setOpen(true)
+  }
+  function validate(index: number, publish = false) {
+    if (index === 0 && (!name.trim() || !code.trim())) return "Enter a template name and identifier."
+    if (index === 1 && !items.length) return "Add at least one published KPI."
+    if (index === 2 && mode === "weighted") {
+      if (items.some((item) => !item.weight.trim() || !Number.isFinite(Number(item.weight)) || Number(item.weight) < 0)) return "Enter a valid weight for every KPI."
+      if (Math.abs(totalWeight(items) - 100) > 0.0001) return "KPI weights must total 100%."
+      if (publish && !policyId) return "Choose a published scoring policy before publishing."
+    }
+    return ""
+  }
+  function next() {
+    const problem = validate(step)
+    if (problem) { setError(problem); return }
+    setError(""); setStep((current) => Math.min(current + 1, steps.length - 1))
+  }
+  async function save(publish: boolean) {
+    if (saving.current || busy) return
+    for (let index = 0; index < steps.length - 1; index += 1) {
+      const problem = validate(index, publish)
+      if (problem) { setStep(index); setError(problem); return }
+    }
+    saving.current = true; setBusy(true); setError(""); setNotice("")
+    let saved: ScorecardTemplate | null = null
+    try {
+      const body = { code: code.trim(), name: name.trim(), mode, policyVersionId: policyId ? Number(policyId) : null, items }
+      const draft = editing ? await scorecardApi.updateTemplate(token, editing, body) : await scorecardApi.createTemplate(token, body)
+      saved = draft; setEditing(draft.id); ++loadSequence.current
+      setRows((current) => [draft, ...current.filter((row) => row.id !== draft.id)])
+      if (publish) {
+        const published = await scorecardApi.publishTemplate(token, draft.id)
+        setRows((current) => [published, ...current.filter((row) => row.id !== published.id)])
+      }
+      setOpen(false); reset(); setNotice(publish ? "Scorecard template published." : "Template draft saved.")
+    } catch (cause) {
+      setError(saved && publish ? "Draft saved, but publication failed: " + errorText(cause) : errorText(cause))
+    } finally {
+      saving.current = false; setBusy(false)
+    }
+  }
+  async function publishRow(row: ScorecardTemplate) {
+    if (busy) return
+    setBusy(true); setError(""); setNotice("")
+    try {
+      const published = await scorecardApi.publishTemplate(token, row.id)
+      ++loadSequence.current
+      setRows((current) => [published, ...current.filter((item) => item.id !== published.id)])
+      setNotice("Scorecard template published.")
+    } catch (cause) { setError(errorText(cause)) } finally { setBusy(false) }
+  }
+  function openUse(row: ScorecardTemplate) {
+    setUseId(row.id); setNewCode(kpiIdentifierFromName(row.name))
+    setSubjectType("employee"); setSubjectId(""); setPeriodId(""); setError("")
+  }
+  async function createFromTemplate(event: React.FormEvent) {
+    event.preventDefault()
+    if (busy || useId === null) return
+    if (!newCode.trim() || !Number.isInteger(Number(subjectId)) || Number(subjectId) < 1 || !periodId) {
+      setError("Enter an identifier, subject ID, and reporting period."); return
+    }
+    setBusy(true); setError("")
+    try {
+      const card = await scorecardApi.useTemplate(token, useId, { code: newCode.trim(), subjectType, subjectId: Number(subjectId), periodId: Number(periodId) })
+      setUseId(null); router.push("/dashboard/kpi/scorecards/" + card.id)
+    } catch (cause) { setError(errorText(cause)) } finally { setBusy(false) }
+  }
+
   if (!scorecardsEnabled) return <p className="p-6">Scorecards are disabled in this environment.</p>
-  return <div className="space-y-4"><KpiPageHeader title="Scorecard Templates" description="Reuse a scorecard structure with valid KPI assignments and a reporting period." actions={<Link className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium hover:bg-muted" href="/dashboard/kpi/scorecards">Back to scorecards</Link>} />{loading && <p>Loading templates…</p>}{error && <KpiFeedback intent="error">{error}</KpiFeedback>}{notice && <KpiFeedback intent="success">{notice}</KpiFeedback>}{canEdit && !editing && entryMode === "choose" && <KpiModeSelector title="Scorecard Template" description="Select published KPIs, weights and an existing scoring policy step by step." onSelect={setEntryMode} />}{canEdit && entryMode === "guided" && <KpiWizardProgress steps={steps} step={wizardStep} />}{canEdit && (editing || entryMode !== "choose") && <form ref={formRef} className="space-y-4 rounded-lg border p-5" onSubmit={(event) => void save(event)}><h2 className="font-semibold">{editing ? "Edit draft template" : "Create template"}</h2><div hidden={entryMode === "guided" && wizardStep !== 0 && wizardStep !== 2} className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Identifier<KpiFluentInput className={input} value={code} required onChange={(e) => setCode(e.target.value)} /></label><label className="text-sm">Name<KpiFluentInput className={input} value={name} required onChange={(e) => { if (!editing && (!code || code === kpiIdentifierFromName(name))) setCode(kpiIdentifierFromName(e.target.value)); setName(e.target.value) }} /></label><label className="text-sm">Mode<KpiFluentSelect className={input} value={mode} onChange={(e) => { setMode(e.target.value as "weighted" | "strategic"); if (e.target.value === "strategic") setItems((rows) => rows.map((r) => ({ ...r, weight: "0" }))) }}><option value="weighted">Weighted</option><option value="strategic">Strategic status only</option></KpiFluentSelect></label><label className="text-sm">Scoring policy<KpiFluentSelect className={input} value={policyId} onChange={(e) => setPolicyId(e.target.value)}><option value="">Select published policy</option>{policies.flatMap((p) => p.versions.filter((v) => v.publishedAt).map((v) => <option key={v.id} value={v.id}>{p.code} · v{v.version}</option>))}</KpiFluentSelect></label></div><div hidden={entryMode === "guided" && wizardStep !== 1} className="flex gap-2"><KpiFluentSelect aria-label="KPI definition for template" className={input} value={selected} onChange={(e) => setSelected(e.target.value)}><option value="">Select KPI definition</option>{definitions.filter((d) => d.status === "published" && !items.some((i) => i.definitionId === d.id)).map((d) => <option key={d.id} value={d.id}>{d.code} · {d.currentVersion?.name}</option>)}</KpiFluentSelect><KpiFluentButton type="button" className="rounded border px-3 py-2 text-sm" disabled={!selected} onClick={() => { setItems((rows) => [...rows, { definitionId: Number(selected), weight: mode === "strategic" ? "0" : "" }]); setSelected("") }}>Add KPI</KpiFluentButton></div><div hidden={entryMode === "guided" && wizardStep !== 2} className="space-y-2">{items.map((item) => <div className="flex flex-wrap items-center gap-3 rounded border p-3" key={item.definitionId}><span className="min-w-48 flex-1">{definitions.find((d) => d.id === item.definitionId)?.currentVersion?.name ?? `Definition #${item.definitionId}`}</span><label className="text-sm">Weight (%)<KpiFluentInput className={`${input} w-28`} type="number" value={item.weight} onChange={(e) => setItems((rows) => rows.map((r) => r.definitionId === item.definitionId ? { ...r, weight: e.target.value } : r))} /></label><KpiFluentButton type="button" className="text-sm text-red-700 underline" onClick={() => setItems((rows) => rows.filter((r) => r.definitionId !== item.definitionId))}>Remove</KpiFluentButton></div>)}</div><p hidden={entryMode === "guided" && wizardStep !== 2} className="text-sm">Draft weight total: {items.reduce((sum, i) => sum + (Number(i.weight) || 0), 0).toFixed(4)}%</p>{entryMode === "guided" && wizardStep === 3 && <section className="rounded-lg border p-4 text-sm" aria-label="Scorecard template review"><p><b>{name}</b> · {code} · {mode} · {items.length} KPIs</p><p>Weight total: {items.reduce((sum, item) => sum + Number(item.weight || 0), 0).toFixed(4)}%</p><p>Policy: {policyId ? `Version #${policyId}` : "None selected"}</p></section>}<div className="flex gap-3">{entryMode === "manual" && <KpiFluentButton className="rounded bg-[var(--primary)] px-4 py-2 text-sm text-white" disabled={busy}>Save template draft</KpiFluentButton>}{editing && <KpiFluentButton type="button" className="text-sm underline" onClick={() => { setEditing(null); setCode(""); setName(""); setItems([]) }}>New template</KpiFluentButton>}</div></form>}{canEdit && entryMode === "guided" && <KpiWizardControls steps={steps} step={wizardStep} busy={busy} error={error} onBack={() => setWizardStep((step) => step - 1)} onNext={advanceWizard} onCancel={() => setEntryMode("choose")} onFinish={() => formRef.current?.requestSubmit()} finishLabel="Save template draft" />}<section className="space-y-3"><h2 className="font-semibold">Template library</h2>{rows.map((row) => <div className="rounded-lg border p-4" key={row.id}><div className="flex flex-wrap justify-between gap-2"><p><b>{row.name}</b> · {row.code} · {row.mode} · {row.status} · {row.items.length} KPIs</p><div className="flex gap-3">{canEdit && row.status === "draft" && <><KpiFluentButton className="text-sm text-primary underline" onClick={() => edit(row)}>Edit</KpiFluentButton><KpiFluentButton className="text-sm text-primary underline" disabled={busy} onClick={() => void action(() => scorecardApi.publishTemplate(token, row.id), "Template published")}>Publish</KpiFluentButton></>}{row.status === "published" && <KpiFluentButton className="text-sm text-primary underline" onClick={() => setUseId(row.id)}>Use template</KpiFluentButton>}</div></div>{useId === row.id && <form className="mt-3 grid gap-3 border-t pt-3 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); void action(async () => { const card = await scorecardApi.useTemplate(token, row.id, { code: newCode, subjectType, subjectId: Number(subjectId), periodId: Number(periodId) }); router.push(`/dashboard/kpi/scorecards/${card.id}`) }, "Scorecard draft created from template") }}><label className="text-sm">New scorecard identifier<KpiFluentInput className={input} value={newCode} required onChange={(e) => setNewCode(e.target.value)} /></label><label className="text-sm">Subject type<KpiFluentSelect className={input} value={subjectType} onChange={(e) => setSubjectType(e.target.value)}>{["employee", "department", "branch", "manager_group", "organization"].map((s) => <option key={s} value={s}>{s.replaceAll("_", " ")}</option>)}</KpiFluentSelect></label><label className="text-sm">Subject ID<KpiFluentInput className={input} type="number" value={subjectId} required onChange={(e) => setSubjectId(e.target.value)} /></label><label className="text-sm">Reporting period<KpiFluentSelect className={input} value={periodId} required onChange={(e) => setPeriodId(e.target.value)}><option value="">Select period</option>{periods.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</KpiFluentSelect></label><KpiFluentButton className="rounded bg-[var(--primary)] px-4 py-2 text-sm text-white" disabled={busy}>Create draft from template</KpiFluentButton></form>}</div>)}{!loading && rows.length === 0 && <p className="text-sm text-muted-foreground">No scorecard templates yet.</p>}</section></div>
+  return <div className="space-y-4">
+    <KpiPageHeader title="Scorecard Templates" description="Save a reusable set of KPIs and scoring rules. Choose the person and reporting period when you use it." actions={<Link className="inline-flex h-8 items-center border border-border px-3 text-xs font-medium hover:bg-muted" href="/dashboard/kpi/scorecards">Back to scorecards</Link>} />
+    {error && !open && useId === null && <KpiFeedback intent="error">{error}</KpiFeedback>}
+    {notice && <KpiFeedback intent="success">{notice}</KpiFeedback>}
+    {canEdit && <Button appearance="primary" icon={<Add20Regular />} onClick={() => { reset(); setNotice(""); setOpen(true) }}>Create template</Button>}
+    <section className="space-y-3" aria-label="Scorecard template library">
+      <h2 className="text-xl font-semibold">Template library</h2>
+      {loading ? <p className="text-sm text-muted-foreground">Loading templates…</p> : rows.length === 0 ? <p className="border-t border-border py-8 text-center text-sm text-muted-foreground">No templates yet. Create one to reuse a KPI structure.</p> :
+        <div className="overflow-x-auto border-y border-border"><Table aria-label="Scorecard templates" size="small" className="min-w-[42rem] w-full">
+          <TableHeader><TableRow><TableHeaderCell>Template</TableHeaderCell><TableHeaderCell>Mode</TableHeaderCell><TableHeaderCell>KPIs</TableHeaderCell><TableHeaderCell>Weight total</TableHeaderCell><TableHeaderCell>Status</TableHeaderCell><TableHeaderCell>Actions</TableHeaderCell></TableRow></TableHeader>
+          <TableBody>{rows.map((row) => <TableRow key={row.id}>
+            <TableCell><span className="block font-semibold">{row.name}</span><span className="text-xs text-muted-foreground">{row.code}</span></TableCell>
+            <TableCell>{row.mode === "weighted" ? "Weighted score" : "Strategic status"}</TableCell>
+            <TableCell>{row.items.length}</TableCell>
+            <TableCell>{row.mode === "weighted" ? totalWeight(row.items).toFixed(2) + "%" : "Not used"}</TableCell>
+            <TableCell><Badge appearance="outline" color={row.status === "published" ? "success" : "warning"}>{row.status === "published" ? "Published" : "Draft"}</Badge></TableCell>
+            <TableCell><div className="flex flex-wrap gap-2">{canEdit && row.status === "draft" && <><Button appearance="subtle" size="small" onClick={() => edit(row)}>Edit</Button><Button appearance="subtle" size="small" disabled={busy} onClick={() => void publishRow(row)}>Publish</Button></>}{row.status === "published" && <Button appearance="subtle" size="small" onClick={() => openUse(row)}>Use template</Button>}</div></TableCell>
+          </TableRow>)}</TableBody>
+        </Table></div>}
+    </section>
+
+    <Dialog open={canEdit && open} onOpenChange={(_, data) => { if (!data.open) close() }}>
+      <DialogSurface style={{ width: "min(92vw, 760px)", maxWidth: "none" }} className="!h-[min(90dvh,44rem)] !rounded-none !p-0">
+        <DialogBody className="!flex h-full min-h-0 flex-col gap-0">
+          <div className="flex shrink-0 items-center justify-between border-b border-border px-6 py-5 sm:px-8"><DialogTitle className="text-xl font-semibold sm:text-2xl">{editing ? "Edit scorecard template" : "Create scorecard template"}</DialogTitle><Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close template" onClick={close} /></div>
+          <div className="shrink-0 border-b border-border px-6 py-4 sm:px-8"><div className="flex items-center justify-between text-sm"><strong>{steps[step]}</strong><span className="text-muted-foreground">Step {step + 1} of {steps.length}</span></div><ProgressBar className="mt-2" value={(step + 1) / steps.length} aria-label={"Step " + (step + 1) + " of " + steps.length} /><ol className="mt-3 grid grid-cols-4 gap-2">{steps.map((label, index) => <li key={label} aria-current={step === index ? "step" : undefined} className={"flex min-w-0 items-center gap-2 text-xs " + (step === index ? "font-semibold text-primary" : "text-muted-foreground")}><span className={"flex size-6 shrink-0 items-center justify-center rounded-full border " + (index <= step ? "border-primary bg-primary text-primary-foreground" : "border-border")}>{index + 1}</span><span className="hidden truncate sm:inline">{label}</span></li>)}</ol></div>
+          <DialogContent style={{ padding: "clamp(24px, 3vw, 36px) clamp(24px, 4vw, 40px)" }} className="!m-0 min-h-0 flex-1 overflow-y-auto">
+            <div className="space-y-7">
+              {error && <KpiFeedback intent="error">{error}</KpiFeedback>}
+              {step === 0 && <section className="space-y-6"><div><h3 className="text-lg font-semibold">Template details</h3><p className="mt-1 text-sm text-muted-foreground">Name the reusable KPI set and choose how it will be scored.</p></div>
+                <Field label="Template name" required><Input className="w-full" value={name} maxLength={160} onChange={(_, data) => { if (!editing && (!code || code === kpiIdentifierFromName(name))) setCode(kpiIdentifierFromName(data.value)); setName(data.value) }} /></Field>
+                <Field label="Identifier" hint="Generated from the name; you can change it before saving." required><Input className="w-full" value={code} maxLength={80} onChange={(_, data) => setCode(data.value.toUpperCase())} /></Field>
+                <Field label="Scorecard mode" hint={mode === "weighted" ? "Each KPI contributes to one combined score using its weight." : "Shows KPI progress without one combined score."}><Dropdown className="w-full" value={mode === "weighted" ? "Weighted score" : "Strategic status only"} selectedOptions={[mode]} onOptionSelect={(_, data) => { const next = data.optionValue as "weighted" | "strategic"; setMode(next); if (next === "strategic") setItems((current) => current.map((item) => ({ ...item, weight: "0" }))) }}><Option value="weighted">Weighted score</Option><Option value="strategic">Strategic status only</Option></Dropdown></Field>
+              </section>}
+              {step === 1 && <section className="space-y-6"><div><h3 className="text-lg font-semibold">Select KPIs</h3><p className="mt-1 text-sm text-muted-foreground">Add published KPIs to this reusable template.</p></div>
+                <div className="flex flex-wrap items-end gap-2"><Field label="Published KPI" className="min-w-[14rem] flex-1"><Dropdown className="w-full" value={definitions.find((row) => String(row.id) === selectedKpi)?.currentVersion?.name ?? "Select a KPI"} selectedOptions={selectedKpi ? [selectedKpi] : []} onOptionSelect={(_, data) => setSelectedKpi(data.optionValue ?? "")}><Option value="">Select a KPI</Option>{definitions.filter((row) => row.status === "published" && !items.some((item) => item.definitionId === row.id)).map((row) => <Option key={row.id} value={String(row.id)}>{row.currentVersion?.name ?? row.code}</Option>)}</Dropdown></Field><Button appearance="secondary" disabled={!selectedKpi} onClick={() => { setItems((current) => [...current, { definitionId: Number(selectedKpi), weight: mode === "strategic" ? "0" : "" }]); setSelectedKpi("") }}>Add KPI</Button></div>
+                {items.length === 0 ? <p className="border-t border-border py-5 text-sm text-muted-foreground">No KPIs added yet.</p> : <ul className="divide-y divide-border border-y border-border">{items.map((item) => <li key={item.definitionId} className="flex items-center justify-between gap-3 py-3"><span>{kpiName(item.definitionId)}</span><Button appearance="subtle" icon={<Delete16Regular />} aria-label={"Remove " + kpiName(item.definitionId)} onClick={() => setItems((current) => current.filter((entry) => entry.definitionId !== item.definitionId))} /></li>)}</ul>}
+              </section>}
+              {step === 2 && <section className="space-y-6"><div><h3 className="text-lg font-semibold">Weights and policy</h3><p className="mt-1 text-sm text-muted-foreground">{mode === "weighted" ? "Give each KPI a share of the total. Weights must add up to 100%." : "Strategic scorecards track status, so weights are not used."}</p></div>
+                {mode === "weighted" && <Field label="Published scoring policy" hint="Turns approved KPI results into a score. Required to publish a weighted template."><Dropdown className="w-full" value={publishedPolicies.find((row) => String(row.id) === policyId)?.label ?? "Select a policy"} selectedOptions={policyId ? [policyId] : []} onOptionSelect={(_, data) => setPolicyId(data.optionValue ?? "")}><Option value="">Select a policy</Option>{publishedPolicies.map((row) => <Option key={row.id} value={String(row.id)}>{row.label}</Option>)}</Dropdown></Field>}
+                <div className="divide-y divide-border border-y border-border">{items.map((item) => <div key={item.definitionId} className="grid items-center gap-2 py-4 sm:grid-cols-[minmax(0,1fr)_9rem] sm:gap-5"><label htmlFor={"template-weight-" + item.definitionId} className="text-sm font-medium">{kpiName(item.definitionId)}</label>{mode === "weighted" ? <Input id={"template-weight-" + item.definitionId} aria-label={"Weight for " + kpiName(item.definitionId)} className="w-full" type="number" min={0} max={100} step="any" value={item.weight} contentAfter="%" onChange={(_, data) => setItems((current) => current.map((entry) => entry.definitionId === item.definitionId ? { ...entry, weight: data.value } : entry))} /> : <span className="text-sm text-muted-foreground">No weight</span>}</div>)}</div>
+                {mode === "weighted" && <p className="text-sm font-semibold tabular-nums">Total weight: {totalWeight(items).toFixed(2)}% of 100%</p>}
+              </section>}
+              {step === 3 && <section className="space-y-6"><div><h3 className="text-lg font-semibold">Review template</h3><p className="mt-1 text-sm text-muted-foreground">Check the structure, then save a draft or publish it now.</p></div>
+                <dl className="grid gap-5 border-y border-border py-5 text-sm sm:grid-cols-2">{[["Template", name], ["Identifier", code], ["Mode", mode === "weighted" ? "Weighted score" : "Strategic status"], ["KPIs", String(items.length)], ["Weight total", mode === "weighted" ? totalWeight(items).toFixed(2) + "%" : "Not used"], ["Scoring policy", publishedPolicies.find((row) => String(row.id) === policyId)?.label ?? "None selected"]].map(([label, value]) => <div key={label}><dt className="text-muted-foreground">{label}</dt><dd className="mt-1 font-semibold">{value}</dd></div>)}</dl>
+                <ul className="divide-y divide-border">{items.map((item) => <li className="flex justify-between gap-3 py-2 text-sm" key={item.definitionId}><span>{kpiName(item.definitionId)}</span><span className="tabular-nums">{mode === "weighted" ? item.weight + "%" : "Status only"}</span></li>)}</ul>
+              </section>}
+            </div>
+          </DialogContent>
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-4 sm:px-8"><Button appearance="subtle" disabled={busy} onClick={close}>Cancel</Button><div className="flex flex-wrap gap-2">{step > 0 && <Button appearance="secondary" disabled={busy} onClick={() => { setError(""); setStep((current) => current - 1) }}>Back</Button>}{step < steps.length - 1 ? <Button appearance="primary" disabled={busy} onClick={next}>Continue</Button> : <><Button appearance="secondary" disabled={busy} onClick={() => void save(false)}>Save draft</Button><Button appearance="primary" disabled={busy} onClick={() => void save(true)}>{busy ? "Saving…" : "Save & publish"}</Button></>}</div></div>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+
+    <Dialog open={useId !== null} onOpenChange={(_, data) => { if (!data.open && !busy) { setUseId(null); setError("") } }}>
+      <DialogSurface style={{ width: "min(92vw, 640px)", maxWidth: "none" }} className="!rounded-none !p-0">
+        <DialogBody className="!flex flex-col gap-0">
+          <div className="flex items-center justify-between border-b border-border px-6 py-4"><DialogTitle className="text-xl font-semibold">Use template</DialogTitle><Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={() => setUseId(null)} /></div>
+          <DialogContent className="!m-0 space-y-5 !px-6 !py-6"><p className="text-sm text-muted-foreground">Choose who the scorecard is for and its reporting period.</p>{error && <KpiFeedback intent="error">{error}</KpiFeedback>}
+            <form id="use-scorecard-template" className="space-y-5" onSubmit={(event) => void createFromTemplate(event)}>
+              <Field label="New scorecard identifier" required><Input className="w-full" value={newCode} onChange={(_, data) => setNewCode(data.value.toUpperCase())} /></Field>
+              <Field label="Subject type"><Dropdown className="w-full" value={subjectType.replaceAll("_", " ")} selectedOptions={[subjectType]} onOptionSelect={(_, data) => { setSubjectType(data.optionValue ?? "employee"); setSubjectId("") }}>{subjects.map((type) => <Option key={type} value={type}>{type.replaceAll("_", " ")}</Option>)}</Dropdown></Field>
+              {["employee", "department", "branch"].includes(subjectType) ? <KpiSearchSelect label={subjectType === "employee" ? "Employee" : subjectType === "department" ? "Department" : "Branch"} value={subjectId} onChange={setSubjectId} load={loadSubjects} required fluentDropdown /> : <Field label="Subject ID" hint="ID of the selected group or organization." required><Input className="w-full" type="number" min={1} value={subjectId} onChange={(_, data) => setSubjectId(data.value)} /></Field>}
+              <Field label="Reporting period" required><Dropdown className="w-full" value={periods.find((row) => String(row.id) === periodId)?.label ?? "Select period"} selectedOptions={periodId ? [periodId] : []} onOptionSelect={(_, data) => setPeriodId(data.optionValue ?? "")}><Option value="">Select period</Option>{periods.map((row) => <Option key={row.id} value={String(row.id)}>{row.label}</Option>)}</Dropdown></Field>
+            </form>
+          </DialogContent>
+          <div className="flex justify-end gap-2 border-t border-border px-6 py-4"><Button appearance="secondary" disabled={busy} onClick={() => setUseId(null)}>Cancel</Button><Button type="submit" form="use-scorecard-template" appearance="primary" disabled={busy}>{busy ? "Creating…" : "Create scorecard draft"}</Button></div>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+  </div>
 }
