@@ -2,27 +2,28 @@ import { adminRequest } from "@/lib/admin-api"
 
 export type KpiDefinitionForm = {
   code: string; name: string; description?: string; category: string; strategicObjective?: string;
-  measurementType: string; measurementUnit?: string; direction: string; frequency: string; ownerEmployeeId?: number;
+  measurementType: string; measurementUnit?: string; direction: string; frequency: string; ownerEmployeeId?: number; preferredPeriodId?: number;
 }
-export type KpiDefinition = { id: number; code: string; status: string; currentVersion?: KpiVersion | null; draftVersion?: KpiVersion | null; versions?: KpiVersion[] }
-export type KpiVersion = { id: number; version: number; name: string; description: string | null; category: string; strategicObjective: string | null; measurementType: string; measurementUnit: string | null; direction: string; frequency: string; publishedAt: string | null; ownerEmployeeId?: number | null }
+export type KpiDefinition = { id: number; code: string; status: string; createdBy?: number; createdAt?: string; currentVersion?: KpiVersion | null; draftVersion?: KpiVersion | null; versions?: KpiVersion[] }
+export type KpiVersion = { id: number; version: number; name: string; description: string | null; category: string; strategicObjective: string | null; measurementType: string; measurementUnit: string | null; direction: string; frequency: string; publishedAt: string | null; ownerEmployeeId?: number | null; preferredPeriodId?: number | null }
 export type KpiTemplate = KpiDefinitionForm & { id: number; status: string; departmentClassification: string | null }
 export type KpiPeriod = { id: number; label: string; frequency: string; startDate: string; endDate: string; timezone: string | null }
-export type KpiAssignment = { id: number; periodId: number; subjectType: string; subjectId: number; organizationSnapshot?: { departmentId?: number | null; branchId?: number | null }; status: string; managerEmployeeId: number | null; definitionVersion: KpiVersion; period: KpiPeriod; currentTarget: { revision: number; target: Record<string, unknown> } | null; targetHistory?: { revision: number; target: Record<string, unknown>; reason: string; changedAt: string }[] }
+export type KpiAssignment = { id: number; periodId: number; subjectType: string; subjectId: number; organizationSnapshot?: { departmentId?: number | null; branchId?: number | null; managerEmployeeId?: number | null }; status: string; managerEmployeeId: number | null; createdBy?: number; createdAt?: string; creatorName?: string; definitionVersion: KpiVersion; period: KpiPeriod; currentTarget: { revision: number; target: Record<string, unknown> } | null; targetHistory?: { revision: number; target: Record<string, unknown>; reason: string; changedAt: string }[] }
 const root = "/api/hr/kpi"
 export const kpiApi = {
-  definitions: (token: string, search = "") => adminRequest<KpiDefinition[]>(`${root}/definitions?search=${encodeURIComponent(search)}`, { token }),
+  definitions: (token: string, search = "", scope: "library" | "assignment" = "library") => adminRequest<KpiDefinition[]>(`${root}/definitions?search=${encodeURIComponent(search)}&scope=${scope}`, { token }),
   definition: (token: string, id: number) => adminRequest<KpiDefinition>(`${root}/definitions/${id}`, { token }),
   createDefinition: (token: string, body: KpiDefinitionForm) => adminRequest<KpiDefinition>(`${root}/definitions`, { token, method: "POST", body }),
   updateDefinition: (token: string, id: number, body: KpiDefinitionForm) => adminRequest<KpiDefinition>(`${root}/definitions/${id}/draft`, { token, method: "PATCH", body }),
   publishDefinition: (token: string, id: number) => adminRequest<KpiDefinition>(`${root}/definitions/${id}/publish`, { token, method: "POST" }),
   archiveDefinition: (token: string, id: number) => adminRequest<KpiDefinition>(`${root}/definitions/${id}`, { token, method: "DELETE" }),
+  deleteUnassignedDefinition: (token: string, id: number) => adminRequest<{ deleted: boolean; id: number }>(`${root}/definitions/${id}/permanent`, { token, method: "DELETE" }),
   reviseDefinition: (token: string, id: number) => adminRequest<KpiVersion>(`${root}/definitions/${id}/revisions`, { token, method: "POST" }),
   templates: (token: string, search = "") => adminRequest<KpiTemplate[]>(`${root}/templates?search=${encodeURIComponent(search)}`, { token }),
   createTemplate: (token: string, body: KpiDefinitionForm & { departmentClassification?: string }) => adminRequest<KpiTemplate>(`${root}/templates`, { token, method: "POST", body }),
   updateTemplate: (token: string, id: number, body: KpiDefinitionForm & { departmentClassification?: string }) => adminRequest<KpiTemplate>(`${root}/templates/${id}`, { token, method: "PATCH", body }),
   publishTemplate: (token: string, id: number) => adminRequest<KpiTemplate>(`${root}/templates/${id}/publish`, { token, method: "POST" }),
-  createFromTemplate: (token: string, id: number, code: string) => adminRequest<KpiDefinition>(`${root}/templates/${id}/definitions`, { token, method: "POST", body: { code } }),
+  createFromTemplate: (token: string, id: number, code: string, preferredPeriodId?: number) => adminRequest<KpiDefinition>(`${root}/templates/${id}/definitions`, { token, method: "POST", body: { code, preferredPeriodId } }),
   periods: (token: string) => adminRequest<KpiPeriod[]>(`${root}/periods`, { token }),
   createPeriod: (token: string, body: { frequency: string; label: string; startDate: string; endDate: string; timezone: string }) => adminRequest<KpiPeriod>(`${root}/periods`, { token, method: "POST", body }),
   setPeriodTimezone: (token: string, id: number, timezone: string) => adminRequest<KpiPeriod>(`${root}/periods/${id}/timezone`, { token, method: "PATCH", body: { timezone } }),

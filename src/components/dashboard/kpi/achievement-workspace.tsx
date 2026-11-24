@@ -26,6 +26,7 @@ import {
   DrawerHeaderTitle,
   Field,
   OverlayDrawer,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -187,6 +188,7 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
   const [record, setRecord] = React.useState<Achievement | null>(null);
   const [actual, setActual] = React.useState("");
+  const [useActivityTotal, setUseActivityTotal] = React.useState(false);
   const [comments, setComments] = React.useState("");
   const [modePickerOpen, setModePickerOpen] = React.useState(false);
   const [flowStep, setFlowStep] = React.useState<AchievementFlowStep>("mode");
@@ -217,6 +219,7 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
       const found = records.find((row) => row.assignmentId === assignmentId) ?? null;
       setRecord(found);
       setActual(initialActual(found?.current?.actual));
+      setUseActivityTotal(false);
       setComments(found?.current?.comments ?? "");
       setError("");
     } catch (e) {
@@ -245,7 +248,7 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
   }, [loading, assignment, record, startAction]);
 
   const draft = !record || record.current?.status === "draft";
-  const blockedAchievement = assignment?.status !== "active"
+  const blockedAchievement = !assignment ? undefined : assignment.status !== "active"
     ? "This KPI assignment is inactive."
     : !assignment.currentTarget
       ? "An authorized manager must configure the assignment target before achievement submission."
@@ -254,6 +257,10 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
   const measurementType = assignment?.definitionVersion?.measurementType ?? "numeric";
   const activities = record?.current?.activities ?? [];
   const activityTotal = measurementType === "numeric" ? numericActivityTotal(activities.map((activity) => activity.measurableResult)) : null;
+  const summedActivityValue = activityTotal?.total;
+  React.useEffect(() => {
+    if (useActivityTotal && summedActivityValue) setActual(summedActivityValue);
+  }, [useActivityTotal, summedActivityValue]);
   const previousRevisions = record?.revisions.filter((revision) => revision.id !== record.current.id) ?? [];
   const selectedActivity = activities.find((activity) => activity.id === selectedActivityId) ?? null;
   const hasFinalResult = record?.current.actual !== null && record?.current.actual !== undefined;
@@ -526,8 +533,8 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
             <DialogContent className="space-y-4">
               <p className="text-sm text-muted-foreground">{assignment!.definitionVersion?.name} · {assignment!.period?.label}</p>
               <KpiFeedback intent="info">Your {activities.length === 1 ? "activity is" : `${activities.length} activities are`} saved as supporting work. Enter the final result, then submit the complete achievement to your manager.</KpiFeedback>
-              <div className="grid gap-3 sm:grid-cols-2"><Field label={`Final actual achievement${assignment!.definitionVersion?.measurementUnit ? ` (${assignment!.definitionVersion.measurementUnit})` : ""}`} required><KpiFluentInput value={actual} onChange={(event) => setActual(event.target.value)} placeholder="Enter the reporting-period result" /></Field><Field label="Supporting comments"><KpiFluentTextarea value={comments} onChange={(event) => setComments(event.target.value)} maxLength={4000} rows={3} /></Field></div>
-              {activityTotal && <div className="flex flex-wrap items-center gap-3"><Button type="button" appearance="secondary" onClick={() => setActual(activityTotal.total)}>Use activity total</Button><span className="text-sm text-muted-foreground">Adds {activityTotal.count} numeric {activityTotal.count === 1 ? "activity result" : "activity results"}. You can edit the total before submitting.</span></div>}
+              <div className="grid gap-3 sm:grid-cols-2"><Field label={`Final actual achievement${assignment!.definitionVersion?.measurementUnit ? ` (${assignment!.definitionVersion.measurementUnit})` : ""}`} required><KpiFluentInput value={actual} readOnly={useActivityTotal} onChange={(event) => setActual(event.target.value)} placeholder="Enter the reporting-period result" /></Field><Field label="Supporting comments"><KpiFluentTextarea value={comments} onChange={(event) => setComments(event.target.value)} maxLength={4000} rows={3} /></Field></div>
+              {activityTotal && <div className="flex flex-wrap items-center gap-3"><Switch checked={useActivityTotal} onChange={(_, data) => { setUseActivityTotal(data.checked); if (data.checked) setActual(activityTotal.total) }} label="Use activity total as final result" /><span className="text-sm text-muted-foreground">Adds {activityTotal.count} numeric {activityTotal.count === 1 ? "activity result" : "activity results"}. Turn off to enter a result manually.</span></div>}
             </DialogContent>
             <DialogActions><Button appearance="secondary" onClick={() => setModePickerOpen(false)}>Cancel</Button><Button appearance="secondary" disabled={busy} onClick={() => { setModePickerOpen(false); void action(() => record ? achievementApi.update(token, record.id, record.current.rowVersion, enteredActual(), comments) : achievementApi.create(token, assignmentId, enteredActual(), comments), "Draft saved"); }}>Save for later</Button><Button appearance="primary" disabled={busy || !actual.trim()} onClick={() => void submitAchievement()}>{busy ? "Submitting…" : "Submit to manager"}</Button></DialogActions>
           </>}
