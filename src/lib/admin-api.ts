@@ -7721,6 +7721,29 @@ function buildEmployeeMovementsQuery(
   return query ? `?${query}` : "";
 }
 
+export type MovementPolicy = {
+  require_management_approval: boolean;
+  allow_backdating: boolean;
+  max_backdate_days: number;
+  source: "company" | "installation";
+};
+
+export function getMovementPolicy(token: string) {
+  return adminRequest<MovementPolicy>("/api/employee-movements/settings", { token });
+}
+
+export function saveMovementPolicy(token: string, policy: Omit<MovementPolicy, "source">) {
+  return adminRequest<MovementPolicy>("/api/employee-movements/settings", { token, method: "PUT", body: policy });
+}
+
+export function resetMovementPolicy(token: string) {
+  return adminRequest<MovementPolicy>("/api/employee-movements/settings", { token, method: "DELETE" });
+}
+
+export async function listTeamMovements(token: string) {
+  return normalizeList(await adminRequest<unknown>("/api/employee-movements/team", { token }));
+}
+
 export async function listEmployeeMovements(
   token: string,
   params: EmployeeMovementsQueryParams = {},
