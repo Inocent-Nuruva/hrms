@@ -15,6 +15,17 @@ describe("employee-only management isolation", () => {
     expect(canAccessDashboardRoute("/dashboard/me/leave/requests", employee, "employee")).toBe(true)
     expect(canAccessDashboardRoute("/dashboard/attendance/attendance-history", employee, "employee")).toBe(true)
   })
+  it("keeps proposal submission and independent HR review behind separate grants", () => {
+    const team = "/dashboard/me/team/recommendations"
+    const review = "/dashboard/to-do/recommendations"
+    expect(canAccessDashboardRoute("/dashboard/to-do", employee, "employee")).toBe(true)
+    expect(canAccessDashboardRoute(team, employee, "employee")).toBe(false)
+    expect(canAccessDashboardRoute(review, employee, "employee")).toBe(false)
+    expect(canAccessDashboardRoute(team, ["manager_recommendations:submit"], "employee")).toBe(true)
+    expect(canAccessDashboardRoute(review, ["manager_recommendations:submit"], "employee")).toBe(false)
+    expect(canAccessDashboardRoute(review, ["manager_recommendations:review"], "admin")).toBe(true)
+    expect(canAccessDashboardRoute(team, ["manager_recommendations:review"], "admin")).toBe(false)
+  })
   it("retains management access for scoped HR users", () => {
     expect(canAccessDashboardRoute("/dashboard/employees/all", [...employee, "data_scope:company"], "admin")).toBe(true)
   })
@@ -24,7 +35,7 @@ describe("employee-only management isolation", () => {
 describe("seeded employee route catalog", () => {
   it("exposes only personal and common routes", () => {
     const permissions = ["data_scope:self", "employees:read", "notifications:read", "notifications:update", "notifications:delete", "holidays:read", "attendance_holiday_groups:read", "attendance_holidays:read", "attendance_policies:read", "leave_types:read", "leave_requests:read", "leave_requests:create", "leave_requests:cancel", "leave_balances:read", "leave_balances:read-own", "attendance_summaries:read", "attendance_mobile_punches:create", "shift_change_requests:read", "shift_change_requests:create", "onboarding_requests:read", "employment_contracts:self", "onboarding_requests:update", "onboarding_tasks:read", "onboarding_tasks:complete", "onboarding_documents:read", "onboarding_documents:create", "offboarding_workflows:read", "offboarding_requests:read", "offboarding_requests:create", "offboarding_requests:update", "offboarding_requests:submit", "offboarding_requests:cancel", "work_activities:self-service-read", "work_activities:self-service-update", "field_visits:self-service-read", "field_visits:self-service-update", "employee_finance:applications-self", "payroll:payslips-self"]
-    const common = new Set(["/dashboard/forms-feedback", "/dashboard/attendance", "/dashboard/attendance/today", "/dashboard/attendance/punch-action", "/dashboard/attendance/attendance-history", "/dashboard/attendance/schedule-preview", "/dashboard/attendance/corrections", "/dashboard/attendance/work-from-home-requests", "/dashboard/operations/reports", "/dashboard/help", "/dashboard/settings"])
+    const common = new Set(["/dashboard/to-do", "/dashboard/forms-feedback", "/dashboard/attendance", "/dashboard/attendance/today", "/dashboard/attendance/punch-action", "/dashboard/attendance/attendance-history", "/dashboard/attendance/schedule-preview", "/dashboard/attendance/corrections", "/dashboard/attendance/work-from-home-requests", "/dashboard/operations/reports", "/dashboard/help", "/dashboard/settings"])
     const visible = Object.keys(DASHBOARD_ROUTE_PERMISSIONS).filter((route) => canAccessDashboardRoute(route, permissions, "employee"))
     expect(visible.filter((route) => !route.startsWith("/dashboard/me/") && !common.has(route))).toEqual([])
     expect(canAccessDashboardRoute("/dashboard/operations/reports", permissions, "employee")).toBe(true)

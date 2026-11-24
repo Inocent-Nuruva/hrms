@@ -68,7 +68,7 @@ Read-only visibility into platform companies, roles, and permissions for governa
 
 Manages company setup, users, branches, departments, roles, and all settings within the company.
 
-491 assigned permissions.
+494 assigned permissions.
 
 | Module | Assigned permissions |
 | --- | --- |
@@ -112,7 +112,7 @@ Manages company setup, users, branches, departments, roles, and all settings wit
 | employee_finance | `employee_finance:accounts-read`, `employee_finance:adjustments`, `employee_finance:adjustments-approve`, `employee_finance:applications-finance-approve`, `employee_finance:applications-hr-approve`, `employee_finance:applications-management-approve`, `employee_finance:applications-manager-review`, `employee_finance:applications-read`, `employee_finance:applications-self`, `employee_finance:delegations`, `employee_finance:disbursements`, `employee_finance:disbursements-approve`, `employee_finance:integrations`, `employee_finance:migration`, `employee_finance:payroll`, `employee_finance:products`, `employee_finance:products-read`, `employee_finance:reconciliation`, `employee_finance:repayments`, `employee_finance:repayments-approve`, `employee_finance:reports`, `employee_finance:settlements`, `employee_finance:settlements-approve`, `employee_finance:templates` |
 | employee_grades | `employee_grades:create`, `employee_grades:delete`, `employee_grades:read`, `employee_grades:update` |
 | employee_import | `employee_import:download-result`, `employee_import:download-template`, `employee_import:execute`, `employee_import:preview`, `employee_import:read-history` |
-| employee_movements | `employee_movements:acknowledge-own`, `employee_movements:apply`, `employee_movements:approve`, `employee_movements:backdate`, `employee_movements:cancel`, `employee_movements:create`, `employee_movements:finance-approve`, `employee_movements:generate-letter`, `employee_movements:management-approve`, `employee_movements:read`, `employee_movements:read-own`, `employee_movements:retry`, `employee_movements:submit` |
+| employee_movements | `employee_movements:acknowledge-own`, `employee_movements:apply`, `employee_movements:approve`, `employee_movements:backdate`, `employee_movements:cancel`, `employee_movements:create`, `employee_movements:finance-approve`, `employee_movements:generate-letter`, `employee_movements:manage-settings`, `employee_movements:management-approve`, `employee_movements:read`, `employee_movements:read-own`, `employee_movements:retry`, `employee_movements:submit` |
 | employee_numbering | `employee_numbering:read`, `employee_numbering:update` |
 | employee_positions | `employee_positions:correct-history` |
 | employee_timetables | `employee_timetables:create`, `employee_timetables:delete`, `employee_timetables:read`, `employee_timetables:update` |
@@ -138,6 +138,7 @@ Manages company setup, users, branches, departments, roles, and all settings wit
 | leave_types | `leave_types:create`, `leave_types:delete`, `leave_types:read`, `leave_types:update` |
 | leave_workflows | `leave_workflows:create`, `leave_workflows:delete`, `leave_workflows:read`, `leave_workflows:update` |
 | location_privacy | `location_privacy:manage` |
+| manager_recommendations | `manager_recommendations:review`, `manager_recommendations:submit` |
 | manager_self_service | `manager_self_service:read` |
 | manager_team | `manager_team:read` |
 | notification_preferences | `notification_preferences:manage-own` |
@@ -196,7 +197,7 @@ Manages company setup, users, branches, departments, roles, and all settings wit
 
 Manages HR operations: employees, leave, attendance, onboarding, offboarding, shifts, and reports.
 
-292 assigned permissions.
+294 assigned permissions.
 
 | Module | Assigned permissions |
 | --- | --- |
@@ -246,6 +247,7 @@ Manages HR operations: employees, leave, attendance, onboarding, offboarding, sh
 | leave_types | `leave_types:create`, `leave_types:delete`, `leave_types:read`, `leave_types:update` |
 | leave_workflows | `leave_workflows:create`, `leave_workflows:delete`, `leave_workflows:read`, `leave_workflows:update` |
 | location_privacy | `location_privacy:manage` |
+| manager_recommendations | `manager_recommendations:review`, `manager_recommendations:submit` |
 | notifications | `notifications:delete`, `notifications:delivery-logs-read`, `notifications:mail-logs-read`, `notifications:mail-logs-retry`, `notifications:read`, `notifications:send`, `notifications:settings-read`, `notifications:settings-update`, `notifications:test`, `notifications:update` |
 | offboarding_clearances | `offboarding_clearances:complete`, `offboarding_clearances:create`, `offboarding_clearances:read` |
 | offboarding_documents | `offboarding_documents:create`, `offboarding_documents:delete`, `offboarding_documents:read`, `offboarding_documents:update` |
@@ -354,7 +356,7 @@ Handles daily HR activities: employee records, documents, leave review, attendan
 
 Manages employees within their department. Approves leave, shift changes, and workflow steps. No HR lifecycle powers.
 
-79 assigned permissions.
+80 assigned permissions.
 
 | Module | Assigned permissions |
 | --- | --- |
@@ -384,6 +386,7 @@ Manages employees within their department. Approves leave, shift changes, and wo
 | leave_requests | `leave_requests:approve`, `leave_requests:cancel`, `leave_requests:create`, `leave_requests:read` |
 | leave_types | `leave_types:read` |
 | manager | `manager:read` |
+| manager_recommendations | `manager_recommendations:submit` |
 | manager_self_service | `manager_self_service:read` |
 | manager_team | `manager_team:read` |
 | notifications | `notifications:delete`, `notifications:read`, `notifications:update` |
@@ -411,7 +414,7 @@ Manages employees within their department. Approves leave, shift changes, and wo
 
 Manages employees, attendance, and approvals for their branch. Branch-scoped equivalent of Department Manager.
 
-80 assigned permissions.
+81 assigned permissions.
 
 | Module | Assigned permissions |
 | --- | --- |
@@ -441,6 +444,7 @@ Manages employees, attendance, and approvals for their branch. Branch-scoped equ
 | leave_requests | `leave_requests:approve`, `leave_requests:cancel`, `leave_requests:create`, `leave_requests:read` |
 | leave_types | `leave_types:read` |
 | manager | `manager:read` |
+| manager_recommendations | `manager_recommendations:submit` |
 | manager_self_service | `manager_self_service:read` |
 | manager_team | `manager_team:read` |
 | notifications | `notifications:delete`, `notifications:read`, `notifications:update` |
