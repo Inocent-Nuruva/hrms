@@ -486,7 +486,7 @@ export function ProbationManagementView({
     if (canAccess && requestedCaseId) void openCase({ id: requestedCaseId });
   }, [canAccess, requestedCaseId, openCase]);
 
-  function openForm(
+  const openForm = React.useCallback((
     mode: FormMode,
     seed: Record<string, string> = {},
     criteria: Array<{
@@ -498,7 +498,7 @@ export function ProbationManagementView({
       self_rating_enabled?: boolean;
       is_required?: boolean;
     }> = [],
-  ) {
+  ) => {
     setFormMode(mode);
     setForm(mode === "policy" && !seed.id ? { ...Object.fromEntries(Object.entries(policyOptions?.defaults ?? {}).map(([key, value]) => [key, String(value)])), ...seed } : seed);
     if (mode === "case") setEmployeeQuery("");
@@ -507,7 +507,7 @@ export function ProbationManagementView({
     );
     setFormError(null);
     setFormOpen(true);
-  }
+  }, [policyOptions]);
 
   async function onSave() {
     const token = readStoredToken();
@@ -920,6 +920,8 @@ export function ProbationManagementView({
     canDeletePolicy,
     canDeleteCase,
     busyId,
+    openCase,
+    openForm,
     onDeleteCase,
     onDeletePolicy,
   ]);
