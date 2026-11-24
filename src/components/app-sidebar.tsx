@@ -71,6 +71,7 @@ import {
   probationSectionTabGroups,
   structureSectionTabGroups,
   type DashboardSectionTabGroup,
+  toDoQueues,
 } from "@/lib/dashboard-sections"
 import type { HomeDashboardKind } from "@/lib/dashboard-home"
 import { canSeeDashboardPage } from "@/lib/forbidden-routes"
@@ -187,19 +188,11 @@ const adminData: SidebarData = {
     { title: "Forms & Feedback", url: "/dashboard/forms-feedback", icon: ReportsIcon, activeIcon: ActiveReportsIcon },
     {
       title: "To do",
-      url: "/dashboard/me/requests/actions",
-      matchUrls: [
-        "/dashboard/me/requests/actions",
-        "/dashboard/attendance/correction-requests",
-        "/dashboard/employees/profile-update-approvals",
-      ],
+      url: "/dashboard/to-do",
+      matchUrls: ["/dashboard/to-do", ...toDoQueues.map((item) => item.url)],
       icon: NotificationsIcon,
       activeIcon: ActiveNotificationsIcon,
-      items: [
-        { title: "Employee Requests", url: "/dashboard/me/requests/actions" },
-        { title: "Correction Requests", url: "/dashboard/attendance/correction-requests" },
-        { title: "Profile Update Approvals", url: "/dashboard/employees/profile-update-approvals" },
-      ],
+      items: [{ title: "All queues", url: "/dashboard/to-do" }, ...toDoQueues],
     },
     {
       title: "Access Control",
@@ -667,9 +660,10 @@ const employeeSearchIndex = [
   { title: "Movements / My movements", url: "/dashboard/me/movements", section: "Movements", keywords: ["my movements", "movement", "transfer", "acknowledge"] },
   { title: "Employees / My team / Overview", url: "/dashboard/me/team/overview", section: "Team", keywords: ["my team", "team", "manager", "direct reports", "action items"] },
   { title: "Employees / My team / Movements", url: "/dashboard/team/movements", section: "Team", keywords: ["my team", "team", "movement", "transfer", "promotion", "manager"] },
-  { title: "To do / Correction Requests", url: "/dashboard/attendance/correction-requests", section: "Team", keywords: ["approvals", "attendance", "correction", "approve", "team", "manager"] },
-  { title: "To do / Profile Update Approvals", url: "/dashboard/employees/profile-update-approvals", section: "Team", keywords: ["approvals", "profile", "update", "approve", "team", "manager"] },
-  { title: "To do / Employee Requests", url: "/dashboard/me/requests/actions", section: "Requests", keywords: ["my requests", "request", "document", "resignation", "profile change"] },
+  { title: "To do", url: "/dashboard/to-do", section: "Requests", keywords: ["tasks", "approvals", "queues"] },
+  ...toDoQueues.map((item) => ({title: `To do / ${item.title}`, url: item.url, section: "Requests", keywords: ["requests", "review", "approval", "team"]})),
+  { title: "Employees / My employee workspace / My insights", url: "/dashboard/me/insights", section: "Employees", keywords: ["my attendance", "leave", "personal insights"] },
+  { title: "Employees / My employee workspace / Team recommendations", url: "/dashboard/me/team/recommendations", section: "Team", keywords: ["promotion", "transfer", "disciplinary", "proposal"] },
   { title: "Structure", url: "/dashboard/structure/cost-centers", section: "Structure", keywords: ["cost center", "grade"] },
   { title: "Insights", url: "/dashboard/insights/hr", section: "Insights", keywords: ["dashboard", "hr"] },
   { title: "Notifications / SMS configuration", url: "/dashboard/sms/overview", section: "Notifications", keywords: ["sms", "text"] },

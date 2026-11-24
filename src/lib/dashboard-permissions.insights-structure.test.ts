@@ -100,7 +100,7 @@ describe("structure and insights route access", () => {
     expect(hasAnalyticsAccess(["analytics:dashboards-sales-field"])).toBe(true)
   })
 
-  it("leaves leftover personal insights links available so they can redirect home", () => {
+  it("allows employees to open their own insights", () => {
     expect(canAccessDashboardRoute("/dashboard/me/insights", [], "employee")).toBe(true)
     expect(canAccessDashboardRoute("/dashboard/me/onboarding", [], "employee")).toBe(true)
   })
