@@ -99,6 +99,10 @@ test("shows policy approval, default-workflow save and shared Business Trips con
   const user = await installDashboardFixture(page, "company", ["leave_policies:read", "leave_policies:update", "leave_policies:approve",
     "leave_workflows:read", "leave_workflows:create", "leave_workflows:update", "attendance_business_trips:read", "attendance_business_trips:create"])
   const workflow = { id: 7, name: "Fallback review", status: "active", is_default: true, leave_type_id: null }
+  const steps = [
+    { id: 81, approval_level: 1, action_type: "recommend", approver_type: "role", role_id: 101, role_name: "DEPARTMENT_MANAGER", is_required: true },
+    { id: 82, approval_level: 2, action_type: "approve", approver_type: "role", role_id: 102, role_name: "HR_MANAGER", is_required: true },
+  ]
   const version = { id: 3, name: "Example policy", version_no: 1, lifecycle_status: "draft", status: "active" }
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname
@@ -107,7 +111,7 @@ test("shows policy approval, default-workflow save and shared Business Trips con
     if (path === "/api/leave/policies") json = { data: [version] }
     if (path === "/api/leave/policies/3/versions") json = { data: [version] }
     if (path === "/api/leave/workflows") json = { data: [workflow] }
-    if (path === "/api/leave/workflows/7") json = workflow
+    if (path === "/api/leave/workflows/7") json = { ...workflow, steps }
     await route.fulfill({ json })
   })
   await page.goto("/dashboard/leave-management/policies")
@@ -117,8 +121,9 @@ test("shows policy approval, default-workflow save and shared Business Trips con
   await expect(panel.getByRole("button", { name: "Approve", exact: true })).toBeVisible()
   await page.goto("/dashboard/leave-management/workflows")
   await page.getByRole("button", { name: "Edit Fallback review" }).click()
-  await page.getByRole("button", { name: "Next", exact: true }).click()
-  await expect(page.getByRole("button", { name: "Save workflow", exact: true })).toBeVisible()
+  const saved = page.waitForRequest(req => new URL(req.url()).pathname === "/api/leave/workflows/7" && req.method() === "PATCH")
+  await page.getByRole("button", { name: "Save workflow", exact: true }).click()
+  expect((await saved).postDataJSON()).toMatchObject({ is_default: true, leave_type_id: null })
   await page.goto("/dashboard/leave-management/workflows")
   await page.getByRole("button", { name: "New workflow", exact: true }).click()
   await page.getByPlaceholder("e.g. Annual leave approval").fill("Fallback example")
@@ -134,16 +139,23 @@ test("shows policy approval, default-workflow save and shared Business Trips con
 
 test("offers Request in the employee's own Encash leave panel", async ({ page }) => {
   const user = await installDashboardFixture(page, "employee", [])
+  const employee = { id: 19, user_id: user.id, employee_no: "DEMO-19", branch: { name: "North" }, department: { name: "Finance" }, position: { name: "Clerk" } }
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname
     let json: unknown = { data: [] }
     if (["/api/users/me", "/api/auth/me", "/api/auth/session"].includes(path)) json = { ...user, data: user }
-    if (path === "/api/me/leave/balances") json = { data: [{ id: 9, fiscal_year: "2031", leave_type_id: 4, leave_type_name: "Annual", remaining_days: 5 }] }
-    if (path.includes("/encashment")) json = []
+    if (path === "/api/employees/me") json = { data: employee }
+    if (path === "/api/me/leave/balances") json = { data: [{ employee_id: employee.id, leave_balances: [{ id: 9, fiscal_year: "2031", leave_type_id: 4, leave_type_name: "Annual", available_days: 5 }] }] }
+    if (path === "/api/leave/comp-off/eligibility") json = { types: [], convertible_overtime: [] }
+    if (path === "/api/me/leave/accrual" || path === "/api/leave/encashments/me") json = []
     await route.fulfill({ json })
   })
   await page.goto("/dashboard/me/leave/balances")
   const panel = page.locator("section").filter({ has: page.getByRole("heading", { name: "Encash leave" }) }).last()
-  await expect(panel.getByRole("button", { name: "Request", exact: true })).toBeVisible()
-  await expect(panel.getByLabel("Days to encash")).toBeVisible()
+  await panel.getByLabel("Leave balance").selectOption("4:2031")
+  await panel.getByLabel("Days to encash").fill("2")
+  await panel.getByLabel("Reason").fill("Test encashment")
+  const request = page.waitForRequest(req => new URL(req.url()).pathname === "/api/leave/encashments" && req.method() === "POST")
+  await panel.getByRole("button", { name: "Request", exact: true }).click()
+  expect((await request).postDataJSON()).toEqual({ leave_type_id: 4, fiscal_year: "2031", requested_days: 2, reason: "Test encashment" })
 })
