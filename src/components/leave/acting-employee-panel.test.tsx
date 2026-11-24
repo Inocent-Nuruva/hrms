@@ -9,7 +9,7 @@ vi.mock("@/lib/admin-api", () => ({
   getLeaveActingAssignment: async () => ({ current: null, history: [], can_manage: true }),
 }))
 
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 describe("acting appointment controls", () => {
   it("labels the optional routing switch and keeps routing off until selected", async () => {

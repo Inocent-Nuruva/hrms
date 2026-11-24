@@ -4646,7 +4646,7 @@ export function LeaveManagementView({
       if (editingWorkflowId === null) {
         await createLeaveWorkflow(token, {
           name: workflowForm.name.trim(),
-          leave_type_id: toId(workflowForm.leave_type_id) ?? null,
+          leave_type_id: workflowForm.leave_type_id ? Number(workflowForm.leave_type_id) : null,
           status: workflowForm.status,
           is_default: workflowForm.is_default === "true",
           reminder_after_days: workflowForm.reminder_after_days
@@ -4687,7 +4687,7 @@ export function LeaveManagementView({
       } else {
         await patchLeaveWorkflow(token, editingWorkflowId, {
           name: workflowForm.name.trim(),
-          leave_type_id: toId(workflowForm.leave_type_id) ?? null,
+          leave_type_id: workflowForm.leave_type_id ? Number(workflowForm.leave_type_id) : null,
           status: workflowForm.status,
           is_default: workflowForm.is_default === "true",
           reminder_after_days: workflowForm.reminder_after_days
