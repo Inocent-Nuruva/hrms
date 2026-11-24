@@ -43,6 +43,16 @@ import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 export type ManagerSelfTab =
   "overview" | "members" | "attendance" | "actions" | "activity-summary";
 
+function formatClock(value: unknown) {
+  if (!value) return "—";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim();
 }
@@ -286,7 +296,41 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
         {
           key: "employee",
           label: "Employee",
-          render: (row) => employeeLabel(row),
+          render: (row) => {
+            const name = employeeLabel(row);
+            const number = readString(row, ["employee_no", "employeeNo"], "");
+            const photo = readString(row, ["profile_photo_url"], "");
+            const initials = name
+              .split(" ")
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((part) => part[0]?.toUpperCase())
+              .join("");
+            return (
+              <div className="flex min-w-0 items-center gap-2.5">
+                {photo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={photo}
+                    alt=""
+                    className="size-8 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    {initials || "?"}
+                  </span>
+                )}
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-foreground">{name}</p>
+                  {number ? (
+                    <p className="truncate text-xs text-muted-foreground">
+                      {number}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            );
+          },
         },
         {
           key: "date",
@@ -299,10 +343,12 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
           label: "Status",
           render: (row) => (
             <StatusChip
-              value={readString(
-                row,
-                ["status", "attendanceStatus", "attendance_status"],
-                "—",
+              value={prettify(
+                readString(
+                  row,
+                  ["status", "attendanceStatus", "attendance_status"],
+                  "—",
+                ),
               )}
             />
           ),
@@ -310,8 +356,29 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
         {
           key: "in",
           label: "Check in",
-          render: (row) =>
-            readString(row, ["checkInAt", "check_in_at", "firstPunch"], "—"),
+          render: (row) => formatClock(row.check_in_at ?? row.checkInAt),
+        },
+        {
+          key: "out",
+          label: "Check out",
+          render: (row) => formatClock(row.check_out_at ?? row.checkOutAt),
+        },
+        {
+          key: "late",
+          label: "Late / early",
+          render: (row) => {
+            const late = readNumber(row, ["late_minutes"]) ?? 0;
+            const early = readNumber(row, ["early_departure_minutes"]) ?? 0;
+            if (!late && !early)
+              return <span className="text-muted-foreground">—</span>;
+            return (
+              <span className="text-xs text-amber-700 dark:text-amber-300">
+                {[late ? `${late}m late` : "", early ? `${early}m early` : ""]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            );
+          },
         },
       ];
     }
@@ -468,7 +535,9 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
                     : "Action items"}
             </h1>
             <p className="text-sm text-muted-foreground">
-              One backend page at a time — filters are sent on the request.
+              {activeTab === "attendance"
+                ? "Daily attendance for the people you manage. Pick a date range to narrow it down."
+                : "Records for the people you manage."}
             </p>
           </div>
           <button
