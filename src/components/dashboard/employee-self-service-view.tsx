@@ -180,6 +180,7 @@ import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 import { movementAcknowledgement } from "@/lib/movement-acknowledgement"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { AddProfileRecordButton, MyProfileRecordHistory, ProfileRecordActions } from "@/components/dashboard/profile-records/profile-records"
+import { MyDocumentsSection } from "@/components/dashboard/profile-records/my-documents-section"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
@@ -3127,35 +3128,7 @@ function ProfileRecordsTab({
                 title: "Documents",
                 count: documents.length,
                 content: (
-                  <SelfServiceSectionCard title="Documents" count={documents.length}>
-                    {documents.length ? (
-                      documents.map((record, index) => {
-                        const status = readString(record, ["status"], "—")
-                        return (
-                          <ProfileDataItem
-                            key={`document-${index}`}
-                            title={readString(record, ["title", "name"], "Document")}
-                            badge={
-                              status !== "—" ? (
-                                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                  {status}
-                                </span>
-                              ) : null
-                            }
-                            fields={[
-                              {
-                                label: "Type",
-                                value: readString(record, ["document_type", "type"], "—"),
-                              },
-                              { label: "Uploaded", value: formatDate(record.created_at) },
-                            ]}
-                          />
-                        )
-                      })
-                    ) : (
-                      <ProfileEmptyRow message="No documents available." />
-                    )}
-                  </SelfServiceSectionCard>
+                  <MyDocumentsSection token={token} />
                 ),
               },
             ]}
