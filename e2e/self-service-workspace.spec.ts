@@ -204,6 +204,9 @@ for (const [device, width, height] of [
       await page
         .getByRole("button", { name: "Revise recommendation", exact: true })
         .click()
+      await expect(
+        page.getByRole("heading", { name: "Revise recommendation #51" })
+      ).toBeFocused()
       await expect(page.getByLabel("Team member")).toBeDisabled()
       await page
         .getByRole("textbox", { name: "Rationale", exact: true })
@@ -253,6 +256,13 @@ for (const [device, width, height] of [
       await expect(
         dialog.getByRole("button", { name: "Return", exact: true })
       ).toBeVisible()
+      const corrections = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname ===
+          "/api/hr/self-service/approvals/attendance-corrections"
+      )
+      await page.goto("/dashboard/attendance/correction-requests")
+      expect((await corrections).ok()).toBe(true)
     }
   )
 }
