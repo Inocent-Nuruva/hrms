@@ -19176,7 +19176,19 @@ export async function createProbationPolicy(token: string, data: AdminRecord) {
 export function getProbationPolicyOptions(token: string) {
   return adminRequest<{
     targets: Record<string, Array<{id: number; name: string}>>;
-    defaults: { probation_period_days: number; maximum_extensions: number; default_extension_days: number; maximum_extension_days: number; maximum_total_days: number; reminder_days: number[] };
+    defaults: {
+      probation_period_days: number;
+      maximum_extensions: number;
+      default_extension_days: number;
+      maximum_extension_days: number;
+      minimum_confirmation_score: number;
+      self_assessment_required: boolean;
+      objectives_required: boolean;
+      manager_review_required: boolean;
+      confirmation_letter_required: boolean;
+      maximum_total_days: number;
+      reminder_days: number[];
+    };
   }>("/api/probation/policy-options", { token });
 }
 
