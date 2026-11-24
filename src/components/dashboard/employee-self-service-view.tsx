@@ -179,6 +179,7 @@ import { LeaveRequestPreviewPanel, useLeaveRequestPreview } from "@/components/l
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 import { movementAcknowledgement } from "@/lib/movement-acknowledgement"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { AddProfileRecordButton, MyProfileRecordHistory, ProfileRecordActions } from "@/components/dashboard/profile-records/profile-records"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
@@ -1972,9 +1973,11 @@ function ProfileDataItem({
   fields,
   barClassName = "bg-primary",
   persona,
+  actions,
 }: {
   title?: string
   badge?: React.ReactNode
+  actions?: React.ReactNode
   fields: Array<{ label: string; value: React.ReactNode }>
   barClassName?: string
   persona?: { name: string; secondaryText?: string }
@@ -1982,7 +1985,7 @@ function ProfileDataItem({
   return (
     <div className="min-w-0 border-b border-border/40 py-3 last:border-b-0">
       <div className="min-w-0 px-3">
-        {title || badge || persona ? (
+        {title || badge || persona || actions ? (
           <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
             {persona ? (
               <Persona
@@ -1993,7 +1996,7 @@ function ProfileDataItem({
                 className="[&_.fui-Persona__primaryText]:font-medium [&_.fui-Persona__secondaryText]:text-muted-foreground"
               />
             ) : title ? <p className="flex items-center gap-2 text-sm font-semibold text-foreground"><span className={cn("size-1.5 rounded-full", barClassName)} aria-hidden="true" />{title}</p> : <span />}
-            {badge}
+            <span className="flex items-center gap-1.5">{badge}{actions}</span>
           </div>
         ) : null}
         <div className="grid gap-2.5 sm:grid-cols-2">{fields.map((field) => (
@@ -2644,9 +2647,13 @@ function asRecordList(value: unknown): AdminRecord[] {
 function ProfilePersonalTab({
   employee,
   onRequestAdd,
+  token,
+  onRefresh,
 }: {
   employee: AdminRecord
   onRequestAdd: (kind: "contact" | "address" | "relative") => void
+  token: string
+  onRefresh: () => Promise<void>
 }) {
   const contacts = asRecordList(employee.contacts)
   const addresses = asRecordList(employee.addresses)
@@ -2687,13 +2694,14 @@ function ProfilePersonalTab({
               title: "Contacts",
               count: contacts.length,
               content: (
-                <SelfServiceSectionCard title="Contacts" count={contacts.length} subtitle="Phone and email">
+                <SelfServiceSectionCard title="Contacts" count={contacts.length} action={<AddProfileRecordButton type="contact" token={token} onChanged={onRefresh} />} subtitle="Phone and email">
                   {contacts.length ? (
                     contacts.map((record, index) => {
                       const isPrimary = formatUnknownValue(record.is_primary) === "Yes"
                       return (
                         <ProfileDataItem
                           key={`contact-${index}`}
+                          actions={<ProfileRecordActions type="contact" record={record} token={token} onChanged={onRefresh} />}
                           persona={{
                             name: readString(record, ["contact_type"], "Contact"),
                             secondaryText: readString(record, ["email", "phone_number", "phone"], ""),
@@ -2735,16 +2743,17 @@ function ProfilePersonalTab({
               title: "Addresses",
               count: addresses.length,
               content: (
-                <SelfServiceSectionCard title="Addresses" count={addresses.length} subtitle="Home and work">
+                <SelfServiceSectionCard title="Addresses" count={addresses.length} action={<AddProfileRecordButton type="address" token={token} onChanged={onRefresh} />} subtitle="Home and work">
                   {addresses.length ? (
                     addresses.map((record, index) => (
                       <ProfileDataItem
                         key={`address-${index}`}
+                          actions={<ProfileRecordActions type="address" record={record} token={token} onChanged={onRefresh} />}
                         title={readString(record, ["address_type", "type"], "Address")}
                         fields={[
                           {
                             label: "Address",
-                            value: readString(record, ["address_line", "address"], "—"),
+                            value: [readString(record, ["address_line_1", "address_line", "address"], ""), readString(record, ["address_line_2"], "")].filter(Boolean).join(", ") || "—",
                           },
                           { label: "City", value: readString(record, ["city"], "—") },
                           { label: "Country", value: readString(record, ["country"], "—") },
@@ -2772,7 +2781,7 @@ function ProfilePersonalTab({
               count: relatives.length,
               content: (
                 <SelfServiceSectionCard
-                  title="Relatives"
+                  title="Relatives" action={<AddProfileRecordButton type="relative" token={token} onChanged={onRefresh} />}
                   count={relatives.length}
                   subtitle="Emergency contacts"
                 >
@@ -2780,7 +2789,8 @@ function ProfilePersonalTab({
                     relatives.map((record, index) => (
                       <ProfileDataItem
                         key={`relative-${index}`}
-                        title={readString(record, ["name", "full_name"], "Relative")}
+                          actions={<ProfileRecordActions type="relative" record={record} token={token} onChanged={onRefresh} />}
+                        title={readString(record, ["full_name", "name"], "Relative")}
                         fields={[
                           {
                             label: "Relationship",
@@ -2907,43 +2917,6 @@ function ProfileRecordsTab({
   return (
     <FluentCard appearance="outline" size="small" className={cn(pageBleedClass, "!flex-col !items-stretch !gap-5 !rounded-none !border-x-0 !border-border/70 !bg-card !p-4 shadow-sm sm:!border-x sm:!p-5")}>
     <motion.div className="flex flex-col gap-4" variants={profileTabStagger} initial="hidden" animate="show">
-      <motion.div
-        variants={profileTabItem}
-        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto border-b border-border/60"
-      >
-        {[
-          {
-            label: "Corrections",
-            value: String(correctionRequests.length),
-            highlight: pendingCorrections > 0,
-          },
-          { label: "Team today", value: String(teamAttendance.length), highlight: false },
-          { label: "IDs", value: String(identifications.length), highlight: false },
-          { label: "Documents", value: String(documents.length), highlight: false },
-        ].map((chip, index, arr) => (
-          <div
-            key={chip.label}
-            className={cn(
-              "flex min-w-[5.5rem] shrink-0 flex-col justify-center px-3 py-2",
-              chip.highlight ? "bg-amber-500/10" : "bg-background",
-              index < arr.length - 1 ? "border-r border-border/60" : null
-            )}
-          >
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {chip.label}
-            </span>
-            <span
-              className={cn(
-                "text-base font-semibold tabular-nums",
-                chip.highlight ? "text-amber-700 dark:text-amber-300" : "text-primary"
-              )}
-            >
-              {chip.value}
-            </span>
-          </div>
-        ))}
-      </motion.div>
-
       <div className="divide-y divide-border/70">
         <motion.div variants={profileTabItem} className="py-4 first:pt-0">
           <SelfServiceSectionCard
@@ -2982,64 +2955,6 @@ function ProfileRecordsTab({
 
       </div>
 
-      <motion.div variants={profileTabItem} className="py-4">
-        <SelfServiceSectionCard
-          title="Direct reports today"
-          count={teamAttendance.length}
-          subtitle="Team attendance snapshot"
-        >
-          {teamAttendance.length === 0 ? (
-            <ProfileEmptyRow message="No team attendance rows were returned for your account." />
-          ) : (
-            <div role="list" aria-label="Direct reports attendance" className="max-h-80 divide-y divide-border/50 overflow-y-auto overscroll-contain">
-            {teamAttendance.map((row, index) => {
-              const nestedEmployee = asRecord(row.employee)
-              const employeeLabel =
-                readString(row, ["employee_name", "full_name", "name"], "") ||
-                readString(nestedEmployee, ["full_name", "name"], "") ||
-                [
-                  readString(nestedEmployee, ["first_name"], ""),
-                  readString(nestedEmployee, ["last_name"], ""),
-                ]
-                  .filter(Boolean)
-                  .join(" ") ||
-                "Direct report"
-              const status = readString(row, ["status", "attendance_status"], "—")
-              const checkIn = formatUnknownValue(row.check_in_at ?? row.first_punch_at)
-              return (
-                <div key={String(row.id ?? index)} role="listitem">
-                <ProfileDataItem
-                  title={employeeLabel}
-                  barClassName={
-                    status.toLowerCase().includes("absent")
-                      ? "bg-rose-500"
-                      : status.toLowerCase().includes("late")
-                        ? "bg-amber-500"
-                        : "bg-emerald-500"
-                  }
-                  badge={
-                    status !== "—" ? (
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        {status}
-                      </span>
-                    ) : null
-                  }
-                  fields={[
-                    {
-                      label: "Date",
-                      value: formatDate(row.date ?? row.attendance_date),
-                    },
-                    { label: "Check in", value: checkIn },
-                  ]}
-                />
-                </div>
-              )
-            })
-            }
-            </div>
-          )}
-        </SelfServiceSectionCard>
-      </motion.div>
 
       {employee ? (
         <motion.div variants={profileTabItem} className="order-first">
@@ -3051,16 +2966,17 @@ function ProfileRecordsTab({
                 title: "Identifications",
                 count: identifications.length,
                 content: (
-                  <SelfServiceSectionCard title="Identifications" count={identifications.length}>
+                  <SelfServiceSectionCard title="Identifications" count={identifications.length} action={<AddProfileRecordButton type="identification" token={token} onChanged={onRefresh} />}>
                     {identifications.length ? (
                       identifications.map((record, index) => (
                         <ProfileDataItem
                           key={`identification-${index}`}
+                          actions={<ProfileRecordActions type="identification" record={record} token={token} onChanged={onRefresh} />}
                           title={readString(record, ["identification_type", "type"], "ID")}
                           fields={[
                             {
                               label: "Number",
-                              value: readString(record, ["number", "id_number"], "—"),
+                              value: readString(record, ["identification_number", "number", "id_number"], "—"),
                             },
                             { label: "Issue date", value: formatDate(record.issue_date) },
                             { label: "Expiry date", value: formatDate(record.expiry_date) },
@@ -3079,16 +2995,12 @@ function ProfileRecordsTab({
                 count: bankAccounts.length,
                 content: (
                   <div className="space-y-3">
-                    <div className="flex justify-end">
-                      <FluentButton appearance="primary" icon={<Add20Regular />} onClick={() => setBankDialogOpen(true)}>
-                        Add bank account
-                      </FluentButton>
-                    </div>
-                    <SelfServiceSectionCard title="Bank Accounts" count={bankAccounts.length}>
+                    <SelfServiceSectionCard title="Bank Accounts" count={bankAccounts.length} action={<AddProfileRecordButton type="bank_account" token={token} onChanged={onRefresh} />}>
                     {bankAccounts.length ? (
                       bankAccounts.map((record, index) => (
                         <ProfileDataItem
                           key={`bank-${index}`}
+                          actions={<ProfileRecordActions type="bank_account" record={record} token={token} onChanged={onRefresh} />}
                           title={readString(record, ["bank_name"], "Bank account")}
                           fields={[
                             {
@@ -3116,18 +3028,20 @@ function ProfileRecordsTab({
                 title: "Academic Qualifications",
                 count: academic.length,
                 content: (
-                  <SelfServiceSectionCard title="Academic Qualifications" count={academic.length}>
+                  <SelfServiceSectionCard title="Academic Qualifications" count={academic.length} action={<AddProfileRecordButton type="academic_qualification" token={token} onChanged={onRefresh} />}>
                     {academic.length ? (
                       academic.map((record, index) => (
                         <ProfileDataItem
                           key={`academic-${index}`}
-                          title={readString(record, ["qualification", "name"], "Qualification")}
+                          actions={<ProfileRecordActions type="academic_qualification" record={record} token={token} onChanged={onRefresh} />}
+                          title={readString(record, ["degree_or_certificate", "qualification", "name"], "Qualification")}
                           fields={[
                             {
                               label: "Institution",
-                              value: readString(record, ["institution"], "—"),
+                              value: readString(record, ["institution_name", "institution"], "—"),
                             },
-                            { label: "Year", value: readString(record, ["year"], "—") },
+                            { label: "Field of study", value: readString(record, ["field_of_study"], "—") },
+                            { label: "Completed", value: formatDate(record.end_date) },
                           ]}
                         />
                       ))
@@ -3143,20 +3057,21 @@ function ProfileRecordsTab({
                 count: professional.length,
                 content: (
                   <SelfServiceSectionCard
-                    title="Professional Qualifications"
+                    title="Professional Qualifications" action={<AddProfileRecordButton type="professional_qualification" token={token} onChanged={onRefresh} />}
                     count={professional.length}
                   >
                     {professional.length ? (
                       professional.map((record, index) => (
                         <ProfileDataItem
                           key={`professional-${index}`}
-                          title={readString(record, ["qualification", "name"], "Qualification")}
+                          actions={<ProfileRecordActions type="professional_qualification" record={record} token={token} onChanged={onRefresh} />}
+                          title={readString(record, ["programme_name", "qualification", "name"], "Qualification")}
                           fields={[
                             {
                               label: "Issuer",
-                              value: readString(record, ["issuer", "institution"], "—"),
+                              value: readString(record, ["issuing_organization", "institution_name", "issuer"], "—"),
                             },
-                            { label: "Year", value: readString(record, ["year"], "—") },
+                            { label: "Issued", value: formatDate(record.issue_date) },
                           ]}
                         />
                       ))
@@ -3171,16 +3086,17 @@ function ProfileRecordsTab({
                 title: "Experience Details",
                 count: experience.length,
                 content: (
-                  <SelfServiceSectionCard title="Experience Details" count={experience.length}>
+                  <SelfServiceSectionCard title="Experience Details" count={experience.length} action={<AddProfileRecordButton type="experience" token={token} onChanged={onRefresh} />}>
                     {experience.length ? (
                       experience.map((record, index) => (
                         <ProfileDataItem
                           key={`experience-${index}`}
+                          actions={<ProfileRecordActions type="experience" record={record} token={token} onChanged={onRefresh} />}
                           title={readString(record, ["company_name", "company"], "Experience")}
                           fields={[
                             {
                               label: "Role",
-                              value: readString(record, ["role", "position"], "—"),
+                              value: readString(record, ["job_title", "role", "position"], "—"),
                             },
                             { label: "Start", value: formatDate(record.start_date) },
                             { label: "End", value: formatDate(record.end_date) },
@@ -3190,6 +3106,19 @@ function ProfileRecordsTab({
                     ) : (
                       <ProfileEmptyRow message="No experience details available." />
                     )}
+                  </SelfServiceSectionCard>
+                ),
+              },
+              {
+                id: "change_history",
+                title: "Change history",
+                count: 0,
+                content: (
+                  <SelfServiceSectionCard
+                    title="Change history"
+                    subtitle="Every add, edit and delete is kept here. Ask HR to roll back a change if needed."
+                  >
+                    <MyProfileRecordHistory token={token} onChanged={onRefresh} />
                   </SelfServiceSectionCard>
                 ),
               },
@@ -4868,6 +4797,8 @@ export function EmployeeSelfServiceProfileView() {
           {activeTab === "personal" && employee ? (
             <ProfilePersonalTab
               employee={employee}
+              token={token}
+              onRefresh={refresh}
               onRequestAdd={(kind) => {
                 if (kind === "contact") {
                   openSectionEditor(

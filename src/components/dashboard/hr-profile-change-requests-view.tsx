@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
+import { HrProfileRecordApprovals } from "@/components/dashboard/profile-records/profile-records"
 import { PageHeader } from "@/components/ui/page-header"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
@@ -904,6 +905,13 @@ export function HrProfileChangeRequestsView() {
           </DialogFooter>
         </DialogPopup>
       </Dialog>
+      <div className="border-t border-border px-3 py-4">
+        <h2 className="text-base font-semibold">Profile record requests</h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          IDs, bank accounts and next-of-kin changes, deletions and rollbacks that employees sent for approval.
+        </p>
+        <HrProfileRecordApprovals token={readStoredToken()} />
+      </div>
     </section>
   )
 }
