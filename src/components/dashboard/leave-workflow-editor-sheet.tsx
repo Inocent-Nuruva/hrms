@@ -307,7 +307,8 @@ export function LeaveWorkflowEditorSheet({
   const hasName = Boolean(value.name.trim())
   const hasLeaveType = Boolean(value.leave_type_id)
   const hasSteps = steps.length > 0
-  const isReady = hasName && hasLeaveType && hasSteps
+  const hasScope = hasLeaveType || value.is_default === "true"
+  const isReady = hasName && hasScope && hasSteps
   const isDirty =
     hasName ||
     hasLeaveType ||
@@ -315,13 +316,13 @@ export function LeaveWorkflowEditorSheet({
     value.status !== "active" ||
     value.is_default === "true" ||
     stage === "path"
-  const canGoNext = hasName && hasLeaveType
+  const canGoNext = hasName && hasScope
   const selectedLeaveType =
-    leaveTypeOptions.find((option) => option.value === value.leave_type_id)?.label ?? "No leave type selected"
+    leaveTypeOptions.find((option) => option.value === value.leave_type_id)?.label ?? (value.is_default === "true" ? "All leave types" : "No leave type selected")
 
   const readinessMessage = !hasName
     ? "Add a workflow name to continue."
-    : !hasLeaveType
+    : !hasScope
       ? "Choose the leave type this workflow will handle."
       : stage === "details"
         ? "Continue to the approval path."
@@ -401,6 +402,7 @@ export function LeaveWorkflowEditorSheet({
         <WorkflowSelect
           value={value.leave_type_id}
           options={leaveTypeOptions}
+          allLabel={value.is_default === "true" ? "All leave types" : undefined}
           placeholder="Select leave type"
           onValueChange={(next) => onValueChange({ leave_type_id: next })}
         />

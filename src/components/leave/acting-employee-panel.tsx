@@ -446,6 +446,7 @@ export function ActingEmployeePanel({
 
           <label className="flex items-start gap-3 text-sm">
             <Switch
+              aria-label="Route leave approvals to the acting employee"
               checked={routeApprovals}
               onCheckedChange={setRouteApprovals}
               aria-describedby={`${listId}-route-help`}

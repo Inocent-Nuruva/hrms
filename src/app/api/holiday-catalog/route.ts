@@ -1,28 +1,17 @@
+import { HOLIDAY_IMPORT_COUNTRIES, type HolidayImportCountryCode } from "@/lib/holiday-catalog"
 import Holidays from "date-holidays"
 import { NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
 
-const SUPPORTED_COUNTRIES = {
-  TZ: "Tanzania",
-  KE: "Kenya",
-  UG: "Uganda",
-} as const
-
-type SupportedCountryCode = keyof typeof SUPPORTED_COUNTRIES
-
 type HolidayCatalogEntry = {
-  countryCode: SupportedCountryCode
+  countryCode: HolidayImportCountryCode
   countryName: string
   name: string
   localName: string
   holidayDate: string
   isRecurring: boolean
   type: string
-}
-
-function isSupportedCountryCode(value: string): value is SupportedCountryCode {
-  return value in SUPPORTED_COUNTRIES
 }
 
 function toDateOnly(value: string) {
@@ -36,7 +25,8 @@ export async function GET(request: Request) {
   const yearValue = searchParams.get("year")?.trim() ?? ""
   const year = Number(yearValue)
 
-  if (!isSupportedCountryCode(country)) {
+  const option = HOLIDAY_IMPORT_COUNTRIES.find((entry) => entry.code === country)
+  if (!option) {
     return NextResponse.json({ error: "Unsupported country." }, { status: 400 })
   }
 
@@ -49,8 +39,8 @@ export async function GET(request: Request) {
     .getHolidays(year)
     .filter((entry) => String(entry.type).toLowerCase() === "public")
     .map<HolidayCatalogEntry>((entry) => ({
-      countryCode: country,
-      countryName: SUPPORTED_COUNTRIES[country],
+      countryCode: option.code,
+      countryName: option.label,
       name: entry.name,
       localName: entry.name,
       holidayDate: toDateOnly(entry.date),
@@ -60,8 +50,8 @@ export async function GET(request: Request) {
     .sort((left, right) => left.holidayDate.localeCompare(right.holidayDate) || left.name.localeCompare(right.name))
 
   return NextResponse.json({
-    countryCode: country,
-    countryName: SUPPORTED_COUNTRIES[country],
+    countryCode: option.code,
+    countryName: option.label,
     year,
     holidays: rows,
   })

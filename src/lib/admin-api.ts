@@ -5152,6 +5152,21 @@ export async function listLeaveHolidays(
   return { rows, ...pagination };
 }
 
+export async function listAllLeaveHolidays(token: string) {
+  const params = { limit: 100, sortBy: "created_at", sortOrder: "DESC" } as const;
+  const first = await listLeaveHolidays(token, { ...params, page: 1 });
+  const rows = [...first.rows];
+  for (let page = 2; page <= (first.totalPages ?? 1); page++) {
+    const result = await listLeaveHolidays(token, { ...params, page });
+    rows.push(...result.rows);
+  }
+  return rows;
+}
+
+export async function listLeaveHolidayBranches(token: string) {
+  return normalizeList(await adminRequest<unknown>("/api/leave/holidays/branches", { token }));
+}
+
 export async function listLeavePolicies(
   token: string,
   params: LeavePoliciesQueryParams = {},
@@ -10758,8 +10773,16 @@ export async function patchLeaveHoliday(
   });
 }
 
-export async function deleteLeaveHoliday(token: string, id: string | number) {
-  return adminRequest<unknown>(`/api/leave/holidays/${id}`, {
+export async function deleteLeaveHoliday(
+  token: string,
+  id: string | number,
+  scope: { branch_id?: number; import_country_code?: string; holiday_date?: string } = {},
+) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(scope)) {
+    if (value != null) query.set(key, String(value));
+  }
+  return adminRequest<unknown>(`/api/leave/holidays/${id}${query.size ? "?" + query.toString() : ""}`, {
     method: "DELETE",
     token,
   });
