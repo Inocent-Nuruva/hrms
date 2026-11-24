@@ -132,6 +132,7 @@ test("shows policy approval, default-workflow save and shared Business Trips con
   await expect(page.getByRole("button", { name: "Create workflow", exact: true })).toBeVisible()
   for (const path of ["/dashboard/leave-management/business-trips", "/dashboard/attendance/business-trips"]) {
     await page.goto(path)
+    await expect(page).toHaveURL(/\/dashboard\/leave-management\/business-trips$/)
     await expect(page.getByRole("heading", { name: "Business trips", exact: true }).first()).toBeVisible()
     await expect(page.getByRole("button", { name: "New trip" })).toBeVisible()
   }

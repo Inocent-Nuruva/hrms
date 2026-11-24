@@ -127,22 +127,21 @@ describe("tightened dashboard permissions", () => {
     ).toBe(true)
   })
 
-  it("lets employee-shell users open Business Trips with any trip grant", () => {
-    for (const permission of [
+  it("applies the same Business Trips grants to the current address and Attendance bookmark", () => {
+    const trips = [
       "attendance_business_trips:approve",
       "attendance_business_trips:cancel",
       "attendance_business_trips:create",
       "attendance_business_trips:delete",
       "attendance_business_trips:read",
       "attendance_business_trips:update",
-    ]) {
-      expect(
-        canAccessDashboardRoute(
-          "/dashboard/leave-management/business-trips",
-          [permission],
-          "employee",
-        ),
-      ).toBe(true)
+    ]
+    for (const route of ["/dashboard/leave-management/business-trips", "/dashboard/attendance/business-trips"]) {
+      for (const permission of trips) {
+        expect(canAccessDashboardRoute(route, [permission], "employee")).toBe(true)
+      }
+      expect(canAccessDashboardRoute(route, ["attendance_holidays:read"], "admin")).toBe(false)
+      expect(canAccessDashboardRoute(route, ["data_scope:self", "attendance_business_trips:read"], "employee")).toBe(false)
     }
   })
 
