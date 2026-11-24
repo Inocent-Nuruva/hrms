@@ -50,14 +50,12 @@ import {
 } from "@/components/dashboard/self-service-approval-timeline"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
-import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { readStoredSessionTokens } from "@/lib/session-client"
 import { cn } from "@/lib/utils"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { useForbiddenRouteGuard } from "@/hooks/use-forbidden-route-guard"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { pageBleedClass } from "@/components/dashboard/talent-visuals"
-
-const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
 type ChangeRow = {
   field: string
@@ -79,28 +77,6 @@ function asRecordArray(value: unknown) {
     .filter((entry): entry is AdminRecord => Boolean(entry))
 }
 
-function readStoredToken() {
-  if (typeof window === "undefined") {
-    return ""
-  }
-
-  const direct = window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ""
-  if (direct) {
-    return direct
-  }
-
-  const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
-  if (!authTokensRaw) {
-    return ""
-  }
-
-  try {
-    const parsed = JSON.parse(authTokensRaw) as { accessToken?: string; access_token?: string }
-    return (parsed.accessToken ?? parsed.access_token ?? "").trim()
-  } catch {
-    return ""
-  }
-}
 
 function readString(row: AdminRecord | null, keys: string[], fallback = "-") {
   if (!row) {
@@ -700,7 +676,7 @@ export function HrProfileUpdateApprovalsView() {
   )
 
   const loadRequestDetail = React.useCallback(async (requestId: string) => {
-    const token = readStoredToken()
+    const token = readStoredSessionTokens().accessToken
     if (!token || !requestId) {
       return
     }
@@ -851,7 +827,7 @@ export function HrProfileUpdateApprovalsView() {
   }, [highlightedRequestId])
 
   const loadRequests = React.useCallback(async () => {
-    const token = readStoredToken()
+    const token = readStoredSessionTokens().accessToken
     if (!token) {
       const message = "Authentication required. Please log in again."
       setError(message)
@@ -920,7 +896,7 @@ export function HrProfileUpdateApprovalsView() {
   }, [loadRequests])
 
   const handleDecision = React.useCallback(async (action: "approve" | "reject" | "return") => {
-    const token = readStoredToken()
+    const token = readStoredSessionTokens().accessToken
     if (!token || !activeRequest) {
       const message = "Authentication required. Please log in again."
       setError(message)

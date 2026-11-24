@@ -272,6 +272,7 @@ function Sidebar({
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const mobileNavigation = React.useRef<HTMLDivElement>(null)
 
   if (collapsible === "none") {
     return (
@@ -296,6 +297,7 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
+          initialFocus={mobileNavigation}
           showCloseButton={false}
           className="app-sidebar-surface inset-y-0 left-0 top-0 h-svh max-h-svh w-(--sidebar-width) max-w-[min(18rem,88vw)] gap-0 border-0 p-0 text-sidebar-foreground shadow-xl"
           style={
@@ -309,7 +311,9 @@ function Sidebar({
             <SheetTitle>Sidebar</SheetTitle>
             <SheetDescription>Displays the mobile sidebar.</SheetDescription>
           </SheetHeader>
-          <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">{children}</div>
+          <div ref={mobileNavigation} tabIndex={-1} className="flex h-full min-h-0 w-full flex-col overflow-hidden outline-none">
+            {children}
+          </div>
         </SheetContent>
       </Sheet>
     )

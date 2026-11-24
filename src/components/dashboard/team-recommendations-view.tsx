@@ -1,6 +1,12 @@
 "use client"
 
-import { useEffect, useState, type FormEvent, type ReactNode } from "react"
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
@@ -47,6 +53,10 @@ function SubmissionForm({
   onSaved: () => void
   onCancel: () => void
 }) {
+  const heading = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    if (previous) heading.current?.focus()
+  }, [previous])
   const [employee, setEmployee] = useState(
     previous ? String(previous.employee_id) : ""
   )
@@ -106,7 +116,7 @@ function SubmissionForm({
   )
   return (
     <form onSubmit={send} className="space-y-4 rounded-lg border p-4">
-      <h2 className="text-lg font-semibold">
+      <h2 ref={heading} tabIndex={-1} className="text-lg font-semibold">
         {previous
           ? `Revise recommendation #${previous.id}`
           : "New recommendation"}
@@ -463,13 +473,7 @@ export function TeamRecommendationsView({
                 row.status === "RETURNED" &&
                 !revised.has(row.id) &&
                 choices?.employees.some((e) => e.id === row.employee_id) && (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setPrevious(row)
-                      window.scrollTo({ top: 0, behavior: "smooth" })
-                    }}
-                  >
+                  <Button variant="outline" onClick={() => setPrevious(row)}>
                     Revise recommendation
                   </Button>
                 )
