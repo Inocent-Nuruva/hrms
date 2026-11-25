@@ -4,6 +4,7 @@ import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow
 import {
   loadAttendanceReportRows,
   attendanceReportRate,
+  attendanceReportCategory,
 } from "./attendance-report-data";
 import { formsRequest } from "@/lib/forms-feedback";
 import { useDashboardHeroBackground } from "@/hooks/use-dashboard-hero-background";
@@ -38,7 +39,6 @@ import {
   listDepartments,
   listLeaveRequests,
   listAttendanceHolidays,
-  listAttendanceDailySummariesPage,
   listOnboardingRequests,
   listOffboardingRequests,
   listPayrollRuns,
@@ -647,6 +647,7 @@ function leaveStatusTone(status: string) {
 
 function getAttendanceStatus(row: AdminRecord): string {
   return readString(row, [
+    "attendanceStatus",
     "status",
     "attendance_status",
     "work_status",
@@ -1993,12 +1994,6 @@ export default function HrAnalyticsDashboard({
       if (to_date) leaveParams.to_date = to_date;
 
       const todayAttendanceDate = formatLocalDateKey(new Date());
-      const todayAttendanceParams: Record<string, string | number> = {
-        page: 1,
-        limit: 500,
-        from_date: todayAttendanceDate,
-        to_date: todayAttendanceDate,
-      };
 
       const analyticsDashboardTask = getAnalyticsDashboard(token, "hr", {
         date_from: from_date,
@@ -2128,15 +2123,13 @@ export default function HrAnalyticsDashboard({
             markReady("attendance");
           }),
 
-        listAttendanceDailySummariesPage(token, todayAttendanceParams, {
-          cacheTtlMs: 0,
-        })
+        loadAttendanceReportRows(token, todayAttendanceDate, todayAttendanceDate)
           .catch(() => {
             recordPartialSourceError("Today's attendance");
-            return { rows: [], total: null } as PagedRowsResult;
+            return [];
           })
-          .then((attRes) => {
-            setTodayAttendanceSummaries(attRes.rows ?? []);
+          .then((rows) => {
+            setTodayAttendanceSummaries(rows);
           }),
 
         listAttendanceHolidays(token, { page: 1, limit: 100 })
@@ -2370,19 +2363,25 @@ export default function HrAnalyticsDashboard({
   }, [analyticsSummary, offboardingRequests]);
 
   const todayKey = formatLocalDateKey(new Date());
-  const analyticsTodayPresent = readNumberDeep(analyticsSummary, [
+  const analyticsTodayPresent = readNumberDeep(workforceSummary, [
+    "today_present",
+  ]) ?? readNumberDeep(analyticsSummary, [
     "today_present",
     "todayPresent",
     "present_today",
     "presentToday",
   ]);
-  const analyticsTodayAbsent = readNumberDeep(analyticsSummary, [
+  const analyticsTodayAbsent = readNumberDeep(workforceSummary, [
+    "today_absent",
+  ]) ?? readNumberDeep(analyticsSummary, [
     "today_absent",
     "todayAbsent",
     "absent_today",
     "absentToday",
   ]);
-  const analyticsTodayLeave = readNumberDeep(analyticsSummary, [
+  const analyticsTodayLeave = readNumberDeep(workforceSummary, [
+    "today_on_leave",
+  ]) ?? readNumberDeep(analyticsSummary, [
     "today_on_leave",
     "todayOnLeave",
     "employees_currently_on_leave",
@@ -2400,6 +2399,7 @@ export default function HrAnalyticsDashboard({
       const date = recordDateKey(
         readDeepValue(summary, [
           "attendance_date",
+          "attendanceDate",
           "work_date",
           "summary_date",
           "date",
@@ -2549,25 +2549,10 @@ export default function HrAnalyticsDashboard({
     let absent = 0;
 
     attendanceSummaries.forEach((summary) => {
-      const status = getAttendanceStatus(summary);
-      const isLate = status.includes("late");
-      const isAbsent =
-        status.includes("absent") ||
-        status.includes("no_show") ||
-        status.includes("no show");
-      const isPresent =
-        !isAbsent &&
-        (isLate ||
-          status.includes("present") ||
-          status.includes("worked") ||
-          status.includes("early_departure") ||
-          status.includes("overtime") ||
-          status.includes("half_day") ||
-          status.includes("manual_correction") ||
-          status.includes("on_time") ||
-          status.includes("ontime") ||
-          status === "ok" ||
-          status.includes("full"));
+      const category = attendanceReportCategory(summary);
+      const isLate = category === "late";
+      const isAbsent = category === "absent";
+      const isPresent = category === "present" || isLate;
 
       if (isAbsent) absent += 1;
       else if (isLate) late += 1;
@@ -2576,6 +2561,7 @@ export default function HrAnalyticsDashboard({
       const date = recordDateKey(
         readDeepValue(summary, [
           "attendance_date",
+          "attendanceDate",
           "work_date",
           "summary_date",
           "date",

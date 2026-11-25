@@ -23,3 +23,13 @@ export function attendanceReportRate(present: number, late: number, absent: numb
   const total = present + late + absent
   return total > 0 ? Math.round(((present + late) / total) * 1000) / 10 : null
 }
+
+export function attendanceReportCategory(row: AdminRecord): "present" | "late" | "absent" | null {
+  const value = row.attendanceStatus ?? row.attendance_status ?? row.status ?? row.work_status ?? row.day_status
+  const status = typeof value === "string" ? value.toLowerCase() : ""
+  if (status.includes("absent") || status.includes("no_show") || status.includes("no show")) return "absent"
+  const present = ["present", "late", "worked", "early_departure", "overtime", "half_day", "manual_correction", "on_time", "ontime", "full", "business_trip", "official_duty"].some((part) => status.includes(part)) || status === "ok"
+  if (!present) return null
+  const lateMinutes = Number(row.lateMinutes ?? row.late_minutes ?? 0)
+  return status.includes("late") || lateMinutes > 0 ? "late" : "present"
+}
