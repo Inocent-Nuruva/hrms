@@ -204,7 +204,7 @@ export function HeaderGlobalSearch({
           aria-autocomplete="list"
           aria-expanded={open}
           aria-controls="header-search-results"
-          className="w-full min-w-0 max-w-full !px-3.5 !py-2 text-sm sm:pr-16"
+          className="hrms-search-hint w-full min-w-0 max-w-full"
         />
       </Field>
       {placement === "header" && <button
@@ -237,7 +237,7 @@ export function HeaderGlobalSearch({
           <p className="px-2 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {normalizedQuery ? "Results" : recentItems.length > 0 ? "Recent" : "Quick navigation"}
           </p>
-          <div className="max-h-72 overflow-y-auto">
+          <div className="max-h-72 overflow-y-auto" data-hrms-options>
             {results.length > 0 ? results.map((result, index) => {
               // Titles follow the sidebar path "Module / Group / Page". Show the page
               // name first so results stay distinguishable on narrow screens.

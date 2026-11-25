@@ -224,3 +224,52 @@ body[data-app-text-scale="compact"] {
 :where(input, textarea)::placeholder {
   text-overflow: ellipsis;
 }
+
+/* --- Hand-built option lists ---------------------------------------------
+ * Search-as-you-type lists built without Fluent (role="listbox", or any
+ * container marked data-hrms-options) get the same rows as Fluent options:
+ * one height, padding, text size and corner, and "…" for long text. */
+:where([role="listbox"]:not(.fui-Listbox)) {
+  padding: 4px !important;
+  border-radius: var(--hrms-control-radius) !important;
+}
+:where([role="listbox"]:not(.fui-Listbox), [data-hrms-options]) :where(button, [role="option"]:not(:has(button))) {
+  box-sizing: border-box !important;
+  width: 100%;
+  min-height: var(--hrms-option-height) !important;
+  margin: 0 !important;
+  padding: 6px var(--hrms-option-px) !important;
+  border-radius: calc(var(--hrms-control-radius) - 2px) !important;
+  font-size: var(--hrms-control-font) !important;
+  line-height: var(--hrms-control-line) !important;
+  column-gap: var(--hrms-control-gap) !important;
+  text-align: start;
+  min-width: 0;
+}
+:where([role="listbox"]:not(.fui-Listbox), [data-hrms-options]) :where(button, [role="option"]) > :where(span, div) {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Rich-text editors (contenteditable textareas) --------------------- */
+:where([contenteditable="true"][role="textbox"]):not(:where([data-control="free"], [data-control="free"] *)) {
+  padding: 8px var(--hrms-control-px) !important;
+  font-size: var(--hrms-control-font) !important;
+  line-height: var(--hrms-control-line) !important;
+  min-height: var(--hrms-textarea-min);
+  overflow-wrap: anywhere;
+}
+:where(:has(> [contenteditable="true"][role="textbox"])):not(:where([data-control="free"], [data-control="free"] *)) {
+  border-radius: var(--hrms-control-radius);
+}
+
+/* Header search keeps room on the right for its "Ctrl /" hint. */
+@media (min-width: 640px) {
+  .hrms-search-hint {
+    padding-inline-end: 64px !important;
+  }
+}

@@ -3036,7 +3036,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
                       "h-8 rounded-lg bg-background text-xs whitespace-nowrap",
                       activeSection === "shift-rotation-rules" ? "w-40" : "w-31",
                     )}
-                    controlClassName="!h-8 !min-h-8 !px-2 !text-xs !whitespace-nowrap"
+                    controlClassName="!whitespace-nowrap"
                     aria-label={`Filter ${config.title.toLowerCase()}`}
                   >
                     <SelectValue />

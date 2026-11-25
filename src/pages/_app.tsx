@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AppFluentThemeProvider } from "@/components/fluent-theme-provider";
 import { AppTextScale } from "@/components/app-text-scale";
 import "@/app/globals.css";
+import "@/app/form-controls.css";
 
 const comfortaa = Comfortaa({
   variable: "--font-comfortaa",
