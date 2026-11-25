@@ -164,8 +164,7 @@ jobs:
           npm run build
           cp -r public .next/standalone/
           cp -r .next/static .next/standalone/.next/
-      # Temporarily exclude the three known failing cases while retaining the rest of the suite.
-      - run: npx playwright test e2e/onboarding-workspace.spec.ts e2e/forms-feedback.spec.ts e2e/public.spec.ts e2e/auth-session-policy.spec.ts e2e/probation-access.spec.ts e2e/company-directory.spec.ts e2e/notification-routing.spec.ts e2e/organization-structure.spec.ts e2e/attendance-navigation.spec.ts e2e/leave-calendar.spec.ts e2e/movement-workflow.spec.ts e2e/self-service-workspace.spec.ts e2e/profile-record-modals.spec.ts --grep-invert 'assigns a department manager and previews employee numbers on mobile|opens Users from Access Control and by bookmark on (desktop|mobile)'
+      - run: npx playwright test e2e/onboarding-workspace.spec.ts e2e/forms-feedback.spec.ts e2e/public.spec.ts e2e/auth-session-policy.spec.ts e2e/probation-access.spec.ts e2e/company-directory.spec.ts e2e/notification-routing.spec.ts e2e/organization-structure.spec.ts e2e/attendance-navigation.spec.ts e2e/leave-calendar.spec.ts e2e/movement-workflow.spec.ts e2e/self-service-workspace.spec.ts e2e/profile-record-modals.spec.ts
       - name: Upload browser failure evidence
         if: failure()
         uses: actions/upload-artifact@v4
