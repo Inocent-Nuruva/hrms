@@ -631,6 +631,18 @@ export const api = {
     return request<Record<string, unknown>>('/api/me/field-visits/commercial-policy');
   },
 
+  async getMyFieldAttendancePolicy() {
+    return request<Record<string, unknown>>('/api/me/field-visits/attendance-policy');
+  },
+
+  async retryMyFieldAttendance(id: string | number, type: 'CHECK_IN' | 'CHECK_OUT') {
+    return request<Record<string, unknown>>(`/api/me/field-visits/${id}/attendance/${type}/retry`, { method: 'POST' });
+  },
+
+  async uploadMyFieldAttachment(id: string | number, data: Record<string, unknown>) {
+    return request<unknown>(`/api/me/field-visits/${id}/attachments`, { method: 'POST', body: data });
+  },
+
   async listManagerFieldVisits() {
     return normalizeList(await request<unknown>('/api/manager/field-visits'));
   },
@@ -659,10 +671,10 @@ export const api = {
     return request<unknown>(`/api/me/field-visits/${id}/opportunities`, { method: 'POST', body: data });
   },
 
-  async syncMyFieldVisitAction(operation: string, payload: Record<string, unknown>) {
+  async syncMyFieldVisitAction(operation: string, payload: Record<string, unknown>, offlineQueued = false) {
     const syncRequestId = createClientRequestId();
     const clientRequestId = typeof payload.client_request_id === 'string' ? payload.client_request_id : createClientRequestId();
-    const result = await request<Record<string, unknown>>('/api/me/field-visits/sync', { method: 'POST', body: { sync_request_id: syncRequestId, device_identifier: await getAttendanceInstallationIdentifier(), items: [{ client_request_id: clientRequestId, operation, payload }] } });
+    const result = await request<Record<string, unknown>>('/api/me/field-visits/sync', { method: 'POST', body: { sync_request_id: syncRequestId, device_identifier: await getAttendanceInstallationIdentifier(), items: [{ client_request_id: clientRequestId, operation, payload: { ...payload, offline_queued: offlineQueued } }] } });
     const items = Array.isArray(result.items) ? result.items as Record<string, unknown>[] : [];
     if (!items.length || items[0].status !== 'COMPLETED') {
       const error = new Error(String(items[0]?.message ?? 'Field visit action was not accepted.')) as ApiError;

@@ -19512,7 +19512,7 @@ export async function getHrFieldVisitsMap(
     `/api/hr/field-visits/map${buildRecordQuery({ purpose })}`,
     { token },
   );
-  return normalizeSingle(payload) ?? asRecord(payload);
+  return Array.isArray(payload) ? { items: normalizeList(payload) } : normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function listHrFieldLocationAccessLogs(token: string) {
@@ -19699,6 +19699,18 @@ export async function getManagerFieldVisitDashboard(token: string) {
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
+export async function getFieldOperationsReport(token: string, params: Record<string, string | undefined> = {}, hr = false) {
+  const path = hr ? "/api/hr/field-visits/operations-report" : "/api/manager/field-visits/operations-report";
+  const payload = await adminRequest<unknown>(`${path}${buildRecordQuery(params)}`, { token });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getManagerFieldPartyHistory(token: string, id: string | number, hr = false) {
+  const path = hr ? `/api/hr/field-visits/parties/${id}/history` : `/api/manager/field-visits/parties/${id}/history`;
+  const payload = await adminRequest<unknown>(path, { token });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
 export async function getManagerFieldVisitCommercialPolicy(token: string) {
   const payload = await adminRequest<unknown>(
     "/api/manager/field-visits/commercial-policy",
@@ -19799,7 +19811,7 @@ export async function getManagerFieldVisitMap(
     `/api/manager/field-visits/map/view${buildRecordQuery({ purpose })}`,
     { token },
   );
-  return normalizeSingle(payload) ?? asRecord(payload);
+  return Array.isArray(payload) ? { items: normalizeList(payload) } : normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function getManagerFieldVisitExceptions(token: string) {
@@ -19839,6 +19851,53 @@ export async function getMyFieldVisitCommercialPolicy(token: string) {
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
+export async function getMyFieldAttendancePolicy(token: string) {
+  const payload = await adminRequest<unknown>("/api/me/field-visits/attendance-policy", { token });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function retryMyFieldAttendance(token: string, id: string | number, eventType: "CHECK_IN" | "CHECK_OUT") {
+  return adminRequest<unknown>(`/api/me/field-visits/${id}/attendance/${eventType}/retry`, { method: "POST", token });
+}
+
+export async function setMyFieldVisitDisposition(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/me/field-visits/${id}/disposition`, { method: "POST", token, body: data });
+}
+
+export async function requestMyFieldCheckoutCorrection(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/me/field-visits/${id}/checkout-corrections`, { method: "POST", token, body: data });
+}
+
+export async function reviseMyFieldVisitOutcome(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/me/field-visits/${id}/outcome`, { method: "PATCH", token, body: data });
+}
+
+export async function uploadMyFieldAttachment(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/me/field-visits/${id}/attachments`, { method: "POST", token, body: data });
+}
+
+export async function downloadFieldAttachment(token: string, visitId: string | number, attachmentId: string | number, fileName: string, manager = false, hr = false) {
+  const path = hr ? `/api/hr/field-visits/${visitId}/attachments/${attachmentId}/download` : manager ? `/api/manager/field-visits/${visitId}/attachments/${attachmentId}/download` : `/api/me/field-visits/${visitId}/attachments/${attachmentId}/download`;
+  return downloadAdminBlob(path, token, fileName);
+}
+
+export async function listManagerFieldCheckoutCorrections(token: string) {
+  const payload = await adminRequest<unknown>("/api/manager/field-visits/checkout-corrections", { token });
+  return normalizeList(payload);
+}
+
+export async function reviewManagerFieldCheckoutCorrection(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/manager/field-visits/checkout-corrections/${id}/review`, { method: "POST", token, body: data });
+}
+
+export async function assignManagerFieldPlan(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/manager/field-visits/plans/assign", { method: "POST", token, body: data });
+}
+
+export async function assignManagerFieldFollowUp(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/manager/field-visits/follow-ups/${id}/assign`, { method: "PATCH", token, body: data });
+}
+
 export async function getMyFieldVisit(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(`/api/me/field-visits/${id}`, {
     token,
@@ -19867,6 +19926,16 @@ export async function updateMyFieldVisitPlan(token: string, id: string | number,
     token,
     body: data,
   });
+}
+
+export async function suggestMyFieldPlanRoute(token: string, id: string | number) {
+  const payload = await adminRequest<unknown>(`/api/me/field-visits/plans/${id}/route`, { token });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function repeatMyFieldPlan(token: string, id: string | number, weeks: number) {
+  const payload = await adminRequest<unknown>(`/api/me/field-visits/plans/${id}/repeat-weekly`, { method: "POST", token, body: { weeks } });
+  return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function submitMyFieldVisitPlan(
