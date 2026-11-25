@@ -1,4 +1,5 @@
 "use client";
+import { AttendancePageHead } from "@/components/dashboard/attendance-ops-ui";
 
 import * as React from "react";
 import {
@@ -12,7 +13,6 @@ import {
 } from "@fluentui/react-components";
 import {
   ArrowClockwise20Regular,
-  PersonProhibited20Regular,
 } from "@fluentui/react-icons";
 import {
   listAttendanceExemptionCandidates,
@@ -171,22 +171,11 @@ export function AttendanceExemptionsClient() {
 
   return (
     <main className="flex w-full flex-col gap-5 px-4 py-5 sm:px-5">
-      <header className="flex items-start gap-3 border-b border-border pb-4">
-        <PersonProhibited20Regular
-          className="mt-0.5 size-6 shrink-0 text-primary"
-          aria-hidden
-        />
-        <div className="mr-auto min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            Attendance exemptions
-          </h1>
-          <p className="mt-0.5 max-w-3xl text-sm text-muted-foreground">
-            Exempt employees are never marked absent or late and receive no
-            attendance alerts. Days they punch show as Present; other days
-            show as Not Tracked. The exempt date must fall after the last
-            closed payroll period.
-          </p>
-        </div>
+      <AttendancePageHead
+        section="Attendance operations"
+        title="Exemptions"
+        description="Exempt employees are never marked absent or late and receive no attendance alerts. Days they punch show as Present; other days show as Not Tracked. The exempt date must fall after the last closed payroll period."
+        actions={
         <FluentButton
           aria-label="Refresh"
           title="Refresh"
@@ -201,7 +190,8 @@ export function AttendanceExemptionsClient() {
           onClick={() => void refresh()}
           disabled={loading || saving}
         />
-      </header>
+        }
+      />
 
       {message ? (
         <MessageBar intent="success">

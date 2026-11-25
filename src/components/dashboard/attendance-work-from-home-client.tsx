@@ -1,4 +1,5 @@
 "use client";
+import { AttendancePageHead } from "@/components/dashboard/attendance-ops-ui";
 
 import * as React from "react";
 import {
@@ -15,7 +16,6 @@ import {
   CalendarLtr20Regular,
   CheckmarkCircle20Regular,
   DismissCircle20Regular,
-  Home20Regular,
   MailInbox20Regular,
   Send20Regular,
 } from "@fluentui/react-icons";
@@ -302,21 +302,11 @@ export function AttendanceWorkFromHomeClient() {
 
   return (
     <main className="flex w-full flex-col gap-5 px-4 py-5 sm:px-5">
-      <header className="flex items-start gap-3 border-b border-border pb-4">
-        <Home20Regular
-          className="mt-0.5 size-6 shrink-0 text-primary"
-          aria-hidden
-        />
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            Work from home
-          </h1>
-          <p className="mt-0.5 max-w-3xl text-sm text-muted-foreground">
-            Request remote-work dates and track approval before recording
-            attendance away from the office.
-          </p>
-        </div>
-      </header>
+      <AttendancePageHead
+        section="Attendance"
+        title="Work from home"
+        description="Request remote-work dates and track approval before recording attendance away from the office."
+      />
 
       {message ? (
         <MessageBar intent="success">

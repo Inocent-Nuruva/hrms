@@ -64,6 +64,13 @@ import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { Input } from "@/components/ui/input"
 import { ResizableTable } from "@/components/ui/resizable-table"
+import {
+  AttendancePageHead,
+  AttendanceStatusBadge,
+  AttendanceStatusCounters,
+  buildStatusCounters,
+  normalizeStatusKey,
+} from "@/components/dashboard/attendance-ops-ui"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { TimeInput } from "@/components/ui/time-input"
@@ -2868,21 +2875,37 @@ export function ScheduleManagementView({ section }: { section: string }) {
   }
   const activeEnhancedListMeta = enhancedListMeta[activeSection]
 
-  const sectionTitleBlock = activeEnhancedListMeta ? (
-    <div className="flex min-w-0 items-center gap-3">
-      <div className="flex min-w-0 items-center gap-2">
-        <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">{activeEnhancedListMeta.title}</h1>
-        <ScheduleSectionGuide section={activeSection} />
-      </div>
-    </div>
-  ) : (
-    <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-        {config.moduleTitle}
-      </span>
-      <h1 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl">
-        {config.title}
-      </h1>
+
+  const [scheduleStatusFilter, setScheduleStatusFilter] = React.useState("")
+  React.useEffect(() => {
+    setScheduleStatusFilter("")
+  }, [activeSection])
+  const scheduleBaseRows = enhancedShiftList ? filteredManagementRows : rows
+  const readScheduleStatus = (row: AdminRecord) => readStringFromRecord(row, ["status"])
+  const scheduleCounters = buildStatusCounters(scheduleBaseRows, readScheduleStatus, { order: [] })
+  const scheduleTableRows = scheduleStatusFilter
+    ? scheduleBaseRows.filter((row) => normalizeStatusKey(readScheduleStatus(row)) === scheduleStatusFilter)
+    : scheduleBaseRows
+  const scheduleTableColumns = tableColumns.map((column) =>
+    column.key === "status" && !column.render
+      ? { ...column, render: (row: AdminRecord) => <AttendanceStatusBadge status={readScheduleStatus(row)} /> }
+      : column,
+  )
+  const pageHead = (
+    <div className="space-y-3">
+      <AttendancePageHead
+        section={config.moduleTitle}
+        title={activeEnhancedListMeta?.title ?? config.title}
+        description={config.description}
+        actions={activeEnhancedListMeta ? <ScheduleSectionGuide section={activeSection} /> : undefined}
+      />
+      {activeSection !== "shift-schedules" && scheduleCounters.length > 1 ? (
+        <AttendanceStatusCounters
+          items={scheduleCounters}
+          value={scheduleStatusFilter}
+          onChange={setScheduleStatusFilter}
+        />
+      ) : null}
     </div>
   )
 
@@ -2908,6 +2931,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
 
   return (
     <div className="mt-1.5 w-full min-w-0 max-w-none space-y-2">
+      {pageHead}
       {activeSection === "shift-schedules" ? (
         <ShiftWeeklyScheduler
           rows={rows}
@@ -2939,13 +2963,13 @@ export function ScheduleManagementView({ section }: { section: string }) {
       ) : (
       <ResizableTable
         title={config.title}
-        data={enhancedShiftList ? filteredManagementRows : rows}
-        columns={tableColumns}
+        data={scheduleTableRows}
+        columns={scheduleTableColumns}
         loading={loading}
         itemsPerPage={20}
         showExport={false}
         storageKey={`schedule-${activeSection}`}
-        toolbarStart={sectionTitleBlock}
+
         toolbarSummary={enhancedListSummary}
         toolbarActions={
           <>

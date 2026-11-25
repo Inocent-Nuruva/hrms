@@ -54,6 +54,18 @@ import {
 } from "@/components/ui/popover"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
+  AttendanceExportButton,
+  AttendancePageHead,
+  downloadAttendanceCsv,
+  AttendanceShiftTimeline,
+  AttendanceStatusBadge,
+  AttendanceStatusCounters,
+  attendanceStatusTone,
+  buildStatusCounters,
+  normalizeStatusKey,
+  prettifyStatus,
+} from "@/components/dashboard/attendance-ops-ui"
+import {
   cancelMyAttendanceCorrectionRequest,
   addMyAttendanceCorrectionDocument,
   clearAttendanceDailySummaryAdjustment,
@@ -67,6 +79,7 @@ import {
   listMyAttendanceCorrectionRequests,
   refreshAttendanceDailySummaries,
   listAttendanceDailySummariesPage,
+  getAttendanceDailySummaryStatusCounts,
   listAttendanceDevices,
   listAttendanceProcessingJobs,
   listAttendanceUnmatchedLogs,
@@ -1636,6 +1649,7 @@ function resolveVisibleColumns(rows: AdminRecord[], section: AttendanceActivityS
           "attendance_status",
           "check_in_time",
           "check_out_time",
+          "shift_timeline",
         ]
       : section === "processing-exceptions"
       ? [
@@ -2651,7 +2665,29 @@ function UnmatchedLogDetailsContent({
 
 function resolveTableCellValue(section: AttendanceActivitySectionKey, column: string, row: AdminRecord): React.ReactNode {
   if (section === "daily-summaries") {
+    if (column === "attendance_status") {
+      return <AttendanceStatusBadge status={resolveDailySummaryCellValue(column, row)} />
+    }
+    if (column === "shift_timeline") {
+      const timetable = readNestedRecord(row, ["timetable", "schedule", "shift"])
+      const date = String(resolveDailySummaryCellValue("attendance_date", row) ?? "")
+      const today = new Date()
+      const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`
+      return (
+        <AttendanceShiftTimeline
+          checkIn={resolveDailySummaryCellValue("check_in_time", row)}
+          checkOut={resolveDailySummaryCellValue("check_out_time", row)}
+          shiftStart={readFirstValue(timetable, ["start_time", "startTime", "expected_check_in_time", "expectedCheckInTime"])}
+          shiftEnd={readFirstValue(timetable, ["end_time", "endTime", "expected_check_out_time", "expectedCheckOutTime"])}
+          status={resolveDailySummaryCellValue("attendance_status", row)}
+          isToday={date.startsWith(todayKey)}
+        />
+      )
+    }
     return resolveDailySummaryCellValue(column, row)
+  }
+  if ((section === "processing-exceptions" || section === "recalculation-jobs") && column === "status") {
+    return <AttendanceStatusBadge status={readFirstValue(row, ["status"])} />
   }
   if (section === "recalculation-jobs" && column === "employee_name") {
     const employeeName = readStringFromRow(row, ["employee_name", "employeeName"])
@@ -2915,7 +2951,8 @@ function TableBlock({
         data={rows}
         columns={columns.map((c: string) => ({
           key: c,
-          label: prettifyLabel(c),
+          label: c === "shift_timeline" ? "Shift" : prettifyLabel(c),
+          sortable: c !== "shift_timeline",
           defaultWidth: 75,
           render: (row: AdminRecord) => resolveTableCellValue(section, c, row),
         }))}
@@ -3107,6 +3144,10 @@ export function AttendanceActivityView({ section }: { section: string }) {
   const [dailySummaryPageSize, setDailySummaryPageSize] = React.useState(DEFAULT_DAILY_SUMMARY_PAGE_SIZE)
   const [dailySummaryTotal, setDailySummaryTotal] = React.useState<number | null>(null)
   const [dailySummaryTotalPages, setDailySummaryTotalPages] = React.useState<number | null>(null)
+  const [dailySummaryStatusCounts, setDailySummaryStatusCounts] = React.useState<{
+    total: number
+    counts: Record<string, number>
+  } | null>(null)
   const [singleRecord, setSingleRecord] = React.useState<AdminRecord | null>(null)
   const [detailsOpen, setDetailsOpen] = React.useState(false)
   const [detailsLoading, setDetailsLoading] = React.useState(false)
@@ -3594,8 +3635,13 @@ export function AttendanceActivityView({ section }: { section: string }) {
           }
           resultTotal = resultRows.length
           resultTotalPages = 1
+          setDailySummaryStatusCounts(null)
         } else {
-          const result = await listAttendanceDailySummariesPage(token, listParams)
+          const [result, statusCounts] = await Promise.all([
+            listAttendanceDailySummariesPage(token, listParams),
+            getAttendanceDailySummaryStatusCounts(token, listParams).catch(() => null),
+          ])
+          setDailySummaryStatusCounts(statusCounts)
           resultRows = result.rows
           resultTotal = result.total
           resultTotalPages = result.totalPages
@@ -4031,6 +4077,82 @@ export function AttendanceActivityView({ section }: { section: string }) {
     rows,
   ])
 
+  const isOpsSection =
+    activeSection === "daily-summaries" ||
+    activeSection === "processing-exceptions" ||
+    activeSection === "recalculation-jobs" ||
+    activeSection === "unmatched-logs"
+  const [opsStatusFilter, setOpsStatusFilter] = React.useState("")
+  React.useEffect(() => {
+    setOpsStatusFilter("")
+  }, [activeSection])
+  const readOpsStatus = React.useCallback(
+    (row: AdminRecord) =>
+      activeSection === "daily-summaries"
+        ? resolveDailySummaryCellValue("attendance_status", row)
+        : readFirstValue(row, ["status"]),
+    [activeSection],
+  )
+  const opsBaseRows = activeSection === "daily-summaries" ? displayedDailySummaryRows : rows
+  const opsCounters = React.useMemo(
+    () =>
+      activeSection === "unmatched-logs"
+        ? []
+        : activeSection === "daily-summaries" && dailySummaryStatusCounts
+          ? [
+              { key: "", label: "All", count: dailySummaryStatusCounts.total },
+              ...[
+                "PRESENT",
+                "LATE",
+                "EARLY_DEPARTURE",
+                "ABSENT",
+                "ON_LEAVE",
+                ...Object.keys(dailySummaryStatusCounts.counts)
+                  .map(normalizeStatusKey)
+                  .filter((key) => !["PRESENT", "LATE", "EARLY_DEPARTURE", "ABSENT", "ON_LEAVE"].includes(key))
+                  .sort(),
+              ].map((key) => ({
+                key,
+                label: prettifyStatus(key),
+                count: Object.entries(dailySummaryStatusCounts.counts)
+                  .filter(([status]) => normalizeStatusKey(status) === key)
+                  .reduce((sum, [, count]) => sum + count, 0),
+                tone: attendanceStatusTone(key),
+              })),
+            ]
+        : buildStatusCounters(opsBaseRows, readOpsStatus, {
+            order:
+              activeSection === "processing-exceptions"
+                ? ["OPEN", "RESOLVED", "IGNORED"]
+                : activeSection === "recalculation-jobs"
+                  ? ["PENDING", "RUNNING", "COMPLETED", "FAILED"]
+                  : ["PRESENT", "LATE", "EARLY_DEPARTURE", "ABSENT", "ON_LEAVE"],
+          }),
+    [activeSection, dailySummaryStatusCounts, opsBaseRows, readOpsStatus],
+  )
+  const usesServerStatusFilter = activeSection === "daily-summaries" && dailySummaryStatusCounts != null
+  const opsStatusValue = usesServerStatusFilter
+    ? normalizeStatusKey(appliedDailySummaryFilters.status)
+    : opsStatusFilter
+  const changeOpsStatus = (key: string) => {
+    if (!usesServerStatusFilter) {
+      setOpsStatusFilter(key)
+      return
+    }
+    const raw =
+      Object.keys(dailySummaryStatusCounts?.counts ?? {}).find((status) => normalizeStatusKey(status) === key) ?? key
+    setDailySummaryFilters((current) => ({ ...current, status: key ? raw : "" }))
+    setAppliedDailySummaryFilters((current) => ({ ...current, status: key ? raw : "" }))
+    setDailySummaryPage(1)
+  }
+  const opsRows = React.useMemo(
+    () =>
+      opsStatusFilter && !usesServerStatusFilter
+        ? opsBaseRows.filter((row) => normalizeStatusKey(readOpsStatus(row)) === opsStatusFilter)
+        : opsBaseRows,
+    [opsBaseRows, opsStatusFilter, readOpsStatus, usesServerStatusFilter],
+  )
+
   const runPendingJobs = async () => {
     const token = readStoredToken()
     if (!token) {
@@ -4403,6 +4525,9 @@ export function AttendanceActivityView({ section }: { section: string }) {
           ? Number(appliedDailySummaryFilters.branch_id)
           : undefined,
         status: appliedDailySummaryFilters.status || undefined,
+        include_all_employees:
+          Boolean(appliedDailySummaryFilters.from_date) &&
+          appliedDailySummaryFilters.from_date === appliedDailySummaryFilters.to_date,
         format,
       })
 
@@ -4938,6 +5063,105 @@ export function AttendanceActivityView({ section }: { section: string }) {
             {processingExceptionFilterPopover}
             {refreshButton}
           </div>
+        </div>
+      ) : null}
+
+      {isOpsSection ? (
+        <div className="space-y-3">
+          <AttendancePageHead
+            section={config.groupTitle}
+            title={config.title}
+            description={config.description}
+            actions={
+              <>
+                {activeSection === "daily-summaries" ? (
+                  <DatePickerPresets
+                    placeholder="Attendance date"
+                    className="h-9 min-w-[11rem] text-[13px]"
+                    value={
+                      appliedDailySummaryFilters.from_date === appliedDailySummaryFilters.to_date
+                        ? appliedDailySummaryFilters.from_date || ""
+                        : ""
+                    }
+                    onChange={(value) => {
+                      if (!value) return
+                      setDailySummaryFilters((current) => ({ ...current, from_date: value, to_date: value }))
+                      setAppliedDailySummaryFilters((current) => ({ ...current, from_date: value, to_date: value }))
+                      setDailySummaryPage(1)
+                    }}
+                  />
+                ) : null}
+                {activeSection === "daily-summaries" ? (
+                  <Popover>
+                    <PopoverTrigger
+                      disabled={attendanceExporting}
+                      className="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-primary bg-primary px-3 text-[13px] font-semibold text-primary-foreground transition hover:brightness-95 disabled:opacity-60"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+                      </svg>
+                      {attendanceExporting ? "Preparing…" : "Export"}
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-60 p-1.5">
+                      <p className="px-2 pt-1 pb-1.5 text-xs text-muted-foreground">
+                        {appliedDailySummaryFilters.from_date &&
+                        appliedDailySummaryFilters.from_date === appliedDailySummaryFilters.to_date
+                          ? "Full day, every active employee"
+                          : "All rows in the selected range"}
+                      </p>
+                      {([
+                        ["pdf", "PDF"],
+                        ["xlsx", "Excel"],
+                        ["csv", "CSV"],
+                      ] as const).map(([format, label]) => (
+                        <button
+                          key={format}
+                          type="button"
+                          disabled={attendanceExporting}
+                          onClick={() => void exportDailySummaryReport(format)}
+                          className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm font-medium text-foreground hover:bg-muted disabled:opacity-60"
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
+                ) : (
+                <AttendanceExportButton
+                  count={opsRows.length}
+                  disabled={loading}
+                  onExport={() => {
+                    const keys = resolveVisibleColumns(opsRows, activeSection).filter((key) => key !== "shift_timeline")
+                    downloadAttendanceCsv(
+                      `${activeSection}-${new Date().toISOString().slice(0, 10)}`,
+                      keys.map((key) => ({
+                        label: prettifyLabel(key),
+                        value: (row: AdminRecord) => {
+                          const value =
+                            row[key]
+                          return typeof value === "string" || typeof value === "number" ? value : stringifyValue(value)
+                        },
+                      })),
+                      opsRows,
+                    )
+                  }}
+                />
+                )}
+              </>
+            }
+          />
+          {opsCounters.length > 1 ? (
+            <AttendanceStatusCounters
+              items={opsCounters}
+              value={opsStatusValue}
+              onChange={changeOpsStatus}
+              note={
+                activeSection === "daily-summaries" && !usesServerStatusFilter && (dailySummaryTotalPages ?? 1) > 1
+                  ? "Counts cover the rows loaded on this page."
+                  : undefined
+              }
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -5812,7 +6036,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
               </div>
             ) : null}
             <TableBlock
-              rows={displayedDailySummaryRows}
+              rows={opsRows}
               section={activeSection}
               loading={loading}
               itemsPerPage={dailySummaryPageSize}
@@ -5831,7 +6055,6 @@ export function AttendanceActivityView({ section }: { section: string }) {
               onRowSelect={(_, row) => {
                 void openRecordDetails(row)
               }}
-              toolbarStart={sectionTitleBlock}
               toolbarActions={
                 <>
                   <FluentSearchBox
@@ -5878,11 +6101,10 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
         {activeSection === "processing-exceptions" ? (
           <TableBlock
-            rows={rows}
+            rows={opsRows}
             section={activeSection}
             loading={loading}
             onRowSelect={(_, row) => void openRecordDetails(row)}
-            toolbarStart={sectionTitleBlock}
             toolbarActions={
               <>
                 {processingExceptionFilterPopover}
@@ -5897,7 +6119,6 @@ export function AttendanceActivityView({ section }: { section: string }) {
             rows={rows}
             section={activeSection}
             loading={loading}
-            toolbarStart={sectionTitleBlock}
             toolbarActions={refreshButton}
             onRowSelect={(_, row) => {
               void openRecordDetails(row)
@@ -5908,13 +6129,12 @@ export function AttendanceActivityView({ section }: { section: string }) {
         {activeSection === "recalculation-jobs" ? (
           <div className="mt-[9px]">
             <TableBlock
-              rows={rows}
+              rows={opsRows}
               section={activeSection}
               loading={loading}
               onRowSelect={(_, row) => {
                 void openRecordDetails(row)
               }}
-              toolbarStart={sectionTitleBlock}
               toolbarActions={
                 <>
                   <button
