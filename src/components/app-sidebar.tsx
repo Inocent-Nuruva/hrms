@@ -779,36 +779,6 @@ function filterAdminSearchByPermissions(
   )
 }
 
-export type DashboardNavItem = SidebarNavItem
-
-/**
- * The permission-filtered sidebar menu, for frames other than AppSidebar
- * (Theme 2). Same rules as AppSidebar uses.
- */
-export function resolveDashboardNavItems({
-  scope = null,
-  permissionLabels,
-  accessMode,
-  roleNames = [],
-  homeDashboardKind,
-}: {
-  scope?: AuthScope | null
-  permissionLabels: string[]
-  accessMode: AppSidebarAccessMode
-  roleNames?: string[]
-  homeDashboardKind?: HomeDashboardKind
-}): DashboardNavItem[] {
-  const normalizedPermissions = normalizePermissionLabels(permissionLabels)
-  return filterNavByPermissions(
-    scope === "platform" ? platformData.navMain : adminData.navMain,
-    normalizedPermissions,
-    accessMode,
-    roleNames,
-    scope,
-    homeDashboardKind,
-  )
-}
-
 export function resolveDashboardSearchItems({
   scope,
   permissionLabels,

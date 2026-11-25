@@ -7,8 +7,6 @@ import { ScheduleManagementClient } from "@/components/dashboard/schedule-manage
 import { AttendanceWorkFromHomeClient } from "@/components/dashboard/attendance-work-from-home-client"
 import { AccessControlActivityClient } from "@/components/dashboard/access-control-activity-client"
 import { AttendanceExemptionsClient } from "@/components/dashboard/attendance-exemptions-client"
-import DailySummariesV2 from "@/components/attendance-v2/daily-summaries-v2"
-import { getUiTheme } from "@/components/ui-theme/server"
 
 const ALLOWED_VIEWS = new Set([
   "settings",
@@ -153,10 +151,6 @@ export default async function AttendanceViewPage({ params, searchParams }: Atten
 
   if (ACTIVITY_ATTENDANCE_VIEWS.has(normalized)) {
     const tab = sp.tab || normalized;
-    // Theme 2 pages; tabs not converted yet keep their Theme 1 view.
-    if (tab === "daily-summaries" && (await getUiTheme()) === "v2") {
-      return <DailySummariesV2 />
-    }
     return <AttendanceActivityClient section={tab} />
   }
 

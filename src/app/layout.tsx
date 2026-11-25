@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Comfortaa, Fredoka, Manrope } from "next/font/google";
+import { Comfortaa, Fredoka } from "next/font/google";
 import Script from "next/script";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -9,7 +9,6 @@ import { PwaProvider } from "@/components/pwa-provider";
 import { AppFluentThemeProvider } from "@/components/fluent-theme-provider";
 import { AppTextScale } from "@/components/app-text-scale";
 import "./globals.css";
-import "@/components/theme-v2/theme-v2.css";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
 import { FluentDialogService } from "@/components/ui/fluent-dialog-service";
@@ -21,12 +20,6 @@ const comfortaa = Comfortaa({
 const fredoka = Fredoka({
   variable: "--font-fredoka",
   subsets: ["latin"],
-});
-// Theme 2 font; only used by v2- classes.
-const manrope = Manrope({
-  variable: "--font-manrope",
-  subsets: ["latin"],
-  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -73,13 +66,11 @@ export default function RootLayout({
         "antialiased",
         comfortaa.variable,
         fredoka.variable,
-        manrope.variable,
         comfortaa.className,
       )}
     >
       <body className="flex min-h-full flex-col">
         <Script src="/hrms-accent-bootstrap.js" strategy="beforeInteractive" />
-        <Script src="/hrms-ui-theme-bootstrap.js" strategy="beforeInteractive" />
         <ThemeProvider>
           <AppFluentThemeProvider>
             <PwaProvider />

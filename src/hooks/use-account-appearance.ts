@@ -6,7 +6,7 @@ import { adminRequest } from "@/lib/admin-api"
 import { getSessionSnapshot, getServerSessionSnapshot, subscribeSession } from "@/lib/auth-session-store"
 import { toast } from "@/components/ui/fluent-toast-store"
 
-type Appearance = { theme?: "light" | "dark" | "system"; accent?: string; employeeBackground?: "aurora" | "geometric" | "glow" | "plain" | "original"; managerBackground?: "aurora" | "geometric" | "glow"; uiDesign?: "v1" | "v2" }
+type Appearance = { theme?: "light" | "dark" | "system"; accent?: string; employeeBackground?: "aurora" | "geometric" | "glow" | "plain" | "original"; managerBackground?: "aurora" | "geometric" | "glow" }
 
 function readCache(key: string) {
   try { return localStorage.getItem(key) } catch { return null }
@@ -39,7 +39,6 @@ export function useAccountAppearance<K extends keyof Appearance>(
       typeof value === "string" && (field === "theme"
         ? ["light", "dark", "system"].includes(value)
         : field === "accent" ? /^#[0-9a-fA-F]{6}$/.test(value)
-        : field === "uiDesign" ? ["v1", "v2"].includes(value)
         : (field === "managerBackground" ? ["aurora", "geometric", "glow"] : ["aurora", "geometric", "glow", "plain", "original"]).includes(value))
     const cached = readCache(cacheKey)
     applyRef.current(valid(cached) ? cached : fallback)
