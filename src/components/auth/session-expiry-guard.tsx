@@ -32,7 +32,7 @@ const ACCESS_TOKEN_REFRESH_WINDOW_MS = env.NEXT_PUBLIC_TOKEN_REFRESH_WINDOW_MS;
 export function SessionExpiryGuard() {
   const refreshInFlightRef = React.useRef<Promise<void> | null>(null);
   const accessSyncInFlightRef = React.useRef<Promise<
-    "ok" | "unauthorized" | "failed"
+    "ok" | "unauthorized" | "password_change" | "failed"
   > | null>(null);
   const lastAccessSyncAtRef = React.useRef(0);
 
@@ -82,6 +82,11 @@ export function SessionExpiryGuard() {
               errorObject instanceof ApiError &&
               errorObject.statusCode === 401
             ) {
+              // The account is valid but has a temporary password: the
+              // backend only answers the change-password endpoints.
+              if (/temporary password/i.test(errorObject.message)) {
+                return "password_change" as const;
+              }
               return "unauthorized" as const;
             }
             // A temporary network outage must not make the authenticated shell
@@ -192,10 +197,24 @@ export function SessionExpiryGuard() {
       }
 
       if ((readJwtExpiry(activeAccessToken) ?? Infinity) <= Date.now() && refreshToken) return;
+      // A user with a temporary password may only call a few endpoints until
+      // they set a new one. Never sign them out from the page where they do
+      // that; token refresh above still keeps the session alive.
+      if (pathname === ROUTES.changePassword) {
+        return;
+      }
+
       const accessSyncResult = await syncAccessContext(
         activeAccessToken,
         forceAccessSync,
       );
+      if (accessSyncResult === "password_change") {
+        // Keep the user signed in and send them to set a new password.
+        window.location.replace(
+          `${ROUTES.changePassword}?required=1&next=${encodeURIComponent(pathname)}`,
+        );
+        return;
+      }
       if (accessSyncResult === "unauthorized") {
         expireSession();
       }

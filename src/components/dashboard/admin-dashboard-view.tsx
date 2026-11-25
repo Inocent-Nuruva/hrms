@@ -614,6 +614,15 @@ export default function AdminDashboardView({
           }));
         }
       } catch (errorObject) {
+        // A temporary password is not an expired session: keep the user signed
+        // in and show the "change your temporary password" screen.
+        if (
+          isUnauthorizedError(errorObject) &&
+          /temporary password/i.test(String((errorObject as { message?: unknown })?.message ?? ""))
+        ) {
+          window.dispatchEvent(new Event(FORCE_PASSWORD_RESET_EVENT));
+          return;
+        }
         if (retryOnUnauthorized && isUnauthorizedError(errorObject)) {
           const refreshedToken = await attemptRefreshToken();
           if (refreshedToken) {
