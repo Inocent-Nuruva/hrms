@@ -1,9 +1,9 @@
 import { test, expect, type Page } from "@playwright/test"
 import { DASHBOARD_AUTH_COOKIE } from "../src/lib/dashboard-permissions"
 
-async function workspace(page: Page, additionalPermissions: string[] = [], reviewerOnly = false) {
+async function workspace(page: Page, additionalPermissions: string[] = [], reviewerOnly = false, companyAdmin = false) {
   const permissions = reviewerOnly ? ["data_scope:team", "probation_reviews:manager-review"] : ["data_scope:company","company_dashboard:read","probation_policies:read","probation_policies:create","probation_cases:read","probation_reviews:manager-review","probation_letters:generate",...additionalPermissions]
-  const user = { id: 231, fullName:"Test reviewer", email:"reviewer@example.test", roles:reviewerOnly ? ["EMPLOYEE"] : ["HR"], permissions, scope:"company", userType:"COMPANY_USER", companyId:10, companyMembershipId:71, dashboardType:reviewerOnly ? "employee" : "admin", accessContextResolved:true }
+  const user = { id: 231, fullName:"Test reviewer", email:"reviewer@example.test", roles:reviewerOnly ? ["EMPLOYEE"] : [companyAdmin ? "COMPANY_ADMIN" : "HR"], permissions, scope:"company", userType:"COMPANY_USER", companyId:10, companyMembershipId:71, dashboardType:reviewerOnly ? "employee" : "admin", accessContextResolved:true }
   const token = `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({...user,sub:user.id,exp:Math.floor(Date.now()/1000)+3600})).toString("base64url")}.test`
   await page.context().addCookies([{name:DASHBOARD_AUTH_COOKIE,value:"1",url:test.info().project.use.baseURL ?? "http://localhost:3000"}])
   await page.addInitScript(({user,token})=>{
@@ -45,7 +45,7 @@ async function workspace(page: Page, additionalPermissions: string[] = [], revie
 for (const [name,width,height] of [["desktop",1366,900],["mobile",390,844]] as const) {
   test(`opens Users from Access Control and by bookmark on ${name}`,async ({page})=>{
     await page.setViewportSize({width,height})
-    await workspace(page,["roles:read","users:read"])
+    await workspace(page,["roles:read","users:read"],false,true)
     await page.goto("/dashboard/access-control/roles")
     await page.getByRole("tab",{name:"Users",exact:true}).click()
     await expect(page).toHaveURL(/\/dashboard\/users$/)
