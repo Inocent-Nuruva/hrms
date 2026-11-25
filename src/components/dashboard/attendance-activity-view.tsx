@@ -78,7 +78,8 @@ import {
   getMyAttendanceCorrectionRequest,
   getMyAttendanceSchedule,
   getMyAttendanceToday,
-  listAttendanceProcessingExceptions,
+  listAttendanceProcessingExceptionsPage,
+  getAttendanceProcessingExceptionStatusCounts,
   listMyAttendanceCorrectionRequests,
   refreshAttendanceDailySummaries,
   listAttendanceDailySummariesPage,
@@ -1161,16 +1162,6 @@ const ATTENDANCE_EMPLOYEE_NAME_KEYS = [
   "name",
 ]
 
-const ATTENDANCE_DEVICE_NAME_KEYS = [
-  "device_name",
-  "deviceName",
-  "terminal_name",
-  "terminalName",
-  "name",
-]
-
-const ATTENDANCE_DEVICE_ID_KEYS = ["device_id", "deviceId", "deviceID", "device"]
-
 function collectEmployeeIdentityIds(record: AdminRecord | null | undefined) {
   const ids = new Set<number>()
   if (!record) {
@@ -1225,72 +1216,7 @@ function readEmployeeIdentityLabel(row: AdminRecord) {
   return employeeId === null ? "—" : `Employee ID ${employeeId}`
 }
 
-function readDeviceIdentityLabel(row: AdminRecord) {
-  const nestedDevice = readNestedRecord(row, ["device", "attendance_device", "attendanceDevice", "terminal"])
-  const name =
-    readFirstValue(row, ATTENDANCE_DEVICE_NAME_KEYS) ??
-    readFirstValue(nestedDevice, ATTENDANCE_DEVICE_NAME_KEYS)
-  if (name) {
-    return name
-  }
-  const id =
-    readNumberFromRow(row, ATTENDANCE_DEVICE_ID_KEYS) ??
-    readNumberFromRow(nestedDevice ?? {}, ATTENDANCE_DEVICE_ID_KEYS)
-  return id === null ? "—" : `Device ${id}`
-}
 
-function filterProcessingExceptionRows(rows: AdminRecord[], filters: Record<string, string>) {
-  const fromDate = filters.from_date.trim()
-  const toDate = filters.to_date.trim()
-  const employeeId = filters.employee_id.trim()
-  const status = filters.status.trim().toUpperCase()
-  const exceptionType = filters.exception_type.trim().toUpperCase()
-  const search = filters.search.trim().toLowerCase()
-
-  return rows.filter((row) => {
-    const rowDate = String(
-      readFirstValue(row, ["attendance_date", "attendanceDate", "date", "created_at", "createdAt"]) ?? ""
-    ).slice(0, 10)
-    if (fromDate && rowDate && rowDate < fromDate) return false
-    if (toDate && rowDate && rowDate > toDate) return false
-
-    if (employeeId) {
-      const ids = collectEmployeeIdentityIds(row)
-      if (![...ids].some((id) => String(id) === employeeId)) {
-        return false
-      }
-    }
-
-    if (status) {
-      const rowStatus = String(readFirstValue(row, ["status"]) ?? "").trim().toUpperCase()
-      if (rowStatus !== status) return false
-    }
-
-    if (exceptionType) {
-      const rowType = String(readFirstValue(row, ["exception_type", "exceptionType", "type"]) ?? "")
-        .trim()
-        .toUpperCase()
-      if (rowType !== exceptionType) return false
-    }
-
-    if (search) {
-      const haystack = [
-        readEmployeeIdentityLabel(row),
-        readDeviceIdentityLabel(row),
-        readFirstValue(row, ATTENDANCE_EMPLOYEE_NO_KEYS),
-        readFirstValue(row, ATTENDANCE_EMPLOYEE_ID_KEYS),
-        readFirstValue(row, ["exception_type", "exceptionType", "type"]),
-        readFirstValue(row, ["status"]),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-      if (!haystack.includes(search)) return false
-    }
-
-    return true
-  })
-}
 
 function readWithFallback(
   record: AdminRecord | null | undefined,
@@ -3200,6 +3126,13 @@ export function AttendanceActivityView({ section }: { section: string }) {
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [dailySummaryRows, setDailySummaryRows] = React.useState<AdminRecord[]>([])
   const [dailySummaryPage, setDailySummaryPage] = React.useState(1)
+  const [exceptionPage, setExceptionPage] = React.useState(1)
+  const [exceptionTotal, setExceptionTotal] = React.useState<number | null>(null)
+  const [exceptionTotalPages, setExceptionTotalPages] = React.useState<number | null>(null)
+  const [exceptionStatusCounts, setExceptionStatusCounts] = React.useState<{
+    total: number
+    counts: Record<string, number>
+  } | null>(null)
   const [dailySummaryPageSize, setDailySummaryPageSize] = React.useState(DEFAULT_DAILY_SUMMARY_PAGE_SIZE)
   const [dailySummaryTotal, setDailySummaryTotal] = React.useState<number | null>(null)
   const [dailySummaryTotalPages, setDailySummaryTotalPages] = React.useState<number | null>(null)
@@ -3391,6 +3324,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
   const applyProcessingExceptionDraftFilters = React.useCallback(() => {
     setAppliedProcessingExceptionFilters({ ...processingExceptionFilters })
+    setExceptionPage(1)
     setMessage(null)
     setError(null)
     setProcessingExceptionFiltersOpen(false)
@@ -3409,6 +3343,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
     }
     setProcessingExceptionFilters(resetFilters)
     setAppliedProcessingExceptionFilters(resetFilters)
+    setExceptionPage(1)
     setError(null)
     setMessage(null)
     setProcessingExceptionFiltersOpen(false)
@@ -3777,47 +3712,39 @@ export function AttendanceActivityView({ section }: { section: string }) {
           ? Number(appliedProcessingExceptionFilters.employee_id)
           : undefined
         const exceptionLimit = Number(appliedProcessingExceptionFilters.limit)
-        const baseExceptionParams = {
-          page: 1,
+        // One page from the server with every filter applied there (dates,
+        // search, status, type). Loading every page and filtering in the
+        // browser made the page wait for thousands of rows.
+        const serverExceptionParams = {
+          page: exceptionPage,
           limit:
             Number.isFinite(exceptionLimit) && exceptionLimit > 0
               ? exceptionLimit
               : DEFAULT_PROCESSING_EXCEPTION_PAGE_SIZE,
           sortBy: "created_at",
           sortOrder: "DESC",
-        } as const
-        const serverExceptionParams = {
-          ...baseExceptionParams,
           employee_id:
             exceptionEmployeeId && Number.isFinite(exceptionEmployeeId)
               ? exceptionEmployeeId
               : undefined,
+          from_date: appliedProcessingExceptionFilters.from_date || undefined,
+          to_date: appliedProcessingExceptionFilters.to_date || undefined,
+          search: appliedProcessingExceptionFilters.search.trim() || undefined,
           status: appliedProcessingExceptionFilters.status || undefined,
           exception_type: appliedProcessingExceptionFilters.exception_type || undefined,
-        }
-        let result
-        try {
-          result = await listAttendanceProcessingExceptions(token, serverExceptionParams)
-        } catch (errorObject) {
-          const hasServerFilters = Boolean(
-            serverExceptionParams.employee_id ||
-              serverExceptionParams.status ||
-              serverExceptionParams.exception_type
-          )
-          if (!hasServerFilters) {
-            throw errorObject
-          }
-          result = await listAttendanceProcessingExceptions(token, baseExceptionParams)
-        }
-        const enrichedRows = enrichRowsWithReadableNames(
+        } as const
+        const [result, statusCounts] = await Promise.all([
+          listAttendanceProcessingExceptionsPage(token, serverExceptionParams),
+          getAttendanceProcessingExceptionStatusCounts(token, serverExceptionParams).catch(() => null),
+        ])
+        const filteredRows = enrichRowsWithReadableNames(
           result.rows,
           branchesRef.current,
           employeesRef.current
         )
-        const filteredRows = filterProcessingExceptionRows(
-          enrichedRows,
-          appliedProcessingExceptionFilters
-        )
+        setExceptionTotal(result.total)
+        setExceptionTotalPages(result.totalPages)
+        setExceptionStatusCounts(statusCounts)
         setDailySummaryRows([])
         setDailySummaryTotal(null)
         setDailySummaryTotalPages(null)
@@ -3975,6 +3902,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
     dailySummaryPage,
     dailySummaryPageSize,
     debouncedRecordSearch,
+    exceptionPage,
     hasAppliedDailySummaryFilters,
     historyFilters,
     user?.companyName,
@@ -4157,6 +4085,16 @@ export function AttendanceActivityView({ section }: { section: string }) {
     () =>
       activeSection === "unmatched-logs"
         ? []
+        : activeSection === "processing-exceptions" && exceptionStatusCounts
+          ? [
+              { key: "", label: "All", count: exceptionStatusCounts.total },
+              ...["OPEN", "RESOLVED", "IGNORED"].map((key) => ({
+                key,
+                label: prettifyStatus(key),
+                count: exceptionStatusCounts.counts[key] ?? 0,
+                tone: attendanceStatusTone(key),
+              })),
+            ]
         : activeSection === "daily-summaries" && dailySummaryStatusCounts
           ? [
               { key: "", label: "All", count: dailySummaryStatusCounts.total },
@@ -4189,13 +4127,23 @@ export function AttendanceActivityView({ section }: { section: string }) {
           }),
     [activeSection, dailySummaryStatusCounts, opsBaseRows, readOpsStatus],
   )
-  const usesServerStatusFilter = activeSection === "daily-summaries" && dailySummaryStatusCounts != null
-  const opsStatusValue = usesServerStatusFilter
-    ? normalizeStatusKey(appliedDailySummaryFilters.status)
-    : opsStatusFilter
+  const usesServerStatusFilter =
+    (activeSection === "daily-summaries" && dailySummaryStatusCounts != null) ||
+    (activeSection === "processing-exceptions" && exceptionStatusCounts != null)
+  const opsStatusValue = !usesServerStatusFilter
+    ? opsStatusFilter
+    : activeSection === "processing-exceptions"
+      ? normalizeStatusKey(appliedProcessingExceptionFilters.status)
+      : normalizeStatusKey(appliedDailySummaryFilters.status)
   const changeOpsStatus = (key: string) => {
     if (!usesServerStatusFilter) {
       setOpsStatusFilter(key)
+      return
+    }
+    if (activeSection === "processing-exceptions") {
+      setProcessingExceptionFilters((current) => ({ ...current, status: key }))
+      setAppliedProcessingExceptionFilters((current) => ({ ...current, status: key }))
+      setExceptionPage(1)
       return
     }
     const raw =
@@ -5130,7 +5078,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
           <AttendancePageHead
             section={config.groupTitle}
             title={config.title}
-            description={config.description}
+            description={activeSection === "daily-summaries" ? undefined : config.description}
             actions={
               <>
                 {activeSection === "daily-summaries" ? (
@@ -5150,42 +5098,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                     }}
                   />
                 ) : null}
-                {activeSection === "daily-summaries" ? (
-                  <Popover>
-                    <PopoverTrigger
-                      disabled={attendanceExporting}
-                      className="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-primary bg-primary px-3 text-[13px] font-semibold text-primary-foreground transition hover:brightness-95 disabled:opacity-60"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
-                      </svg>
-                      {attendanceExporting ? "Preparing…" : "Export"}
-                    </PopoverTrigger>
-                    <PopoverContent align="end" className="w-60 p-1.5">
-                      <p className="px-2 pt-1 pb-1.5 text-xs text-muted-foreground">
-                        {appliedDailySummaryFilters.from_date &&
-                        appliedDailySummaryFilters.from_date === appliedDailySummaryFilters.to_date
-                          ? "Full day, every active employee"
-                          : "All rows in the selected range"}
-                      </p>
-                      {([
-                        ["pdf", "PDF"],
-                        ["xlsx", "Excel"],
-                        ["csv", "CSV"],
-                      ] as const).map(([format, label]) => (
-                        <button
-                          key={format}
-                          type="button"
-                          disabled={attendanceExporting}
-                          onClick={() => void exportDailySummaryReport(format)}
-                          className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm font-medium text-foreground hover:bg-muted disabled:opacity-60"
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </PopoverContent>
-                  </Popover>
-                ) : (
+                {activeSection === "daily-summaries" ? null : (
                 <AttendanceExportButton
                   count={opsRows.length}
                   disabled={loading}
@@ -6163,6 +6076,11 @@ export function AttendanceActivityView({ section }: { section: string }) {
             rows={opsRows}
             section={activeSection}
             loading={loading}
+            itemsPerPage={Number(appliedProcessingExceptionFilters.limit) || DEFAULT_PROCESSING_EXCEPTION_PAGE_SIZE}
+            page={exceptionPage}
+            totalPages={exceptionTotalPages}
+            totalItems={exceptionTotal}
+            onPageChange={setExceptionPage}
             onRowSelect={(_, row) => void openRecordDetails(row)}
             toolbarActions={
               <>

@@ -6126,6 +6126,41 @@ export async function listAttendanceProcessingExceptions(
   );
 }
 
+/** One page of processing exceptions (the list page pages on the server). */
+export async function listAttendanceProcessingExceptionsPage(
+  token: string,
+  params: AttendanceQueryParams = {},
+): Promise<PaginatedUsersResult> {
+  return listAttendanceCollectionPage(
+    "/api/attendance/processing/exceptions",
+    token,
+    params,
+  );
+}
+
+/** Exceptions per status for the same filters, ignoring status and paging. */
+export async function getAttendanceProcessingExceptionStatusCounts(
+  token: string,
+  params: AttendanceQueryParams = {},
+): Promise<{ total: number; counts: Record<string, number> }> {
+  const { status: _status, page: _page, limit: _limit, ...rest } = params;
+  void _status;
+  void _page;
+  void _limit;
+  const payload = await adminRequest<unknown>(
+    `/api/attendance/processing/exceptions/status-counts${buildAttendanceQuery(rest)}`,
+    { token },
+  );
+  const body =
+    payload && typeof payload === "object" && "data" in payload && (payload as { data: unknown }).data && typeof (payload as { data: unknown }).data === "object"
+      ? (payload as { data: Record<string, unknown> }).data
+      : ((payload as Record<string, unknown> | null) ?? {});
+  const rawCounts = body.counts && typeof body.counts === "object" ? (body.counts as Record<string, unknown>) : {};
+  const counts: Record<string, number> = {};
+  for (const [key, value] of Object.entries(rawCounts)) counts[key] = Number(value) || 0;
+  return { total: Number(body.total) || 0, counts };
+}
+
 export async function updateAttendanceProcessingException(
   token: string,
   id: string | number,
@@ -19821,6 +19856,14 @@ export async function listMyFieldVisitPlans(token: string) {
 export async function createMyFieldVisitPlan(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/me/field-visits/plans", {
     method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function updateMyFieldVisitPlan(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/me/field-visits/plans/${id}`, {
+    method: "PATCH",
     token,
     body: data,
   });
