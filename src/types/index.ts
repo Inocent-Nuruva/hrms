@@ -5,6 +5,8 @@ export type AuthScope = "platform" | "company"
 export interface AuthUser {
   id: string | number;
   employeeId?: string;
+  /** Whether the active company membership is linked to an employee record. */
+  employeeLinked?: boolean;
   fullName: string;
   email: string;
   role?: UserRole | string;

@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AppSidebar, resolveDashboardSearchItems } from "./app-sidebar"
 import allPermissions from "@/lib/permission-catalogue.json"
+import { isSelfServiceDashboardRoute } from "@/lib/dashboard-nav"
 
 type Item = { title: string; url?: string; items?: Item[] }
 const capture = vi.hoisted(() => {
@@ -66,6 +67,16 @@ async function topLevelTitles(role: string, permissions: string[], accessMode: "
 }
 
 describe("sidebar module names are role-independent", () => {
+  it("hides employee-specific links when the membership has no employee record", async () => {
+    await act(async () => {
+      root = createRoot(container)
+      root.render(<AppSidebar accessMode="employee" scope="company" roleNames={["EMPLOYEE"]} permissionLabels={["data_scope:self"]} employeeLinked={false} identityReady />)
+    })
+    const urls = (items: Item[]): string[] => items.flatMap((item) => [item.url ?? "", ...urls(item.items ?? [])])
+    expect(urls(capture.items).filter((url) => url !== "/dashboard/to-do" && isSelfServiceDashboardRoute(url))).toEqual([])
+    const search = resolveDashboardSearchItems({ scope: "company", accessMode: "employee", permissionLabels: ["data_scope:self"], employeeLinked: false })
+    expect(search.filter((item) => item.url !== "/dashboard/to-do" && isSelfServiceDashboardRoute(item.url))).toEqual([])
+  })
   const roles: Array<[string, string[], "admin" | "employee"]> = [
     ["EMPLOYEE", ["data_scope:self"], "employee"],
     ["DEPARTMENT_MANAGER", ["data_scope:department", "self_service_requests:manager_review", "manager_team:read"], "employee"],

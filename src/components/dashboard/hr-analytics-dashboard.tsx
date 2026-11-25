@@ -1417,6 +1417,8 @@ function formatDashboardCurrency(value: unknown, currency = "TZS") {
 }
 
 function PeopleExperiencePanels({
+  canReadForms,
+  canReadPayrollPayslips,
   satisfactionScore,
   satisfactionCategories,
   satisfactionUnavailable,
@@ -1424,6 +1426,8 @@ function PeopleExperiencePanels({
   payrollRows,
   canOpenPayroll,
 }: {
+  canReadForms: boolean;
+  canReadPayrollPayslips: boolean;
   satisfactionScore: number | null;
   satisfactionUnavailable: boolean;
   satisfactionDistribution: {
@@ -1464,7 +1468,7 @@ function PeopleExperiencePanels({
 
   return (
     <div className="mt-3 grid w-full gap-3 lg:grid-cols-[minmax(320px,0.85fr)_minmax(0,1.15fr)]">
-      <section className="h-full min-w-0 rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+      {canReadForms ? <section className="h-full min-w-0 rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-foreground">
             Employee satisfaction
@@ -1555,9 +1559,9 @@ function PeopleExperiencePanels({
               : "No reportable satisfaction responses for this period yet."}
           </p>
         )}
-      </section>
+      </section> : null}
 
-      <section className="h-full min-w-0 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+      {canReadPayrollPayslips ? <section className="h-full min-w-0 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
           <div>
             <h2 className="text-sm font-semibold text-foreground">
@@ -1693,7 +1697,7 @@ function PeopleExperiencePanels({
               : "Payroll access is not available for this account."}
           </div>
         )}
-      </section>
+      </section> : null}
     </div>
   );
 }
@@ -1854,6 +1858,16 @@ export default function HrAnalyticsDashboard({
     actor.permissionLabels,
     "forms_feedback:manage",
   );
+  const canReadHrDashboard = actor.ready && hasPermission(actor.permissionLabels, "dashboard:hr");
+  const canReadHrAnalytics = actor.ready && hasPermission(actor.permissionLabels, "analytics:dashboards-hr");
+  const employeeOnly = actor.roleNames.length > 0 && actor.roleNames.every((role) => role.trim().toUpperCase() === "EMPLOYEE");
+  const canReadAttendance = actor.ready && !employeeOnly && hasPermission(actor.permissionLabels, "attendance_summaries:read");
+  const canReadDepartments = actor.ready && hasPermission(actor.permissionLabels, "departments:read");
+  const canReadLeave = actor.ready && !employeeOnly && hasPermission(actor.permissionLabels, "leave_requests:read");
+  const canReadHolidays = actor.ready && hasPermission(actor.permissionLabels, "attendance_holidays:read");
+  const canReadOnboarding = actor.ready && hasPermission(actor.permissionLabels, "onboarding_requests:read");
+  const canReadOffboarding = actor.ready && hasPermission(actor.permissionLabels, "offboarding_requests:read");
+  const canReadPayrollPayslips = actor.ready && hasPermission(actor.permissionLabels, "payroll:runs-read") && hasPermission(actor.permissionLabels, "payroll:payslips-read");
   const [workforceSummary, setWorkforceSummary] =
     React.useState<AdminRecord | null>(null);
   const [upcomingHoliday, setUpcomingHoliday] =
@@ -1995,16 +2009,16 @@ export default function HrAnalyticsDashboard({
 
       const todayAttendanceDate = formatLocalDateKey(new Date());
 
-      const analyticsDashboardTask = getAnalyticsDashboard(token, "hr", {
+      const analyticsDashboardTask = (canReadHrAnalytics ? getAnalyticsDashboard(token, "hr", {
         date_from: from_date,
         date_to: to_date,
         purpose: "dashboard",
-      })
+      }) : Promise.resolve(null))
         .catch(() =>
-          getHrDashboard(token, "hr", {
+          canReadHrDashboard ? getHrDashboard(token, "hr", {
             date_from: from_date,
             date_to: to_date,
-          }),
+          }) : Promise.resolve(null),
         )
         .catch(() => null);
 
@@ -2029,16 +2043,16 @@ export default function HrAnalyticsDashboard({
         // The advanced analytics HR dashboard is the authoritative structured
         // contract. Keep the older role dashboard as a compatibility fallback.
         analyticsDashboardTask.then((summary) => {
-          if (!summary) {
+          if (!summary && (canReadHrAnalytics || canReadHrDashboard)) {
             recordPartialSourceError("HR analytics summary");
           }
           setAnalyticsSummary(summary);
         }),
 
-        getHrDashboard(token, "hr", {
+        (canReadHrDashboard ? getHrDashboard(token, "hr", {
           date_from: from_date,
           date_to: to_date,
-        })
+        }) : Promise.reject(new Error("HR dashboard access unavailable")))
           .catch(async () => {
             const analytics = await analyticsDashboardTask;
             if (!analytics) {
@@ -2084,7 +2098,7 @@ export default function HrAnalyticsDashboard({
             markReady("employees");
           }),
 
-        listDepartments(token, { page: 1, limit: 100 }, listOpts)
+        (canReadDepartments ? listDepartments(token, { page: 1, limit: 100 }, listOpts) : Promise.resolve({ rows: [], total: null } as PagedRowsResult))
           .catch(() => {
             recordPartialSourceError("Department list");
             return { rows: [], total: null } as PagedRowsResult;
@@ -2098,7 +2112,7 @@ export default function HrAnalyticsDashboard({
             markReady("departments");
           }),
 
-        showLeaveRequests
+        showLeaveRequests && canReadLeave
           ? listLeaveRequests(token, leaveParams)
               .catch(() => {
                 recordPartialSourceError("Leave requests");
@@ -2113,7 +2127,7 @@ export default function HrAnalyticsDashboard({
               markReady("leave");
             }),
 
-        loadAttendanceReportRows(token, from_date, to_date)
+        (canReadAttendance ? loadAttendanceReportRows(token, from_date, to_date) : Promise.resolve([]))
           .catch(() => {
             recordPartialSourceError("Attendance history");
             return [];
@@ -2123,7 +2137,7 @@ export default function HrAnalyticsDashboard({
             markReady("attendance");
           }),
 
-        loadAttendanceReportRows(token, todayAttendanceDate, todayAttendanceDate)
+        (canReadAttendance ? loadAttendanceReportRows(token, todayAttendanceDate, todayAttendanceDate) : Promise.resolve([]))
           .catch(() => {
             recordPartialSourceError("Today's attendance");
             return [];
@@ -2132,7 +2146,7 @@ export default function HrAnalyticsDashboard({
             setTodayAttendanceSummaries(rows);
           }),
 
-        listAttendanceHolidays(token, { page: 1, limit: 100 })
+        (canReadHolidays ? listAttendanceHolidays(token, { page: 1, limit: 100 }) : Promise.resolve({ rows: [], total: null } as PagedRowsResult))
           .catch(() => {
             recordPartialSourceError("Attendance holidays");
             return { rows: [], total: null } as PagedRowsResult;
@@ -2150,7 +2164,7 @@ export default function HrAnalyticsDashboard({
             setUpcomingHoliday(nextHoliday ?? null);
           }),
 
-        listOnboardingRequests(token, { page: 1, limit: 50 })
+        (canReadOnboarding ? listOnboardingRequests(token, { page: 1, limit: 50 }) : Promise.resolve({ rows: [], total: null } as PagedRowsResult))
           .catch(() => {
             recordPartialSourceError("Onboarding requests");
             return { rows: [], total: null } as PagedRowsResult;
@@ -2160,7 +2174,7 @@ export default function HrAnalyticsDashboard({
             markReady("onboarding");
           }),
 
-        listOffboardingRequests(token, { page: 1, limit: 50 })
+        (canReadOffboarding ? listOffboardingRequests(token, { page: 1, limit: 50 }) : Promise.resolve({ rows: [], total: null } as PagedRowsResult))
           .catch(() => {
             recordPartialSourceError("Offboarding requests");
             return { rows: [], total: null } as PagedRowsResult;
@@ -2170,7 +2184,7 @@ export default function HrAnalyticsDashboard({
             markReady("offboarding");
           }),
 
-        canOpenPayroll
+        canReadPayrollPayslips
           ? listPayrollRuns(token, {
               page: 1,
               limit: 1,
@@ -2206,7 +2220,15 @@ export default function HrAnalyticsDashboard({
     },
     [
       canReadForms,
-      canOpenPayroll,
+      canReadHrDashboard,
+      canReadHrAnalytics,
+      canReadAttendance,
+      canReadDepartments,
+      canReadLeave,
+      canReadHolidays,
+      canReadOnboarding,
+      canReadOffboarding,
+      canReadPayrollPayslips,
       fromDate,
       toDate,
       markReady,
@@ -2607,13 +2629,13 @@ export default function HrAnalyticsDashboard({
     summaryHeadcount === null;
   const attendanceUnavailable =
     workforceUnavailable ||
-    (partialSourceErrors.includes("Today's attendance") &&
+    ((!canReadAttendance || partialSourceErrors.includes("Today's attendance")) &&
       (analyticsTodayPresent === null || analyticsTodayAbsent === null));
   const leaveUnavailable =
     workforceUnavailable ||
     (analyticsTodayLeave === null &&
-      (partialSourceErrors.includes("Today's attendance") ||
-        (showLeaveRequests && partialSourceErrors.includes("Leave requests"))));
+      ((!canReadAttendance || partialSourceErrors.includes("Today's attendance")) &&
+        (!canReadLeave || partialSourceErrors.includes("Leave requests"))));
   const workforceMetrics: WorkforceMetric[] = [
     {
       label: "Total employees",
@@ -3529,7 +3551,7 @@ export default function HrAnalyticsDashboard({
               />
             ))}
           </motion.div>
-          <WorkforceInsightPanels
+          {canReadAttendance ? <WorkforceInsightPanels
             rangeLabel={activeDateRangeLabel}
             attendanceRate={
               partialSourceErrors.includes("Attendance history")
@@ -3555,8 +3577,10 @@ export default function HrAnalyticsDashboard({
             attendanceUnavailable={partialSourceErrors.includes(
               "Attendance history",
             )}
-          />
-          <PeopleExperiencePanels
+          /> : null}
+          {canReadForms || canReadPayrollPayslips ? <PeopleExperiencePanels
+            canReadForms={canReadForms}
+            canReadPayrollPayslips={canReadPayrollPayslips}
             satisfactionUnavailable={partialSourceErrors.includes(
               "Satisfaction results",
             )}
@@ -3565,7 +3589,7 @@ export default function HrAnalyticsDashboard({
             satisfactionCategories={satisfactionCategories}
             payrollRows={payrollPayslips}
             canOpenPayroll={canOpenPayroll}
-          />
+          /> : null}
         </motion.section>
 
         {error ? (
@@ -3611,7 +3635,7 @@ export default function HrAnalyticsDashboard({
           </motion.div>
         ) : null}
 
-        {showHrAnalytics && hrAnalyticsGroups.length > 0 ? (
+        {showHrAnalytics && canReadHrAnalytics && hrAnalyticsGroups.length > 0 ? (
           <motion.section className="mt-6" variants={motionPreset.item}>
             <div className="mb-3">
               <h2 className="text-base font-semibold tracking-tight text-foreground">

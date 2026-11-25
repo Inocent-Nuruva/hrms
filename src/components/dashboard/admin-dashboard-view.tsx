@@ -125,6 +125,7 @@ import {
 } from "@/lib/company-modules";
 import {
   canAccessDashboardRoute,
+  hasPermission,
   requestDashboardAccessRefresh,
 } from "@/lib/dashboard-permissions";
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
@@ -1143,11 +1144,12 @@ export default function AdminDashboardView({
       !accessIdentityReady ||
       !token ||
       actorSnapshot.scope === "platform" ||
+      authSession.user?.employeeLinked === false ||
       homeDashboardKind !== "employee"
     ) {
       setCurrentEmployeeIdentity(null);
       setCurrentEmployeeProfile(null);
-      setEmployeeIdentityChecked(homeDashboardKind !== "employee");
+      setEmployeeIdentityChecked(homeDashboardKind !== "employee" || authSession.user?.employeeLinked === false);
       return;
     }
 
@@ -1163,7 +1165,7 @@ export default function AdminDashboardView({
 
         // The employee dashboard endpoint is the authoritative source used by
         // the employee home itself and can contain a richer nested department.
-        if (!isHumanResourcesEmployeeRecord(identity)) {
+        if (!isHumanResourcesEmployeeRecord(identity) && hasPermission(effectivePermissionLabels, "dashboard:employee")) {
           const dashboard = await api
             .getEmployeeDashboard(token)
             .catch(() => null);
@@ -1198,7 +1200,7 @@ export default function AdminDashboardView({
     return () => {
       active = false;
     };
-  }, [accessIdentityReady, actorSnapshot.scope, homeDashboardKind, token]);
+  }, [accessIdentityReady, actorSnapshot.scope, authSession.user?.employeeLinked, effectivePermissionLabels, homeDashboardKind, token]);
 
   React.useEffect(() => {
     if (
@@ -1352,6 +1354,7 @@ export default function AdminDashboardView({
           accessMode={accessMode}
           scope={actorSnapshot.scope}
           homeDashboardKind={effectiveHomeDashboardKind}
+          employeeLinked={authSession.user?.employeeLinked}
           identityReady={navigationReady}
           permissionLabels={effectivePermissionLabels}
           roleNames={actorSnapshot.roleNames}
@@ -1362,6 +1365,7 @@ export default function AdminDashboardView({
             permissionLabels: effectivePermissionLabels,
             accessMode,
             homeDashboardKind: effectiveHomeDashboardKind,
+            employeeLinked: authSession.user?.employeeLinked,
           }) : []}
         />
         <SidebarTrigger
@@ -1389,6 +1393,7 @@ export default function AdminDashboardView({
                     permissionLabels: effectivePermissionLabels,
                     accessMode,
                     homeDashboardKind: effectiveHomeDashboardKind,
+                    employeeLinked: authSession.user?.employeeLinked,
                   })
                 : []
             }
@@ -1420,7 +1425,9 @@ export default function AdminDashboardView({
                   {accessIdentityReady ? (
                     resolvedShowOverview &&
                     (showWorkforceDashboard ||
-                      checkingEmployeeDashboardIdentity) ? null : (
+                      checkingEmployeeDashboardIdentity) ? null : resolvedShowOverview && authSession.user?.employeeLinked === false && homeDashboardKind === "employee" ? (
+                      <p role="status">Your account is not linked to an employee record. Contact your administrator for access to employee self-service.</p>
+                    ) : (
                       children
                     )
                   ) : (

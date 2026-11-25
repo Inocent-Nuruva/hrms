@@ -144,7 +144,11 @@ export function useAuth() {
     try {
       const user = await authService.getCurrentUser(accessToken);
       if (readStoredSessionTokens().accessToken !== accessToken) return null;
-      setStoredUser(user);
+      const previousUser = getSessionSnapshot().user;
+      setStoredUser({
+        ...user,
+        employeeLinked: user.employeeLinked ?? previousUser?.employeeLinked,
+      });
       publishDashboardActorSnapshotFromSources(
         user,
         ...(user.accessContextResolved ? [] : [storedTokens, accessToken]),
@@ -301,6 +305,7 @@ export function useAuth() {
         companyId: response.companyId ?? companyId,
         companyName: response.companyName ?? selectedCompany?.name,
         employeeId: undefined,
+        employeeLinked: undefined,
         role: undefined,
         roles: undefined,
         permissions: undefined,

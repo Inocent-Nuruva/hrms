@@ -683,6 +683,7 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   roleNames?: string[]
   homeDashboardKind?: HomeDashboardKind
   permissionLabels?: string[]
+  employeeLinked?: boolean
   /** False until the dashboard shell has read the signed-in identity. */
   identityReady?: boolean
   activeResource?: AdminResourceKey
@@ -698,6 +699,7 @@ function firstAccessibleNavUrl(
   roleNames: string[],
   scope: AuthScope | null,
   homeDashboardKind?: HomeDashboardKind,
+  employeeLinked?: boolean,
 ) {
   const candidates = [
     ...(url ? [url] : []),
@@ -710,6 +712,7 @@ function firstAccessibleNavUrl(
       ]
     : candidates
   return orderedCandidates.find((candidate) =>
+    !(employeeLinked === false && candidate !== "/dashboard/to-do" && isSelfServiceDashboardRoute(candidate)) &&
     canShowKpiNavigationRoute(candidate, roleNames, scope, normalizedPermissions) &&
     canSeeDashboardPage(candidate, normalizedPermissions, accessMode, { homeDashboardKind, roleNames, scope }),
   )
@@ -722,6 +725,7 @@ function filterNavByPermissions(
   roleNames: string[],
   scope: AuthScope | null,
   homeDashboardKind?: HomeDashboardKind,
+  employeeLinked?: boolean,
 ): SidebarNavItem[] {
   return navMain
     .map((item) => {
@@ -737,6 +741,7 @@ function filterNavByPermissions(
         roleNames,
         scope,
         homeDashboardKind,
+        employeeLinked,
       )
 
       if (!hasChildren) {
@@ -754,6 +759,7 @@ function filterNavByPermissions(
         roleNames,
         scope,
         homeDashboardKind,
+        employeeLinked,
       )
       // Never show a section with zero visible children (no empty menus).
       if (filteredItems.length === 0) {
@@ -773,8 +779,10 @@ function filterAdminSearchByPermissions(
   normalizedPermissions: string[],
   accessMode: AppSidebarAccessMode,
   homeDashboardKind?: HomeDashboardKind,
+  employeeLinked?: boolean,
 ) {
   return searchItems.filter((item) =>
+    !(employeeLinked === false && item.url !== "/dashboard/to-do" && isSelfServiceDashboardRoute(item.url)) &&
     canSeeDashboardPage(item.url, normalizedPermissions, accessMode, { homeDashboardKind }),
   )
 }
@@ -784,11 +792,13 @@ export function resolveDashboardSearchItems({
   permissionLabels,
   accessMode,
   homeDashboardKind,
+  employeeLinked,
 }: {
   scope?: AuthScope | null
   permissionLabels: string[]
   accessMode: AppSidebarAccessMode
   homeDashboardKind?: HomeDashboardKind
+  employeeLinked?: boolean
 }) {
   const normalizedPermissions = normalizePermissionLabels(permissionLabels)
   if (scope === "platform") {
@@ -797,6 +807,7 @@ export function resolveDashboardSearchItems({
       normalizedPermissions,
       accessMode,
       homeDashboardKind,
+      employeeLinked,
     )
   }
   return filterAdminSearchByPermissions(
@@ -804,6 +815,7 @@ export function resolveDashboardSearchItems({
     normalizedPermissions,
     accessMode,
     homeDashboardKind,
+    employeeLinked,
   )
 }
 
@@ -812,6 +824,7 @@ export function AppSidebar({
   scope = null,
   roleNames = [],
   homeDashboardKind,
+  employeeLinked,
   permissionLabels = [],
   identityReady = false,
   activeResource,
@@ -885,6 +898,7 @@ export function AppSidebar({
           roleNames,
           scope,
           homeDashboardKind,
+          employeeLinked,
         ),
       }
     }
@@ -895,6 +909,7 @@ export function AppSidebar({
       roleNames,
       scope,
       homeDashboardKind,
+      employeeLinked,
     )
     return {
       navMain: adminItems,
@@ -902,6 +917,7 @@ export function AppSidebar({
   }, [
     forbiddenVersion,
     homeDashboardKind,
+    employeeLinked,
     normalizedPermissions,
     permissionsResolved,
     resolvedAccessMode,
