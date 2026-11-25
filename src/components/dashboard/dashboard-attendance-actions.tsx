@@ -29,6 +29,9 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { readStoredSessionTokens } from "@/lib/session-client"
+import { getSessionSnapshot, getServerSessionSnapshot, subscribeSession } from "@/lib/auth-session-store"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { hasPermission } from "@/lib/dashboard-permissions"
 import { cn } from "@/lib/utils"
 import { asRecord } from "@/utils/token-utils"
 
@@ -694,10 +697,14 @@ type AttendanceQuickState = {
 export function DashboardAttendanceQuickActions({ mobile = false }: { mobile?: boolean } = {}) {
   const [state, setState] = React.useState<AttendanceQuickState | null>(null)
   const [checked, setChecked] = React.useState(false)
+  const session = React.useSyncExternalStore(subscribeSession, getSessionSnapshot, getServerSessionSnapshot)
+  const actor = useDashboardActor()
+  const canReadEmployeeDashboard = actor.ready && hasPermission(actor.permissionLabels, "dashboard:employee")
+  const canUseEmployeeFeatures = actor.ready && actor.scope !== "platform" && session.user?.employeeLinked !== false
 
   const loadAttendance = React.useCallback(async () => {
     const token = readStoredSessionTokens().accessToken
-    if (!token) {
+    if (!token || !canUseEmployeeFeatures) {
       setState(null)
       setChecked(true)
       return
@@ -705,9 +712,12 @@ export function DashboardAttendanceQuickActions({ mobile = false }: { mobile?: b
 
     const [employeeResult, dashboardResult, todayResult] = await Promise.all([
       getCurrentEmployee(token).catch(() => null),
-      getEmployeeDashboard(token).catch(() => null),
+      canReadEmployeeDashboard ? getEmployeeDashboard(token).catch(() => null) : Promise.resolve(null),
       getMyAttendanceToday(token).catch(() => null),
     ])
+
+    const currentSession = getSessionSnapshot()
+    if (currentSession.tokens?.accessToken !== token || currentSession.user?.employeeLinked === false) return
 
     const employeeRecord = asRecord(employeeResult)
     const dashboardRecord = asRecord(dashboardResult)
@@ -742,7 +752,7 @@ export function DashboardAttendanceQuickActions({ mobile = false }: { mobile?: b
       canCheckOut: explicitCanCheckOut ?? Boolean(checkIn && !checkOut),
     })
     setChecked(true)
-  }, [])
+  }, [canReadEmployeeDashboard, canUseEmployeeFeatures])
 
   React.useEffect(() => {
     void loadAttendance()

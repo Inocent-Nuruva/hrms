@@ -24,6 +24,7 @@ import { ROUTES } from "@/utils/constants";
 import { env } from "@/lib/env";
 import { SessionDeadlineWarning } from "./session-deadline-warning";
 import { withAuthSessionLock } from "@/lib/auth-session-lock";
+import { getSessionSnapshot } from "@/lib/auth-session-store";
 
 const SESSION_CHECK_INTERVAL_MS = env.NEXT_PUBLIC_SESSION_CHECK_INTERVAL_MS;
 const ACCESS_TOKEN_REFRESH_WINDOW_MS = env.NEXT_PUBLIC_TOKEN_REFRESH_WINDOW_MS;
@@ -66,7 +67,10 @@ export function SessionExpiryGuard() {
             if (readDashboardActorSnapshotFromBrowser().scope === "company") {
               const user = await authService.getCurrentUser(accessToken);
               if (readStoredSessionTokens().accessToken !== accessToken) return "failed" as const;
-              persistSessionUser(user);
+              const employeeLinked = snapshot.employeeId === undefined
+                ? getSessionSnapshot().user?.employeeLinked
+                : snapshot.employeeId !== null;
+              persistSessionUser({ ...user, ...(employeeLinked === undefined ? {} : { employeeLinked }) });
               publishDashboardActorSnapshotFromSources(snapshot);
             }
             lastAccessSyncAtRef.current = Date.now();

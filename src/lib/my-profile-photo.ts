@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { readStoredSessionTokens, SESSION_CLEARED_EVENT } from "@/lib/session-client"
+import { getSessionSnapshot, getServerSessionSnapshot, subscribeSession } from "@/lib/auth-session-store"
 
 type Listener = () => void
 
@@ -98,6 +99,13 @@ export async function ensureMyProfilePhotoUrl(
   options: { force?: boolean } = {}
 ): Promise<string | null> {
   const resolvedToken = (token ?? readStoredSessionTokens().accessToken).trim()
+  const user = getSessionSnapshot().user
+  if (user?.scope === "platform" || user?.employeeLinked === false) {
+    cachedToken = resolvedToken
+    cachedUrl = null
+    emit()
+    return null
+  }
   if (!resolvedToken) {
     cachedUrl = null
     cachedToken = ""
@@ -163,6 +171,7 @@ export async function ensureMyProfilePhotoUrl(
  * Prefer this over scraping profile_photo_url off user/employee records.
  */
 export function useMyProfilePhoto(token?: string | null) {
+  const session = React.useSyncExternalStore(subscribeSession, getSessionSnapshot, getServerSessionSnapshot)
   const [url, setUrl] = React.useState<string | null>(() => getCachedMyProfilePhotoUrl())
   const [revision, setRevision] = React.useState(() => getMyProfilePhotoRevision())
   const [loading, setLoading] = React.useState(() => !hasLoadedMyProfilePhoto())
@@ -196,7 +205,7 @@ export function useMyProfilePhoto(token?: string | null) {
     return () => {
       cancelled = true
     }
-  }, [token])
+  }, [token, session.user?.employeeLinked, session.user?.scope])
 
   const refresh = React.useCallback(async () => {
     const resolvedToken = (token ?? readStoredSessionTokens().accessToken).trim()

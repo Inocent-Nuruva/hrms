@@ -133,12 +133,12 @@ import {
   getAttendanceResourceById,
   getAttendanceMobilePunchSelfie,
   listAttendanceCheckpoints,
-  listAttendanceDeviceSyncLogs,
+  listAttendanceDeviceSyncLogsPage,
   listAttendanceDevices,
   listAttendanceGeofences,
   listAttendanceHolidayGroups,
   listAttendanceHolidays,
-  listAttendanceMobilePunches,
+  listAttendanceMobilePunchesPage,
   listAttendancePolicies,
   listAttendanceWifiNetworks,
   listBranches,
@@ -819,7 +819,11 @@ function readStoredToken() {
   }
 }
 
-function listRowsForSection(key: AttendanceSectionKey, token: string) {
+/** Rows per page for the paged sections (mobile punches, device sync logs). */
+const PAGED_SECTION_SIZE = 50
+const PAGED_SECTIONS = new Set<AttendanceSectionKey>(["mobile-punches", "device-sync-logs"])
+
+function listRowsForSection(key: AttendanceSectionKey, token: string, page = 1) {
   // Policies: do not send sortBy=created_at (API docs describe User fields; it can empty the list).
   if (key === "settings" || key === "policies") {
     return listAttendancePolicies(token, { page: 1, limit: 100 })
@@ -831,10 +835,13 @@ function listRowsForSection(key: AttendanceSectionKey, token: string) {
   if (key === "checkpoints") return listAttendanceCheckpoints(token, params)
   if (key === "geofences") return listAttendanceGeofences(token, params)
   if (key === "wifi-networks") return listAttendanceWifiNetworks(token, params)
-  if (key === "mobile-punches") return listAttendanceMobilePunches(token, params)
+  // Large, growing logs: one page from the server instead of every page.
+  if (key === "mobile-punches") {
+    return listAttendanceMobilePunchesPage(token, { ...params, page, limit: PAGED_SECTION_SIZE })
+  }
   if (key === "holiday-groups") return listAttendanceHolidayGroups(token, params)
   if (key === "holidays") return listAttendanceHolidays(token, params)
-  return listAttendanceDeviceSyncLogs(token, params)
+  return listAttendanceDeviceSyncLogsPage(token, { ...params, page, limit: PAGED_SECTION_SIZE })
 }
 
 function readNumberFromRecord(row: AdminRecord, keys: string[]) {
@@ -2289,6 +2296,12 @@ export function AttendanceManagementView({ section }: { section: string }) {
       mode: "any",
     })
   const [rows, setRows] = React.useState<AdminRecord[]>([])
+  const [sectionPage, setSectionPage] = React.useState(1)
+  const [sectionTotal, setSectionTotal] = React.useState<number | null>(null)
+  const [sectionTotalPages, setSectionTotalPages] = React.useState<number | null>(null)
+  React.useEffect(() => {
+    setSectionPage(1)
+  }, [activeSection])
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const [policies, setPolicies] = React.useState<AdminRecord[]>([])
@@ -2422,8 +2435,10 @@ export function AttendanceManagementView({ section }: { section: string }) {
     setLoading(true)
     setError(null)
     try {
-      const result = await listRowsForSection(activeSection, token)
+      const result = await listRowsForSection(activeSection, token, sectionPage)
       setRows(Array.isArray(result.rows) ? result.rows : [])
+      setSectionTotal("total" in result ? (result.total ?? null) : null)
+      setSectionTotalPages("totalPages" in result ? (result.totalPages ?? null) : null)
       if (
         (activeSection === "policies" || activeSection === "settings") &&
         (!result.rows || result.rows.length === 0)
@@ -2443,7 +2458,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
     } finally {
       setLoading(false)
     }
-  }, [activeSection])
+  }, [activeSection, sectionPage])
 
   React.useEffect(() => {
     void fetchRows()
@@ -4184,6 +4199,15 @@ export function AttendanceManagementView({ section }: { section: string }) {
         title={sectionDisplayTitle || "Attendance"}
         variant="card"
         data={tableRows}
+        {...(PAGED_SECTIONS.has(activeSection)
+          ? {
+              itemsPerPage: PAGED_SECTION_SIZE,
+              page: sectionPage,
+              totalPages: sectionTotalPages,
+              totalItems: sectionTotal,
+              onPageChange: setSectionPage,
+            }
+          : {})}
         onRowSelect={(_, row) => {
           if (row) {
             handleRowClick(row)

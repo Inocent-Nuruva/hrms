@@ -459,6 +459,9 @@ function normalizeUser(payload: unknown): AuthUser | undefined {
         scope: readAuthScope(payload),
         dashboardType: readDashboardType(payload),
         employeeId,
+        ...(("employee_id" in candidate || "employeeId" in candidate)
+          ? { employeeLinked: candidate.employee_id != null || candidate.employeeId != null }
+          : {}),
         requiresPasswordChange:
           readBoolean(candidate, [
             "requiresPasswordChange",

@@ -6104,6 +6104,38 @@ export async function downloadAttendanceReport(
   };
 }
 
+/** One page of unmatched logs (list pages page on the server). */
+export async function listAttendanceUnmatchedLogsPage(
+  token: string,
+  params: AttendanceQueryParams = {},
+): Promise<PaginatedUsersResult> {
+  return listAttendanceCollectionPage("/api/attendance/processing/unmatched-logs", token, params);
+}
+
+/** One page of recalculation / processing jobs. */
+export async function listAttendanceProcessingJobsPage(
+  token: string,
+  params: AttendanceQueryParams = {},
+): Promise<PaginatedUsersResult> {
+  return listAttendanceCollectionPage("/api/attendance/processing/jobs", token, params);
+}
+
+/** One page of mobile punches. */
+export async function listAttendanceMobilePunchesPage(
+  token: string,
+  params: AttendanceQueryParams = {},
+): Promise<PaginatedUsersResult> {
+  return listAttendanceCollectionPage("/api/attendance/mobile-punches", token, params);
+}
+
+/** One page of device sync logs. */
+export async function listAttendanceDeviceSyncLogsPage(
+  token: string,
+  params: AttendanceQueryParams = {},
+): Promise<PaginatedUsersResult> {
+  return listAttendanceCollectionPage("/api/attendance/device-sync-logs", token, params);
+}
+
 export async function listAttendanceUnmatchedLogs(
   token: string,
   params: AttendanceQueryParams = {},

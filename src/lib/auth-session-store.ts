@@ -17,6 +17,7 @@ export const AuthUserSchema = z
   .object({
     id: z.union([z.string().min(1), z.number().int().positive()]),
     employeeId: z.string().optional(),
+    employeeLinked: z.boolean().optional(),
     fullName: z.string(),
     email: z.string(),
     role: z.string().optional(),
@@ -169,6 +170,7 @@ export function persistAuthSession(
     previous.user?.scope !== verifiedUser?.scope ||
     previous.user?.dashboardType !== verifiedUser?.dashboardType ||
     previous.user?.employeeId !== verifiedUser?.employeeId ||
+    previous.user?.employeeLinked !== verifiedUser?.employeeLinked ||
     previous.user?.role !== verifiedUser?.role ||
     JSON.stringify(previous.user?.permissions) !==
       JSON.stringify(verifiedUser?.permissions);

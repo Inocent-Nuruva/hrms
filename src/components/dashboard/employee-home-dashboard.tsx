@@ -62,6 +62,7 @@ import {
 } from "@/lib/admin-api"
 import { hasDashboardAdminIdentity } from "@/lib/dashboard-identity"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { hasPermission, readDashboardActorSnapshotFromBrowser } from "@/lib/dashboard-permissions"
 import { useDashboardIdentity } from "@/components/dashboard/dashboard-identity"
 import { useForbiddenPrefixes } from "@/hooks/use-forbidden-route-guard"
 import { canSeeDashboardPage } from "@/lib/forbidden-routes"
@@ -809,7 +810,8 @@ async function loadEmployeeDashboardOverview(token: string) {
   const errors: unknown[] = []
   let lastPayload: unknown = null
 
-  try {
+  const actor = readDashboardActorSnapshotFromBrowser()
+  if (actor.ready && hasPermission(actor.permissionLabels, "dashboard:employee")) try {
     const dedicatedDashboard = await getEmployeeDashboard(token)
     lastPayload = dedicatedDashboard
     if (isEmployeeDashboardData(dedicatedDashboard)) {
@@ -3239,7 +3241,7 @@ export function EmployeeHomeDashboard() {
                 .then((r) => r.rows || [])
                 .catch(() => [] as AdminRecord[])
             ),
-          listMyLeaveBalances(accessToken, { limit: 8 })
+          (hasPermission(readDashboardActorSnapshotFromBrowser().permissionLabels, "leave_balances:read-own") ? listMyLeaveBalances(accessToken, { limit: 8 })
             .then((result) => ({
               rows: (result.rows || []) as AdminRecord[],
               totals: result.totals,
@@ -3247,11 +3249,11 @@ export function EmployeeHomeDashboard() {
             .catch(() => ({
               rows: [] as AdminRecord[],
               totals: undefined as Record<string, number> | undefined,
-            })),
-          listLeaveTypes(accessToken, { page: 1, limit: 100 })
+            })) : Promise.resolve({ rows: [] as AdminRecord[], totals: undefined as Record<string, number> | undefined })),
+          (hasPermission(readDashboardActorSnapshotFromBrowser().permissionLabels, "leave_types:read") ? listLeaveTypes(accessToken, { page: 1, limit: 100 })
             .then((r) => r.rows || [])
-            .catch(() => []),
-          listMyPayslips(accessToken).catch(() => []),
+            .catch(() => []) : Promise.resolve([])),
+          (hasPermission(readDashboardActorSnapshotFromBrowser().permissionLabels, "payroll:payslips-self") ? listMyPayslips(accessToken).catch(() => []) : Promise.resolve([])),
           getCurrentEmployee(accessToken).catch(() => null),
           getMyProfile(accessToken).catch(() => null),
         ])

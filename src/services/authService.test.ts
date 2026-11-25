@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/services/api"
-import { authService } from "@/services/authService"
+import { authService, normalizeLoginResponse } from "@/services/authService"
 
 function jsonResponse(payload: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(payload), {
@@ -17,6 +17,16 @@ describe("authService foundation helpers", () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
+  })
+
+  it("preserves whether the active account has a linked employee", () => {
+    const response = (employeeId: number | null | undefined) => normalizeLoginResponse({
+      access_token: "access-token", refresh_token: "refresh-token", scope: "company",
+      user: { id: 12, email: "staff@example.com", first_name: "Staff", ...(employeeId === undefined ? {} : { employee_id: employeeId }) },
+    })
+    expect(response(42).user?.employeeLinked).toBe(true)
+    expect(response(null).user?.employeeLinked).toBe(false)
+    expect(response(undefined).user?.employeeLinked).toBeUndefined()
   })
 
   it("preserves the platform login scope and dashboard_type", async () => {
