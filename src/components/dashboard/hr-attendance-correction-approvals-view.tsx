@@ -1109,7 +1109,7 @@ export function HrAttendanceCorrectionApprovalsView() {
 
   const sectionTitleBlock = (
     <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
-      <h1 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+      <h1 className="truncate text-xl font-bold tracking-tight text-foreground sm:text-[22px]">
         Correction Requests
       </h1>
       <div className="flex flex-wrap items-center gap-x-2 text-[11px]">

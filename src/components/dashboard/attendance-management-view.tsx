@@ -106,6 +106,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { ResizableTable } from "@/components/ui/resizable-table"
+import {
+  AttendanceExportButton,
+  AttendancePageHead,
+  downloadAttendanceCsv,
+  AttendanceStatusBadge,
+  AttendanceStatusCounters,
+  buildStatusCounters,
+  normalizeStatusKey,
+} from "@/components/dashboard/attendance-ops-ui"
 import { Textarea } from "@/components/ui/textarea"
 import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
 
@@ -2690,6 +2699,10 @@ export function AttendanceManagementView({ section }: { section: string }) {
     },
     [lookupMaps]
   )
+  const [opsStatusFilter, setOpsStatusFilter] = React.useState("")
+  React.useEffect(() => {
+    setOpsStatusFilter("")
+  }, [activeSection])
   const filteredRows = React.useMemo(() => {
     if (activeSection !== "devices") {
       return rows
@@ -3243,6 +3256,24 @@ export function AttendanceManagementView({ section }: { section: string }) {
     : activeSection === "mobile-punches" || activeSection === "device-sync-logs"
       ? "Attendance Operations"
       : "Attendance"
+
+  const isOpsSection = true
+  const readOpsStatus = (row: AdminRecord) =>
+    readStringFromRecord(row, ["review_status", "reviewStatus", "status", "sync_status", "syncStatus"])
+  const opsCounters = isOpsSection
+    ? buildStatusCounters(filteredRows, readOpsStatus, {
+        order:
+          activeSection === "mobile-punches"
+            ? ["PENDING", "APPROVED", "REJECTED"]
+            : activeSection === "device-sync-logs"
+              ? ["SUCCESS", "FAILED"]
+              : [],
+      })
+    : []
+  const tableRows =
+    isOpsSection && opsStatusFilter
+      ? filteredRows.filter((row) => normalizeStatusKey(readOpsStatus(row)) === opsStatusFilter)
+      : filteredRows
 
   const sectionTitleBlock = (
     <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -4114,9 +4145,43 @@ export function AttendanceManagementView({ section }: { section: string }) {
         />
       ) : null}
 
+      {isOpsSection ? (
+        <div className="space-y-3">
+          <AttendancePageHead
+            section={sectionGroupTitle}
+            title={sectionDisplayTitle}
+            actions={
+              <>
+                {activeSection === "devices" ? sectionTitleBlock : null}
+                <AttendanceExportButton
+                  count={tableRows.length}
+                  disabled={loading}
+                  onExport={() =>
+                    downloadAttendanceCsv(
+                      `${activeSection}-${new Date().toISOString().slice(0, 10)}`,
+                      columns.map((column: string) => ({
+                        label: column.replaceAll("_", " "),
+                        value: (row: AdminRecord) =>
+                          column === "branch_id"
+                            ? resolveBranchName(readNumberFromRecord(row, ["branch_id", "branchId"]))
+                            : formatAdminValue(row[column]),
+                      })),
+                      tableRows,
+                    )
+                  }
+                />
+              </>
+            }
+          />
+          {opsCounters.length > 1 ? (
+            <AttendanceStatusCounters items={opsCounters} value={opsStatusFilter} onChange={setOpsStatusFilter} />
+          ) : null}
+        </div>
+      ) : null}
+
       <ResizableTable
         title={sectionDisplayTitle || "Attendance"}
-        data={filteredRows}
+        data={tableRows}
         onRowSelect={(_, row) => {
           if (row) {
             handleRowClick(row)
@@ -4144,7 +4209,9 @@ export function AttendanceManagementView({ section }: { section: string }) {
               : 75,
             sortable: true,
             render:
-              activeSection === "holidays" && column === "name"
+              isOpsSection && (column === "status" || column === "review_status" || column === "sync_status")
+                ? (row: AdminRecord) => <AttendanceStatusBadge status={row[column]} />
+              : activeSection === "holidays" && column === "name"
                 ? (row: AdminRecord) => (
                     <div className="flex items-center gap-2.5 py-1">
                       <Calendar20Regular aria-hidden="true" className="shrink-0 text-primary" />
@@ -4257,7 +4324,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
             </p>
           </div>
         ) : undefined}
-        toolbarStart={sectionTitleBlock}
+        toolbarStart={undefined}
         toolbarActions={
           <>
             {supportsCreate ? (

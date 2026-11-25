@@ -272,6 +272,8 @@ export interface AttendanceReportDownloadParams extends AttendanceQueryParams {
   late_only?: boolean;
   early_departure_only?: boolean;
   overtime_only?: boolean;
+  /** Single-day reports: also list active employees with no record that day. */
+  include_all_employees?: boolean;
   format: "xlsx" | "csv" | "pdf";
 }
 
@@ -1924,6 +1926,7 @@ function buildAttendanceReportQuery(params: AttendanceReportDownloadParams) {
     searchParams.set("attendance_status", params.attendance_status.trim());
   }
   searchParams.set("format", params.format);
+  if (params.include_all_employees) searchParams.set("include_all_employees", "true");
   const query = searchParams.toString();
   return query ? `?${query}` : "";
 }
@@ -5876,6 +5879,34 @@ export async function listAttendanceDailySummaries(
     token,
     params,
   );
+}
+
+/** Whole-result-set counts per attendance status (ignores status filter and paging). */
+export async function getAttendanceDailySummaryStatusCounts(
+  token: string,
+  params: AttendanceQueryParams = {},
+  options: ListRequestOptions = {},
+): Promise<{ total: number; counts: Record<string, number> }> {
+  const { status: _status, page: _page, limit: _limit, ...rest } = params as AttendanceQueryParams & {
+    status?: unknown
+    page?: unknown
+    limit?: unknown
+  };
+  void _status;
+  void _page;
+  void _limit;
+  const payload = await adminRequest<unknown>(
+    `/api/attendance/daily-summaries/status-counts${buildAttendanceQuery(rest as AttendanceQueryParams)}`,
+    { token, signal: options.signal },
+  );
+  const body =
+    payload && typeof payload === "object" && "data" in payload && (payload as { data: unknown }).data && typeof (payload as { data: unknown }).data === "object"
+      ? (payload as { data: Record<string, unknown> }).data
+      : (payload as Record<string, unknown> | null) ?? {};
+  const rawCounts = body.counts && typeof body.counts === "object" ? (body.counts as Record<string, unknown>) : {};
+  const counts: Record<string, number> = {};
+  for (const [key, value] of Object.entries(rawCounts)) counts[key] = Number(value) || 0;
+  return { total: Number(body.total) || 0, counts };
 }
 
 /** Single-page daily summaries — use for paged UI and dashboard samples (not full history). */
