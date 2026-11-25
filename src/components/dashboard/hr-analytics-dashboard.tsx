@@ -1877,6 +1877,9 @@ export default function HrAnalyticsDashboard({
   const departmentsRef = React.useRef(departments);
   const hydratedFromWarmRef = React.useRef(Boolean(warm));
   const firstFetchRef = React.useRef(true);
+  // Each load gets an id; results and errors from an older load (for
+  // example one started before permissions were known) are ignored.
+  const fetchRunRef = React.useRef(0);
   const canOpenLeaveRequests =
     showLeaveRequests &&
     actor.ready &&
@@ -1970,6 +1973,11 @@ export default function HrAnalyticsDashboard({
   const fetchAll = React.useCallback(
     async (options?: { silent?: boolean }) => {
       const silent = Boolean(options?.silent);
+      const runId = ++fetchRunRef.current;
+      const isCurrentRun = () => fetchRunRef.current === runId;
+      const recordError = (source: string) => {
+        if (isCurrentRun()) recordPartialSourceError(source);
+      };
       const token = readStoredToken();
       if (!token) {
         setError("No active session. Please sign in again.");
@@ -2037,16 +2045,16 @@ export default function HrAnalyticsDashboard({
               .then(setSurveySatisfaction)
               .catch(() => {
                 setSurveySatisfaction(null);
-                recordPartialSourceError("Satisfaction results");
+                recordError("Satisfaction results");
               })
           : Promise.resolve().then(() => setSurveySatisfaction(null)),
         // The advanced analytics HR dashboard is the authoritative structured
         // contract. Keep the older role dashboard as a compatibility fallback.
         analyticsDashboardTask.then((summary) => {
           if (!summary && (canReadHrAnalytics || canReadHrDashboard)) {
-            recordPartialSourceError("HR analytics summary");
+            recordError("HR analytics summary");
           }
-          setAnalyticsSummary(summary);
+          if (isCurrentRun()) setAnalyticsSummary(summary);
         }),
 
         (canReadHrDashboard ? getHrDashboard(token, "hr", {
@@ -2056,7 +2064,7 @@ export default function HrAnalyticsDashboard({
           .catch(async () => {
             const analytics = await analyticsDashboardTask;
             if (!analytics) {
-              recordPartialSourceError("Workforce summary");
+              recordError("Workforce summary");
               return null;
             }
             const currentCount = readNumberDeep(analytics, [
@@ -2078,6 +2086,7 @@ export default function HrAnalyticsDashboard({
             } satisfies AdminRecord;
           })
           .then((summary) => {
+            if (!isCurrentRun()) return;
             setWorkforceSummary(summary);
             setEmployees([]);
             const manpower = Array.isArray(summary?.manpower)
@@ -2100,7 +2109,7 @@ export default function HrAnalyticsDashboard({
 
         (canReadDepartments ? listDepartments(token, { page: 1, limit: 100 }, listOpts) : Promise.resolve({ rows: [], total: null } as PagedRowsResult))
           .catch(() => {
-            recordPartialSourceError("Department list");
+            recordError("Department list");
             return { rows: [], total: null } as PagedRowsResult;
           })
           .then((deptRes) => {
@@ -2115,7 +2124,7 @@ export default function HrAnalyticsDashboard({
         showLeaveRequests && canReadLeave
           ? listLeaveRequests(token, leaveParams)
               .catch(() => {
-                recordPartialSourceError("Leave requests");
+                recordError("Leave requests");
                 return { rows: [], total: null } as PagedRowsResult;
               })
               .then((leaveRes) => {
@@ -2129,7 +2138,7 @@ export default function HrAnalyticsDashboard({
 
         (canReadAttendance ? loadAttendanceReportRows(token, from_date, to_date) : Promise.resolve([]))
           .catch(() => {
-            recordPartialSourceError("Attendance history");
+            recordError("Attendance history");
             return [];
           })
           .then((rows) => {
@@ -2139,7 +2148,7 @@ export default function HrAnalyticsDashboard({
 
         (canReadAttendance ? loadAttendanceReportRows(token, todayAttendanceDate, todayAttendanceDate) : Promise.resolve([]))
           .catch(() => {
-            recordPartialSourceError("Today's attendance");
+            recordError("Today's attendance");
             return [];
           })
           .then((rows) => {
@@ -2148,7 +2157,7 @@ export default function HrAnalyticsDashboard({
 
         (canReadHolidays ? listAttendanceHolidays(token, { page: 1, limit: 100 }) : Promise.resolve({ rows: [], total: null } as PagedRowsResult))
           .catch(() => {
-            recordPartialSourceError("Attendance holidays");
+            recordError("Attendance holidays");
             return { rows: [], total: null } as PagedRowsResult;
           })
           .then((holidayResult) => {
@@ -2166,7 +2175,7 @@ export default function HrAnalyticsDashboard({
 
         (canReadOnboarding ? listOnboardingRequests(token, { page: 1, limit: 50 }) : Promise.resolve({ rows: [], total: null } as PagedRowsResult))
           .catch(() => {
-            recordPartialSourceError("Onboarding requests");
+            recordError("Onboarding requests");
             return { rows: [], total: null } as PagedRowsResult;
           })
           .then((onboardRes) => {
@@ -2176,7 +2185,7 @@ export default function HrAnalyticsDashboard({
 
         (canReadOffboarding ? listOffboardingRequests(token, { page: 1, limit: 50 }) : Promise.resolve({ rows: [], total: null } as PagedRowsResult))
           .catch(() => {
-            recordPartialSourceError("Offboarding requests");
+            recordError("Offboarding requests");
             return { rows: [], total: null } as PagedRowsResult;
           })
           .then((offboardRes) => {
@@ -2201,14 +2210,14 @@ export default function HrAnalyticsDashboard({
                     ? []
                     : await listPayrollPayslipsForRun(token, runId).catch(
                         () => {
-                          recordPartialSourceError("Payroll payslips");
+                          recordError("Payroll payslips");
                           return [];
                         },
                       ),
                 );
               })
               .catch(() => {
-                recordPartialSourceError("Payroll payslips");
+                recordError("Payroll payslips");
                 setPayrollPayslips([]);
               })
           : Promise.resolve().then(() => setPayrollPayslips([])),
@@ -2239,10 +2248,13 @@ export default function HrAnalyticsDashboard({
 
   React.useEffect(() => {
     // First mount after login: revalidate quietly so we don't flash skeletons again.
+    // Wait for the signed-in user's permissions; loading earlier skips
+    // every permission-gated source and reports it as unavailable.
+    if (!actor.ready) return;
     const silent = firstFetchRef.current && hydratedFromWarmRef.current;
     firstFetchRef.current = false;
     void fetchAll({ silent });
-  }, [fetchAll]);
+  }, [actor.ready, fetchAll]);
 
   React.useEffect(() => {
     if (refreshKey && refreshKey > 0) {
