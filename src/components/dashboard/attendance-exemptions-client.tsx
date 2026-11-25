@@ -1,5 +1,5 @@
 "use client";
-import { AttendancePageHead } from "@/components/dashboard/attendance-ops-ui";
+import { ATTENDANCE_PAGE_STACK, AttendancePageHead } from "@/components/dashboard/attendance-ops-ui";
 
 import * as React from "react";
 import {
@@ -170,7 +170,7 @@ export function AttendanceExemptionsClient() {
   };
 
   return (
-    <main className="flex w-full flex-col gap-5 px-4 py-5 sm:px-5">
+    <main className={ATTENDANCE_PAGE_STACK}>
       <AttendancePageHead
         section="Attendance operations"
         title="Exemptions"

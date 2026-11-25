@@ -511,6 +511,14 @@ interface ResizableTableProps<T = Record<string, unknown>> {
   sortIconOnly?: boolean;
   /** Optional destination for the standalone Sort control. */
   sortContainer?: HTMLElement | null;
+  /**
+   * "card": rounded card frame, quiet header with sort arrows, roomy rows
+   * without zebra stripes or column rules, and the pager inside the card
+   * ("Showing 1–25 of 132 people" with numbered pages). Used by attendance.
+   */
+  variant?: "default" | "card";
+  /** Plural noun for the pager in the card variant, e.g. "people". */
+  itemLabel?: string;
 }
 
 type SortOrder = "asc" | "desc";
@@ -605,6 +613,8 @@ export function ResizableTable<T = Record<string, unknown>>({
   storageKey,
   fluent = true,
   modern = false,
+  variant = "default",
+  itemLabel,
   sortIconOnly = false,
   sortContainer,
 }: ResizableTableProps<T> = {}) {
@@ -1087,6 +1097,8 @@ export function ResizableTable<T = Record<string, unknown>>({
     ? (controlledTotalItems ?? sortedData.length)
     : sortedData.length;
 
+  const isCard = variant === "card";
+
   const goToPage = (nextPage: number) => {
     const clamped = Math.max(1, Math.min(totalPages, nextPage));
     if (isServerPagination) {
@@ -1095,6 +1107,71 @@ export function ResizableTable<T = Record<string, unknown>>({
     }
     setCurrentPage(clamped);
   };
+
+  const cardPageItems: Array<number | "gap"> = [];
+  for (let p = 1; p <= totalPages; p += 1) {
+    if (p === 1 || p === totalPages || Math.abs(p - activePage) <= 1) cardPageItems.push(p);
+    else if (cardPageItems[cardPageItems.length - 1] !== "gap") cardPageItems.push("gap");
+  }
+  const cardRangeStart = totalCountLabel ? (activePage - 1) * itemsPerPage + 1 : 0;
+  const cardRangeEnd = Math.min(activePage * itemsPerPage, totalCountLabel);
+  const cardPageButton =
+    "inline-grid h-[34px] min-w-[34px] place-items-center rounded-lg px-2 text-[13px] font-bold tabular-nums text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-35";
+  const cardPager = (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-3.5 py-2.5 max-sm:mt-2 max-sm:rounded-xl max-sm:border max-sm:bg-card max-sm:p-2">
+      <div className="text-[13px] text-muted-foreground max-sm:hidden">
+        Showing{" "}
+        <b className="tabular-nums text-foreground">
+          {cardRangeStart}–{cardRangeEnd}
+        </b>{" "}
+        of <b className="tabular-nums text-foreground">{totalCountLabel}</b>{" "}
+        {itemLabel ?? "records"}
+      </div>
+      <nav aria-label="Pagination" className="flex items-center gap-1 max-sm:w-full max-sm:justify-between">
+        <button
+          type="button"
+          className={cn(cardPageButton, "border border-border")}
+          aria-label="Previous page"
+          disabled={activePage <= 1 || loading}
+          onClick={() => goToPage(activePage - 1)}
+        >
+          ‹
+        </button>
+        {cardPageItems.map((p, i) =>
+          p === "gap" ? (
+            <span key={`gap-${i}`} className={cn(cardPageButton, "max-sm:hidden")}>…</span>
+          ) : (
+            <button
+              key={p}
+              type="button"
+              aria-current={p === activePage ? "page" : undefined}
+              className={cn(
+                cardPageButton,
+                "max-sm:hidden",
+                p === activePage && "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
+              )}
+              disabled={loading}
+              onClick={() => goToPage(p)}
+            >
+              {p}
+            </button>
+          ),
+        )}
+        <span className="hidden text-[13px] font-bold text-muted-foreground max-sm:inline">
+          Page {activePage} of {totalPages}
+        </span>
+        <button
+          type="button"
+          className={cn(cardPageButton, "border border-border")}
+          aria-label="Next page"
+          disabled={activePage >= totalPages || loading}
+          onClick={() => goToPage(activePage + 1)}
+        >
+          ›
+        </button>
+      </nav>
+    </div>
+  );
 
   const loadingSkeletonRows = useMemo(
     () =>
@@ -1671,6 +1748,7 @@ export function ResizableTable<T = Record<string, unknown>>({
         className={cn(
           "relative max-w-full overflow-hidden border border-border bg-background shadow-sm",
           modern && "rounded-xl",
+          isCard && "rounded-xl bg-card shadow-none",
           frameClassName,
           isMobileTable && "hidden",
         )}
@@ -1867,11 +1945,12 @@ export function ResizableTable<T = Record<string, unknown>>({
                   "flex w-full border-b border-border bg-muted/5 py-1 text-base font-bold text-foreground",
                   compact &&
                     "min-h-9 bg-muted/20 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em]",
+                  isCard && "min-h-11 bg-muted/40 py-0 text-[12.5px] font-bold normal-case tracking-normal text-muted-foreground",
                 )}
               >
                 {showCheckboxes && (
                   <div
-                    className="flex items-center justify-center border-r border-border pr-1.5 flex-shrink-0"
+                    className={cn("flex items-center justify-center border-r border-border pr-1.5 flex-shrink-0", isCard && "border-r-0 pl-2 pr-0")}
                     style={{ width: getColumnWidth("checkbox") || 36 }}
                   >
                     <input
@@ -1918,6 +1997,7 @@ export function ResizableTable<T = Record<string, unknown>>({
                         className={cn(
                           "relative flex flex-shrink-0 items-center border-r border-border px-1.5",
                           compact ? "text-[11px]" : "text-base",
+                          isCard && "border-r-0 px-3.5 text-[12.5px]",
                           isActions
                             ? "justify-end overflow-visible"
                             : "overflow-hidden",
@@ -1948,10 +2028,14 @@ export function ResizableTable<T = Record<string, unknown>>({
                         <span className="truncate">{col.label}</span>
                         {isActiveSort ? (
                           <span
-                            className="ml-1 shrink-0 text-[10px] text-primary"
+                            className={cn("ml-1 shrink-0 text-[10px] text-primary", isCard && "text-xs font-bold")}
                             aria-hidden
                           >
                             {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : isCard && canSort ? (
+                          <span className="ml-1 shrink-0 text-xs opacity-35" aria-hidden>
+                            ↑
                           </span>
                         ) : null}
                       </div>
@@ -1971,19 +2055,26 @@ export function ResizableTable<T = Record<string, unknown>>({
                       key={rowId}
                       className={cn(
                         "group relative flex w-full cursor-pointer border-b border-border",
-                        compact ? "min-h-11 py-0.5" : "py-1",
-                        isSelected
-                          ? "bg-muted/30"
-                          : index % 2 === 1
-                            ? "bg-primary/[0.08] hover:bg-primary/[0.13]"
-                            : "bg-background hover:bg-muted/20",
+                        isCard
+                          ? cn(
+                              "min-h-[3.25rem] py-1.5 last:border-b-0",
+                              isSelected ? "bg-primary/10" : "bg-card hover:bg-muted/40",
+                            )
+                          : cn(
+                              compact ? "min-h-11 py-0.5" : "py-1",
+                              isSelected
+                                ? "bg-muted/30"
+                                : index % 2 === 1
+                                  ? "bg-primary/[0.08] hover:bg-primary/[0.13]"
+                                  : "bg-background hover:bg-muted/20",
+                            ),
                       )}
                       onClick={() => handleRowSelect(rowId, item)}
                     >
                       {/* Checkbox */}
                       {showCheckboxes && (
                         <div
-                          className="flex items-center justify-center border-r border-border pr-1.5 flex-shrink-0"
+                          className={cn("flex items-center justify-center border-r border-border pr-1.5 flex-shrink-0", isCard && "border-r-0 pl-2 pr-0")}
                           style={{ width: getColumnWidth("checkbox") || 36 }}
                         >
                           <input
@@ -2018,6 +2109,7 @@ export function ResizableTable<T = Record<string, unknown>>({
                             key={col.key}
                             className={cn(
                               "flex min-w-0 flex-shrink-0 items-center border-r border-border px-1.5 text-xs",
+                              isCard && "border-r-0 px-3.5 text-[13.5px] text-foreground",
                               isActions
                                 ? "justify-end overflow-visible"
                                 : "overflow-hidden",
@@ -2080,9 +2172,11 @@ export function ResizableTable<T = Record<string, unknown>>({
             </div>
           </div>
         )}
+        {isCard && !isMobileTable ? cardPager : null}
       </div>
+      {isCard && isMobileTable ? cardPager : null}
 
-      {totalPages > 1 && (
+      {!isCard && totalPages > 1 && (
         <div className="mt-1 flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2 px-1 text-xs">
           <div className="min-w-0 text-muted-foreground/70">
             Page {activePage} of {totalPages} • {totalCountLabel}{" "}

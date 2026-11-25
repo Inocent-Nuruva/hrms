@@ -54,8 +54,11 @@ import {
 } from "@/components/ui/popover"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
+  ATTENDANCE_PAGE_STACK,
+  AttendanceEmployeeCell,
   AttendanceExportButton,
   AttendancePageHead,
+  formatWorkedMinutes,
   downloadAttendanceCsv,
   AttendanceShiftTimeline,
   AttendanceStatusBadge,
@@ -1649,6 +1652,7 @@ function resolveVisibleColumns(rows: AdminRecord[], section: AttendanceActivityS
           "attendance_status",
           "check_in_time",
           "check_out_time",
+          "worked_minutes",
           "shift_timeline",
         ]
       : section === "processing-exceptions"
@@ -2668,6 +2672,39 @@ function resolveTableCellValue(section: AttendanceActivitySectionKey, column: st
     if (column === "attendance_status") {
       return <AttendanceStatusBadge status={resolveDailySummaryCellValue(column, row)} />
     }
+    if (column === "employee_name") {
+      const employee = readNestedRecord(row, ["employee"])
+      const employeeNo =
+        readStringFromRow(row, ["employee_no", "employeeNo", "employee_number"]) ??
+        readStringFromRow(employee ?? {}, ["employee_no", "employeeNo", "employee_number"])
+      const department =
+        readStringFromRow(row, ["department_name", "departmentName"]) ??
+        readStringFromRow(employee ?? {}, ["department_name", "departmentName"])
+      const name = String(resolveDailySummaryCellValue(column, row) ?? "").trim() || employeeNo || "Unknown employee"
+      return <AttendanceEmployeeCell name={name} meta={[employeeNo, department].filter(Boolean).join(", ") || undefined} />
+    }
+    if (column === "attendance_date") {
+      const value = resolveDailySummaryCellValue(column, row)
+      return typeof value === "string" && value ? <span className="tabular-nums">{formatDisplayDate(value.slice(0, 10))}</span> : "—"
+    }
+    if (column === "check_in_time" || column === "check_out_time") {
+      const value = resolveDailySummaryCellValue(column, row)
+      const empty = value == null || value === "" || value === "—"
+      if (column === "check_out_time" && empty) {
+        const checkedIn = resolveDailySummaryCellValue("check_in_time", row)
+        const date = String(resolveDailySummaryCellValue("attendance_date", row) ?? "")
+        const today = new Date()
+        const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`
+        if (checkedIn && checkedIn !== "—" && date.startsWith(todayKey)) {
+          return <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">Still in</span>
+        }
+      }
+      return empty ? <span className="text-muted-foreground">—</span> : <span className="tabular-nums">{value}</span>
+    }
+    if (column === "worked_minutes") {
+      const minutes = readMinutesNumber(row, ["worked_minutes", "workedMinutes", "work_minutes", "workMinutes"])
+      return minutes == null ? <span className="text-muted-foreground">—</span> : <span className="tabular-nums">{formatWorkedMinutes(minutes)}</span>
+    }
     if (column === "shift_timeline") {
       const timetable = readNestedRecord(row, ["timetable", "schedule", "shift"])
       const date = String(resolveDailySummaryCellValue("attendance_date", row) ?? "")
@@ -2951,9 +2988,29 @@ function TableBlock({
         data={rows}
         columns={columns.map((c: string) => ({
           key: c,
-          label: c === "shift_timeline" ? "Shift" : prettifyLabel(c),
+          label:
+            c === "shift_timeline"
+              ? "Shift"
+              : section === "daily-summaries" && c === "employee_name"
+                ? "Employee"
+                : section === "daily-summaries" && c === "branch_name"
+                  ? "Branch"
+                  : section === "daily-summaries" && c === "attendance_date"
+                    ? "Date"
+                    : section === "daily-summaries" && c === "attendance_status"
+                      ? "Status"
+                      : section === "daily-summaries" && c === "check_in_time"
+                        ? "Check in"
+                        : section === "daily-summaries" && c === "check_out_time"
+                          ? "Check out"
+                          : section === "daily-summaries" && c === "worked_minutes"
+                            ? "Worked"
+                            : prettifyLabel(c),
           sortable: c !== "shift_timeline",
-          defaultWidth: 75,
+          defaultWidth:
+            section === "daily-summaries"
+              ? c === "employee_name" ? 250 : c === "shift_timeline" ? 190 : c === "attendance_status" ? 150 : 120
+              : 75,
           render: (row: AdminRecord) => resolveTableCellValue(section, c, row),
         }))}
         itemsPerPage={itemsPerPage}
@@ -2962,7 +3019,9 @@ function TableBlock({
         toolbarStart={toolbarStart}
         toolbarActions={toolbarActions}
         sortIconOnly={section === "unmatched-logs"}
-        storageKey="attendance-activity"
+        storageKey={section === "daily-summaries" ? "attendance-daily-summaries-v2" : "attendance-activity"}
+        variant="card"
+        itemLabel={section === "daily-summaries" ? "people" : "records"}
         page={page}
         totalPages={totalPages}
         totalItems={totalItems}
@@ -4980,7 +5039,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
   )
 
   return (
-    <div className="space-y-4">
+    <div className={ATTENDANCE_PAGE_STACK}>
       <DoodleSprites />
       {/* Data-heavy views host their titles/actions on the table toolbar row. */}
       {activeSection !== "daily-summaries" &&
@@ -6127,7 +6186,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
         ) : null}
 
         {activeSection === "recalculation-jobs" ? (
-          <div className="mt-[9px]">
+          <div>
             <TableBlock
               rows={opsRows}
               section={activeSection}
