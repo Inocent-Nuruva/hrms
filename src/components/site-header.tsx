@@ -25,6 +25,7 @@ import {
 } from "@/components/dashboard/dashboard-attendance-actions"
 import { HeaderGlobalSearch, type HeaderSearchItem } from "@/components/header-global-search"
 import { HeaderUserMenu } from "@/components/nav-user"
+import { UiThemeToggle } from "@/components/ui-theme/UiThemeToggle"
 import { NotificationCenter } from "@/components/notification-center"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
@@ -75,6 +76,7 @@ function HeaderPageControls({
         className={cn(headerActionButtonClass, "max-sm:!hidden")}
       />
       <AccentColorPicker className={cn(headerActionButtonClass, "max-sm:!hidden")} />
+      <UiThemeToggle className="inline-flex h-8 items-center whitespace-nowrap rounded-full border border-border px-3 text-xs font-semibold text-primary transition hover:bg-muted max-md:hidden" />
       <Button
         variant="ghost"
         size="icon-sm"

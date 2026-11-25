@@ -16,8 +16,11 @@ import { usePathname, useRouter } from "next/navigation";
 
 import {
   AppSidebar,
+  resolveDashboardNavItems,
   resolveDashboardSearchItems,
 } from "@/components/app-sidebar";
+import DashboardShellV2 from "@/components/shell/DashboardShellV2";
+import { useOptionalUiTheme } from "@/components/ui-theme/UiThemeProvider";
 import { ChangePasswordForm } from "@/components/auth/ChangePasswordForm";
 import { ThemeTogglerButton } from "@/components/animate-ui/components/buttons/theme-toggler";
 import {
@@ -396,6 +399,7 @@ export default function AdminDashboardView({
   useApis = false,
   children,
 }: AdminDashboardViewProps) {
+  const uiTheme = useOptionalUiTheme()?.ui ?? "v1";
   const router = useRouter();
   const pathname = usePathname();
   const currentPath = pathname ?? "";
@@ -1321,6 +1325,204 @@ export default function AdminDashboardView({
     router,
   ]);
 
+  const pageBody = (
+    <div className="@container/main flex min-w-0 max-w-full flex-col">
+      {resolvedShowOverview && showWorkforceDashboard ? (
+        <>
+          <HrAnalyticsDashboard
+            refreshKey={overviewRefreshKey}
+            companyName={companyName}
+            adminRolesLabel={adminRolesLabel}
+            assignedRoleNames={adminRoleNames}
+            userName={adminName}
+            profilePhotoUrl={adminAvatar}
+            showLeaveRequests={effectiveHomeDashboardKind === "hr"}
+            showHrAnalytics={effectiveHomeDashboardKind === "hr"}
+          />
+          <KpiHomeWidget personal={false} />
+        </>
+      ) : null}
+      <div
+        className={`flex min-w-0 max-w-full flex-col pt-0 ${currentPath === "/dashboard/me/requests/actions" ? "px-0 pb-0" : `pb-3 md:pb-4 ${currentPath === "/dashboard/employees/onboarding" ? "px-1 sm:px-2" : "px-3 sm:px-4 md:px-4"}`} ${showAccessControlTabs ? "gap-2 md:gap-3" : "gap-3 md:gap-4"}`}
+      >
+        {navigationReady && showAccessControlTabs ? (
+          <DashboardSectionTabs groups={accessControlTabGroups} />
+        ) : null}
+        <div className="min-w-0">
+          {accessIdentityReady ? (
+            resolvedShowOverview &&
+            (showWorkforceDashboard ||
+              checkingEmployeeDashboardIdentity) ? null : (
+              children
+            )
+          ) : (
+            <AccessSkeleton className="min-h-40" variant="dashboard" />
+          )}
+        </div>
+        {accessIdentityReady &&
+        resolvedActiveResource &&
+        resolvedUseApis &&
+        resolvedActiveResource !== "companies" &&
+        (resolvedActiveResource !== "roles" &&
+        resolvedActiveResource !== "permissions"
+          ? true
+          : navigationReady &&
+            isDashboardRouteEnabledForCompanyModules(
+              `/dashboard/${resolvedActiveResource}`,
+              readPublishedCompanyModules(),
+            )) ? (
+          <DataTable
+            token={token}
+            activeResource={resolvedActiveResource}
+            rows={rows}
+            roles={collections.roles}
+            permissions={collections.permissions}
+            actorPermissions={effectivePermissionLabels}
+            usersQuery={usersQuery}
+            usersTotal={usersTotal}
+            usersTotalPages={usersTotalPages}
+            onUsersQueryChange={handleUsersQueryChange}
+            catalogQuery={catalogQuery}
+            catalogTotal={catalogTotal}
+            catalogTotalPages={catalogTotalPages}
+            onCatalogQueryChange={handleCatalogQueryChange}
+            loading={
+              loading ||
+              ((resolvedActiveResource === "roles" ||
+                resolvedActiveResource === "permissions") &&
+                !token)
+            }
+            error={error}
+            onCreate={handleCreate}
+            onPatch={handlePatch}
+            onDelete={handleDelete}
+            onUpdateUser={handleUpdateUser}
+            onSetUserPassword={handleSetUserPassword}
+            onSyncUserRoles={handleSyncUserRoles}
+            onRefresh={refreshCurrentResource}
+          />
+        ) : null}
+        {accessIdentityReady && resolvedShowSettings ? (
+          <AccountSettingsPanel
+            token={token}
+            loading={loading}
+            onChangeMyPassword={handleChangeMyPassword}
+            profilePhotoUrl={adminAvatar}
+            displayName={adminName}
+            profilePictureHref={
+              actorSnapshot.scope !== "platform"
+                ? "/dashboard/me/profile?tab=summary&edit=profile-photo"
+                : null
+            }
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+
+  const forcePasswordResetDialog = (
+    <Dialog open={forcePasswordResetOpen}>
+      <DialogPopup
+        className="!h-dvh !w-screen !max-w-none !max-h-none !rounded-none !border-0 !p-0"
+        bodyClassName="!h-full !max-h-none !gap-0 !overflow-y-auto !p-0"
+        showCloseButton={false}
+        disableEscapeClose
+      >
+        <div className="relative flex min-h-full w-full items-center justify-center bg-background p-3 text-card-foreground sm:p-5 lg:p-8">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-100 via-white to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950" />
+          <div className="fixed right-3 top-3 z-20 md:right-4 md:top-4">
+            <ThemeTogglerButton
+              variant="ghost"
+              size="icon-sm"
+              modes={["light", "dark", "system"]}
+              className="!border-0 !bg-transparent text-foreground !shadow-none hover:!bg-transparent"
+            />
+          </div>
+          <div className="relative z-10 w-full max-w-[460px] py-4">
+            <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-xl">
+              <section className="flex min-w-0 items-center bg-card p-5 sm:p-6">
+                <div className="mx-auto w-full">
+                  <div className="mb-4 text-sm font-semibold text-primary">
+                    Alliance HRMS
+                  </div>
+                  <DialogHeader className="mb-4">
+                    <DialogTitle className="text-xl font-semibold tracking-tight text-foreground">
+                      Change your temporary password
+                    </DialogTitle>
+                    <DialogDescription className="text-sm leading-5 text-muted-foreground">
+                      Your administrator provided a temporary password.
+                      Create a new one before continuing.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <ChangePasswordForm
+                    onSubmit={handleForcedPasswordReset}
+                    loading={forcePasswordResetBusy}
+                    error={forcePasswordResetError}
+                    requiredMode
+                    compact
+                    onUseDifferentAccount={
+                      handleUseDifferentAccountForForcedReset
+                    }
+                  />
+                </div>
+              </section>
+            </div>
+            <p className="mt-3 text-center text-[10px] text-muted-foreground">
+              © {new Date().getFullYear()} Alliance Insurance Corporation
+              Ltd
+            </p>
+          </div>
+        </div>
+      </DialogPopup>
+    </Dialog>
+  );
+
+  const identityValue = {
+    name: adminName,
+    photoUrl: adminAvatar,
+    rolesLabel: adminRolesLabel,
+    homeDashboardKind: effectiveHomeDashboardKind,
+  };
+
+  if (uiTheme === "v2") {
+    return (
+      <DashboardIdentityProvider value={identityValue}>
+        <DashboardShellV2
+          navItems={
+            navigationReady
+              ? resolveDashboardNavItems({
+                  scope: actorSnapshot.scope,
+                  permissionLabels: effectivePermissionLabels,
+                  accessMode,
+                  roleNames: actorSnapshot.roleNames,
+                  homeDashboardKind: effectiveHomeDashboardKind,
+                })
+              : []
+          }
+          searchItems={
+            navigationReady
+              ? resolveDashboardSearchItems({
+                  scope: actorSnapshot.scope,
+                  permissionLabels: effectivePermissionLabels,
+                  accessMode,
+                  homeDashboardKind: effectiveHomeDashboardKind,
+                })
+              : []
+          }
+          userName={adminName ?? ""}
+          userRole={adminRolesLabel ?? undefined}
+          userAvatar={adminAvatar}
+          companyName={companyName}
+          onRefresh={handleHeaderRefresh}
+        >
+          {pageBody}
+        </DashboardShellV2>
+        {forcePasswordResetDialog}
+        <SupportChatWidget />
+      </DashboardIdentityProvider>
+    );
+  }
+
   return (
     <DashboardIdentityProvider
       value={{
@@ -1385,154 +1587,10 @@ export default function AdminDashboardView({
             }
           />
           <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
-            <div className="@container/main flex min-w-0 max-w-full flex-col">
-              {resolvedShowOverview && showWorkforceDashboard ? (
-                <>
-                  <HrAnalyticsDashboard
-                    refreshKey={overviewRefreshKey}
-                    companyName={companyName}
-                    adminRolesLabel={adminRolesLabel}
-                    assignedRoleNames={adminRoleNames}
-                    userName={adminName}
-                    profilePhotoUrl={adminAvatar}
-                    showLeaveRequests={effectiveHomeDashboardKind === "hr"}
-                    showHrAnalytics={effectiveHomeDashboardKind === "hr"}
-                  />
-                  <KpiHomeWidget personal={false} />
-                </>
-              ) : null}
-              <div
-                className={`flex min-w-0 max-w-full flex-col pt-0 ${currentPath === "/dashboard/me/requests/actions" ? "px-0 pb-0" : `pb-3 md:pb-4 ${currentPath === "/dashboard/employees/onboarding" ? "px-1 sm:px-2" : "px-3 sm:px-4 md:px-4"}`} ${showAccessControlTabs ? "gap-2 md:gap-3" : "gap-3 md:gap-4"}`}
-              >
-                {navigationReady && showAccessControlTabs ? (
-                  <DashboardSectionTabs groups={accessControlTabGroups} />
-                ) : null}
-                <div className="min-w-0">
-                  {accessIdentityReady ? (
-                    resolvedShowOverview &&
-                    (showWorkforceDashboard ||
-                      checkingEmployeeDashboardIdentity) ? null : (
-                      children
-                    )
-                  ) : (
-                    <AccessSkeleton className="min-h-40" variant="dashboard" />
-                  )}
-                </div>
-                {accessIdentityReady &&
-                resolvedActiveResource &&
-                resolvedUseApis &&
-                resolvedActiveResource !== "companies" &&
-                (resolvedActiveResource !== "roles" &&
-                resolvedActiveResource !== "permissions"
-                  ? true
-                  : navigationReady &&
-                    isDashboardRouteEnabledForCompanyModules(
-                      `/dashboard/${resolvedActiveResource}`,
-                      readPublishedCompanyModules(),
-                    )) ? (
-                  <DataTable
-                    token={token}
-                    activeResource={resolvedActiveResource}
-                    rows={rows}
-                    roles={collections.roles}
-                    permissions={collections.permissions}
-                    actorPermissions={effectivePermissionLabels}
-                    usersQuery={usersQuery}
-                    usersTotal={usersTotal}
-                    usersTotalPages={usersTotalPages}
-                    onUsersQueryChange={handleUsersQueryChange}
-                    catalogQuery={catalogQuery}
-                    catalogTotal={catalogTotal}
-                    catalogTotalPages={catalogTotalPages}
-                    onCatalogQueryChange={handleCatalogQueryChange}
-                    loading={
-                      loading ||
-                      ((resolvedActiveResource === "roles" ||
-                        resolvedActiveResource === "permissions") &&
-                        !token)
-                    }
-                    error={error}
-                    onCreate={handleCreate}
-                    onPatch={handlePatch}
-                    onDelete={handleDelete}
-                    onUpdateUser={handleUpdateUser}
-                    onSetUserPassword={handleSetUserPassword}
-                    onSyncUserRoles={handleSyncUserRoles}
-                    onRefresh={refreshCurrentResource}
-                  />
-                ) : null}
-                {accessIdentityReady && resolvedShowSettings ? (
-                  <AccountSettingsPanel
-                    token={token}
-                    loading={loading}
-                    onChangeMyPassword={handleChangeMyPassword}
-                    profilePhotoUrl={adminAvatar}
-                    displayName={adminName}
-                    profilePictureHref={
-                      actorSnapshot.scope !== "platform"
-                        ? "/dashboard/me/profile?tab=summary&edit=profile-photo"
-                        : null
-                    }
-                  />
-                ) : null}
-              </div>
-            </div>
+            {pageBody}
           </div>
         </SidebarInset>
-        <Dialog open={forcePasswordResetOpen}>
-          <DialogPopup
-            className="!h-dvh !w-screen !max-w-none !max-h-none !rounded-none !border-0 !p-0"
-            bodyClassName="!h-full !max-h-none !gap-0 !overflow-y-auto !p-0"
-            showCloseButton={false}
-            disableEscapeClose
-          >
-            <div className="relative flex min-h-full w-full items-center justify-center bg-background p-3 text-card-foreground sm:p-5 lg:p-8">
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-100 via-white to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950" />
-              <div className="fixed right-3 top-3 z-20 md:right-4 md:top-4">
-                <ThemeTogglerButton
-                  variant="ghost"
-                  size="icon-sm"
-                  modes={["light", "dark", "system"]}
-                  className="!border-0 !bg-transparent text-foreground !shadow-none hover:!bg-transparent"
-                />
-              </div>
-              <div className="relative z-10 w-full max-w-[460px] py-4">
-                <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-xl">
-                  <section className="flex min-w-0 items-center bg-card p-5 sm:p-6">
-                    <div className="mx-auto w-full">
-                      <div className="mb-4 text-sm font-semibold text-primary">
-                        Alliance HRMS
-                      </div>
-                      <DialogHeader className="mb-4">
-                        <DialogTitle className="text-xl font-semibold tracking-tight text-foreground">
-                          Change your temporary password
-                        </DialogTitle>
-                        <DialogDescription className="text-sm leading-5 text-muted-foreground">
-                          Your administrator provided a temporary password.
-                          Create a new one before continuing.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <ChangePasswordForm
-                        onSubmit={handleForcedPasswordReset}
-                        loading={forcePasswordResetBusy}
-                        error={forcePasswordResetError}
-                        requiredMode
-                        compact
-                        onUseDifferentAccount={
-                          handleUseDifferentAccountForForcedReset
-                        }
-                      />
-                    </div>
-                  </section>
-                </div>
-                <p className="mt-3 text-center text-[10px] text-muted-foreground">
-                  © {new Date().getFullYear()} Alliance Insurance Corporation
-                  Ltd
-                </p>
-              </div>
-            </div>
-          </DialogPopup>
-        </Dialog>
+        {forcePasswordResetDialog}
         <SupportChatWidget />
       </SidebarProvider>
     </DashboardIdentityProvider>

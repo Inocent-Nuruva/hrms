@@ -30,6 +30,7 @@ import {
 } from "@/lib/admin-api"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { cn } from "@/lib/utils"
+import { CheckInPanel } from "@/components/theme-v2"
 import { asRecord } from "@/utils/token-utils"
 
 type BrowserNetworkInformation = {
@@ -463,12 +464,19 @@ export function AttendancePunchActions({
   onAttendanceChanged,
   className,
   compact = false,
+  renderTrigger,
 }: {
   canCheckIn: boolean
   canCheckOut: boolean
   onAttendanceChanged?: () => Promise<void>
   className?: string
   compact?: boolean
+  /** Replaces the default Check in / Check out buttons (used by Theme 2). */
+  renderTrigger?: (args: {
+    open: (action: "in" | "out") => void
+    busy: "in" | "out" | null
+    disabled: boolean
+  }) => React.ReactNode
 }) {
   const [busyAction, setBusyAction] = React.useState<"in" | "out" | null>(null)
   const [selfieFile, setSelfieFile] = React.useState<File | null>(null)
@@ -590,7 +598,7 @@ export function AttendancePunchActions({
 
   return (
     <div className={cn("mt-2 flex flex-col gap-1.5", className)}>
-      {webPunchesDisabled && <p role="status" className="text-sm text-muted-foreground">Web check-in and check-out are disabled by your attendance policy.</p>}
+      {webPunchesDisabled && !renderTrigger && <p role="status" className="text-sm text-muted-foreground">Web check-in and check-out are disabled by your attendance policy.</p>}
       <Dialog open={pendingAction !== null} onOpenChange={(open) => {
         if (!open && busyAction === null) {
           requestIdRef.current = null
@@ -639,11 +647,17 @@ export function AttendancePunchActions({
           </DialogFooter>
         </DialogPopup>
       </Dialog>
+      {renderTrigger ? renderTrigger({
+        open: (action) => setPendingAction(action),
+        busy: busyAction,
+        disabled: webPunchesDisabled,
+      }) : null}
       <div className={cn(
         "flex flex-wrap",
         compact
           ? "items-center gap-2"
           : "gap-2",
+        renderTrigger && "hidden",
       )}>
         <Button
           type="button"
@@ -691,7 +705,7 @@ type AttendanceQuickState = {
   canCheckOut: boolean
 }
 
-export function DashboardAttendanceQuickActions({ mobile = false }: { mobile?: boolean } = {}) {
+function useAttendanceQuickState() {
   const [state, setState] = React.useState<AttendanceQuickState | null>(null)
   const [checked, setChecked] = React.useState(false)
 
@@ -748,6 +762,37 @@ export function DashboardAttendanceQuickActions({ mobile = false }: { mobile?: b
     void loadAttendance()
   }, [loadAttendance])
   useAttendanceChangedListener(loadAttendance)
+
+  return { state, checked, loadAttendance }
+}
+
+/** Theme 2 top-bar check-in: same punch flow, Theme 2 panel. */
+export function ThemeV2CheckIn() {
+  const { state, checked, loadAttendance } = useAttendanceQuickState()
+  if (!checked || !state) return null
+  const status = state.checkOut ? "done" : state.checkIn ? "in" : "ready"
+  return (
+    <AttendancePunchActions
+      canCheckIn={state.canCheckIn}
+      canCheckOut={state.canCheckOut}
+      onAttendanceChanged={loadAttendance}
+      compact
+      className="mt-0 gap-0"
+      renderTrigger={({ open, busy, disabled }) => (
+        <CheckInPanel
+          status={status}
+          time={status === "done" ? state.checkOut : state.checkIn}
+          busy={busy !== null || disabled}
+          onCheckIn={() => state.canCheckIn && open("in")}
+          onCheckOut={() => state.canCheckOut && open("out")}
+        />
+      )}
+    />
+  )
+}
+
+export function DashboardAttendanceQuickActions({ mobile = false }: { mobile?: boolean } = {}) {
+  const { state, checked, loadAttendance } = useAttendanceQuickState()
 
   if (!checked || !state) return null
 
