@@ -22137,7 +22137,21 @@ export async function getAnalyticsDashboard(
       token,
     },
   );
-  return normalizeSingle(payload) ?? asRecord(payload);
+  // The dashboard is the object that holds its sections (workforce,
+  // attendance, leave…). Generic unwrapping picked a nested object such as
+  // "period", which left every analytics figure blank.
+  const isDashboard = (value: unknown) => {
+    const record = asRecord(value);
+    return Boolean(
+      record &&
+        ("workforce" in record || "attendance" in record || "leave" in record || "audience" in record),
+    );
+  };
+  const root = asRecord(payload);
+  for (const candidate of [root, asRecord(root?.data), asRecord(root?.result)]) {
+    if (isDashboard(candidate)) return candidate;
+  }
+  return normalizeSingle(payload) ?? root;
 }
 
 export async function getAnalyticsSalesFieldDetails(
