@@ -25,6 +25,8 @@ export function AttendanceSectionTabs() {
       // Correction approvals are a To do workflow, not part of the personal
       // Attendance workspace. Keep its queue free of Attendance tabs.
       hideOnPaths={["/dashboard/attendance/correction-requests"]}
+      // Design: tabs start 8px in on phones and 20px on wider screens, flush under the top bar.
+      className="!px-2 !pt-0 sm:!px-5"
     />
   )
 }

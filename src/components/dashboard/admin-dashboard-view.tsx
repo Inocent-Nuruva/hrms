@@ -134,7 +134,9 @@ import { env } from "@/lib/env";
 import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants";
 import { isSelfServiceDashboardRoute } from "@/lib/dashboard-nav";
 import {
+  canOpenUsersAdminPage,
   firstVisibleSiblingOrHome,
+  isUsersAdminRoute,
   rememberForbiddenRoute,
 } from "@/lib/forbidden-routes";
 import { useHideRememberedForbiddenPath } from "@/hooks/use-forbidden-route-guard";
@@ -1302,7 +1304,12 @@ export default function AdminDashboardView({
         currentPath,
         effectivePermissionLabels,
         accessMode,
-      )
+      ) ||
+      (isUsersAdminRoute(currentPath) &&
+        !canOpenUsersAdminPage({
+          scope: actorSnapshot.scope,
+          roleNames: actorSnapshot.roleNames,
+        }))
     ) {
       rememberForbiddenRoute(currentPath);
       router.replace(
@@ -1315,6 +1322,8 @@ export default function AdminDashboardView({
     }
   }, [
     accessMode,
+    actorSnapshot.roleNames,
+    actorSnapshot.scope,
     currentPath,
     effectivePermissionLabels,
     accessIdentityReady,

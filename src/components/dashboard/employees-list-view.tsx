@@ -1351,7 +1351,6 @@ export function EmployeesListView({
                   <SelectTrigger
                     size="sm"
                     className="w-full bg-background"
-                    controlClassName="[&>button]:!h-6 [&>button]:!min-h-6 [&>button]:!text-[8px]"
                     aria-label="Filter employment status"
                   >
                     <SelectValue placeholder="All" />

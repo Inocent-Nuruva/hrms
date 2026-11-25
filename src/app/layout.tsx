@@ -9,6 +9,7 @@ import { PwaProvider } from "@/components/pwa-provider";
 import { AppFluentThemeProvider } from "@/components/fluent-theme-provider";
 import { AppTextScale } from "@/components/app-text-scale";
 import "./globals.css";
+import "./form-controls.css";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
 import { FluentDialogService } from "@/components/ui/fluent-dialog-service";

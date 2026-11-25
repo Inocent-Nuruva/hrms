@@ -104,8 +104,14 @@ test("switches to a second membership from the account menu and loads its grants
     return route.fulfill({json:{data:[]}})
   })
   await page.goto("/dashboard/settings")
-  await page.getByRole("button",{name:/account menu/i}).click()
-  await expect(page.getByRole("menuitem",{name:"West office (current)"})).toBeDisabled()
+  // The header can re-render while the session hydrates and close the menu, so
+  // reopen it until the membership list is visible.
+  const current = page.getByRole("menuitem",{name:"West office (current)"})
+  await expect(async () => {
+    if (!(await current.isVisible())) await page.getByRole("button",{name:/account menu/i}).click()
+    await expect(current).toBeVisible({timeout:2000})
+  }).toPass({timeout:15000})
+  await expect(current).toBeDisabled()
   await Promise.all([
     page.waitForURL(url=>url.pathname === "/dashboard",{waitUntil:"domcontentloaded"}),
     page.getByRole("menuitem",{name:"East office"}).click(),

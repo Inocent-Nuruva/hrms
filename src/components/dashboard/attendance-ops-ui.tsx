@@ -178,14 +178,14 @@ export function AttendanceStatusCounters({
               disabled={!onChange}
               onClick={() => onChange?.(pressed && item.key ? "" : item.key)}
               className={cn(
-                "flex min-w-[7rem] flex-1 flex-col gap-0.5 rounded-xl border border-border bg-card px-3 py-2 text-left transition sm:min-w-[8rem]",
+                "flex min-w-[7rem] flex-1 flex-col gap-0.5 rounded-xl border border-border bg-card px-2.5 py-2 text-left transition sm:min-w-32 sm:px-3 sm:py-2.5",
                 "hover:border-muted-foreground/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
                 pressed && tone.ring,
               )}
             >
               <span
                 className={cn(
-                  "text-lg font-extrabold leading-tight tabular-nums tracking-tight sm:text-[22px]",
+                  "text-[19px] font-extrabold leading-tight tabular-nums tracking-tight sm:text-[22px]",
                   pressed ? tone.text : "text-foreground",
                 )}
               >
@@ -441,4 +441,65 @@ export function AttendanceExportButton({
       Export
     </AttendanceHeadButton>
   )
+}
+
+/**
+ * Vertical rhythm for every attendance page (design: 14px between blocks,
+ * 12px on phones). The attendance layout supplies the outer padding.
+ */
+export const ATTENDANCE_PAGE_STACK = "flex min-w-0 flex-col gap-3.5 max-sm:gap-3"
+
+const AVATAR_TONES = [
+  "bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300",
+  "bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300",
+  "bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
+  "bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
+  "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300",
+  "bg-teal-50 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300",
+]
+
+function avatarTone(seed: string) {
+  let hash = 0
+  for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) | 0
+  return AVATAR_TONES[Math.abs(hash) % AVATAR_TONES.length]
+}
+
+/** Initials avatar + name + a muted second line (employee number, department). */
+export function AttendanceEmployeeCell({
+  name,
+  meta,
+  className,
+}: {
+  name: string
+  meta?: React.ReactNode
+  className?: string
+}) {
+  const initials =
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "?"
+  return (
+    <div className={cn("flex min-w-0 items-center gap-2.5", className)}>
+      <span
+        aria-hidden="true"
+        className={cn("grid size-8 shrink-0 place-items-center rounded-full text-xs font-extrabold", avatarTone(name))}
+      >
+        {initials}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-[13.5px] font-bold text-foreground">{name}</span>
+        {meta ? <span className="block truncate text-xs font-normal text-muted-foreground">{meta}</span> : null}
+      </span>
+    </div>
+  )
+}
+
+/** 515 → "8h 35m". */
+export function formatWorkedMinutes(minutes: number | null | undefined) {
+  if (minutes == null || !Number.isFinite(minutes)) return "—"
+  const safe = Math.max(0, Math.round(minutes))
+  return `${Math.floor(safe / 60)}h ${String(safe % 60).padStart(2, "0")}m`
 }

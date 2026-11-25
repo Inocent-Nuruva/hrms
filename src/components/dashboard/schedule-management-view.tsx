@@ -65,6 +65,7 @@ import { FluentSelect } from "@/components/ui/fluent-select"
 import { Input } from "@/components/ui/input"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import {
+  ATTENDANCE_PAGE_STACK,
   AttendancePageHead,
   AttendanceStatusBadge,
   AttendanceStatusCounters,
@@ -2930,7 +2931,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
   ) : null
 
   return (
-    <div className="mt-1.5 w-full min-w-0 max-w-none space-y-2">
+    <div className={ATTENDANCE_PAGE_STACK}>
       {pageHead}
       {activeSection === "shift-schedules" ? (
         <ShiftWeeklyScheduler
@@ -2965,6 +2966,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
         title={config.title}
         data={scheduleTableRows}
         columns={scheduleTableColumns}
+        variant="card"
         loading={loading}
         itemsPerPage={20}
         showExport={false}
@@ -3034,7 +3036,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
                       "h-8 rounded-lg bg-background text-xs whitespace-nowrap",
                       activeSection === "shift-rotation-rules" ? "w-40" : "w-31",
                     )}
-                    controlClassName="!h-8 !min-h-8 !px-2 !text-xs !whitespace-nowrap"
+                    controlClassName="!whitespace-nowrap"
                     aria-label={`Filter ${config.title.toLowerCase()}`}
                   >
                     <SelectValue />

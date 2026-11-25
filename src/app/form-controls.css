@@ -1,0 +1,275 @@
+/* ==========================================================================
+ * Form control standard (inputs, selects, combo boxes, search, date/time,
+ * number, textarea, and the option lists that drop down from them).
+ *
+ * Every text-like control in the app has the same height, inner padding,
+ * text size, corner radius and outer margin, and long values end in "…"
+ * instead of spilling or wrapping. Change the tokens below to restyle all
+ * controls at once.
+ *
+ * Applies to Fluent UI controls (what ui/input, ui/select, FluentSelect,
+ * DateInput, TimeInput and the search box render) and to plain <input>,
+ * <select> and <textarea> elements. Checkboxes, radios, files, ranges and
+ * colour pickers are left alone.
+ *
+ * Opt out for a special case (e.g. an inline grid editor) with
+ * data-control="free" on the control or any ancestor.
+ * ======================================================================== */
+:root {
+  --hrms-control-height: 36px;
+  --hrms-control-px: 12px;
+  --hrms-control-radius: 8px;
+  --hrms-control-font: 13px;
+  --hrms-control-line: 20px;
+  --hrms-control-gap: 8px; /* icon to text */
+  --hrms-option-height: 32px;
+  --hrms-option-px: 10px;
+  --hrms-textarea-min: 88px;
+}
+
+/* Workspace pages use the compact 11px type scale (see globals.css,
+ * body[data-app-text-scale="compact"]). Controls follow it so they match the
+ * text around them: same rules, smaller steps. */
+body[data-app-text-scale="compact"] {
+  --hrms-control-height: 32px;
+  --hrms-control-px: 10px;
+  --hrms-control-font: 11px;
+  --hrms-control-line: 16px;
+  --hrms-control-gap: 6px;
+  --hrms-option-height: 28px;
+  --hrms-option-px: 8px;
+  --hrms-textarea-min: 72px;
+}
+
+/* --- Fluent UI control shells (one box per control) -------------------- */
+:where(.fui-Input, .fui-SearchBox, .fui-Dropdown, .fui-Combobox, .fui-Select, .fui-SpinButton):not(:where([data-control="free"], [data-control="free"] *)) {
+  box-sizing: border-box !important;
+  height: var(--hrms-control-height) !important;
+  min-height: var(--hrms-control-height) !important;
+  max-height: var(--hrms-control-height) !important;
+  margin: 0 !important;
+  border-radius: var(--hrms-control-radius) !important;
+  font-size: var(--hrms-control-font) !important;
+  line-height: var(--hrms-control-line) !important;
+  column-gap: var(--hrms-control-gap) !important;
+  padding-inline: var(--hrms-control-px) !important;
+  min-width: 0;
+}
+
+/* Fluent draws the focus underline inside the rounded box; keep it clipped. */
+:where(.fui-Input, .fui-SearchBox, .fui-Dropdown, .fui-Combobox, .fui-SpinButton):not(:where([data-control="free"], [data-control="free"] *)) {
+  overflow: hidden;
+}
+
+/* Inner text fields fill the shell; the shell owns the padding. */
+:where(.fui-Input__input, .fui-Combobox__input, .fui-SpinButton__input):not(:where([data-control="free"] *)) {
+  height: 100% !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Dropdown: the button is the whole control, the value truncates with "…". */
+:where(.fui-Dropdown__button):not(:where([data-control="free"] *)) {
+  height: 100% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 var(--hrms-control-px) !important;
+  width: 100% !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  column-gap: var(--hrms-control-gap) !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  text-align: start;
+}
+/* Fluent lays the value out as a bare text node in a grid, which clips
+ * without "…". A block button with the arrow pinned right lets the value
+ * end in an ellipsis. */
+:where(.fui-Dropdown__button):not(:where([data-control="free"] *)) {
+  display: block !important;
+  position: relative !important;
+  padding-inline-end: calc(var(--hrms-control-px) + 20px) !important;
+  line-height: calc(var(--hrms-control-height) - 2px) !important;
+}
+:where(.fui-Dropdown__expandIcon):not(:where([data-control="free"] *)) {
+  position: absolute !important;
+  inset-inline-end: var(--hrms-control-px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  line-height: 0;
+}
+:where(.fui-Dropdown__button) > :where(span:not(.fui-Dropdown__expandIcon)):not(:where([data-control="free"] *)) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Dropdown and Select: the inner button / select is the box, so the shell
+ * has no padding of its own. */
+:where(.fui-Dropdown, .fui-Select):not(:where([data-control="free"], [data-control="free"] *)) {
+  padding-inline: 0 !important;
+}
+:where(.fui-Select__select):not(:where([data-control="free"] *)) {
+  height: 100% !important;
+  border-radius: var(--hrms-control-radius) !important;
+  padding-inline: var(--hrms-control-px) calc(var(--hrms-control-px) + 1.5rem) !important;
+  font-size: inherit !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Icons and buttons inside controls keep their size and never squeeze text. */
+:where(.fui-Input__contentBefore, .fui-Input__contentAfter, .fui-Dropdown__expandIcon, .fui-Combobox__expandIcon, .fui-SearchBox__dismiss) {
+  flex-shrink: 0;
+}
+
+/* Fluent Textarea: same padding, text and corners; grows downwards only. */
+:where(.fui-Textarea):not(:where([data-control="free"], [data-control="free"] *)) {
+  margin: 0 !important;
+  border-radius: var(--hrms-control-radius) !important;
+  min-height: var(--hrms-textarea-min) !important;
+}
+:where(.fui-Textarea__textarea):not(:where([data-control="free"] *)) {
+  padding: 0.5rem var(--hrms-control-px) !important;
+  font-size: var(--hrms-control-font) !important;
+  line-height: var(--hrms-control-line) !important;
+}
+
+/* --- Option lists (Dropdown, Combobox, TimePicker menus) ---------------- */
+:where(.fui-Listbox) {
+  padding: 0.25rem !important;
+  border-radius: var(--hrms-control-radius) !important;
+  max-height: min(20rem, 60vh) !important;
+  max-width: min(28rem, calc(100vw - 2rem)) !important;
+}
+:where(.fui-Option) {
+  min-height: var(--hrms-option-height) !important;
+  padding: 0.375rem var(--hrms-option-px) !important;
+  border-radius: calc(var(--hrms-control-radius) - 0.125rem) !important;
+  font-size: var(--hrms-control-font) !important;
+  line-height: var(--hrms-control-line) !important;
+  column-gap: var(--hrms-control-gap) !important;
+  align-items: center;
+}
+/* Long option labels show two lines, then "…". */
+:where(.fui-Option) > :where(:not(.fui-Option__checkIcon)) {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+:where(.fui-OptionGroup__label) {
+  padding: 0.375rem var(--hrms-option-px) 0.25rem !important;
+  font-size: 12px !important;
+}
+
+/* --- Plain HTML controls ------------------------------------------------ */
+:where(
+  input:not([type]),
+  input[type="text"],
+  input[type="email"],
+  input[type="number"],
+  input[type="password"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="week"],
+  select:not([multiple]):not([size])
+):not(:where(
+  .fui-Input, .fui-Input *, .fui-SearchBox *, .fui-Dropdown *, .fui-Combobox *, .fui-Select *, .fui-SpinButton *, .fui-Textarea, .fui-Textarea *, .fui-DatePicker *, .fui-TimePicker *,
+  [data-control="free"],
+  [data-control="free"] *
+)) {
+  box-sizing: border-box !important;
+  height: var(--hrms-control-height) !important;
+  min-height: var(--hrms-control-height) !important;
+  margin: 0 !important;
+  padding-block: 0 !important;
+  padding-inline: var(--hrms-control-px) !important;
+  border-radius: var(--hrms-control-radius) !important;
+  font-size: var(--hrms-control-font) !important;
+  line-height: var(--hrms-control-line) !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+/* Leave room for the native select arrow. */
+:where(select:not([multiple]):not([size])):not(:where(.fui-Input, .fui-Input *, .fui-SearchBox *, .fui-Dropdown *, .fui-Combobox *, .fui-Select *, .fui-SpinButton *, .fui-Textarea, .fui-Textarea *, .fui-DatePicker *, .fui-TimePicker *, [data-control="free"], [data-control="free"] *)) {
+  padding-inline-end: calc(var(--hrms-control-px) + 1.25rem) !important;
+  overflow: hidden;
+}
+:where(textarea):not(:where(.fui-Input, .fui-Input *, .fui-SearchBox *, .fui-Dropdown *, .fui-Combobox *, .fui-Select *, .fui-SpinButton *, .fui-Textarea, .fui-Textarea *, .fui-DatePicker *, .fui-TimePicker *, [data-control="free"], [data-control="free"] *)) {
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  min-height: var(--hrms-textarea-min);
+  padding: 0.5rem var(--hrms-control-px) !important;
+  border-radius: var(--hrms-control-radius) !important;
+  font-size: var(--hrms-control-font) !important;
+  line-height: var(--hrms-control-line) !important;
+}
+:where(input, textarea)::placeholder {
+  text-overflow: ellipsis;
+}
+
+/* --- Hand-built option lists ---------------------------------------------
+ * Search-as-you-type lists built without Fluent (role="listbox", or any
+ * container marked data-hrms-options) get the same rows as Fluent options:
+ * one height, padding, text size and corner, and "…" for long text. */
+:where([role="listbox"]:not(.fui-Listbox)) {
+  padding: 4px !important;
+  border-radius: var(--hrms-control-radius) !important;
+}
+:where([role="listbox"]:not(.fui-Listbox), [data-hrms-options]) :where(button, [role="option"]:not(:has(button))) {
+  box-sizing: border-box !important;
+  width: 100%;
+  min-height: var(--hrms-option-height) !important;
+  margin: 0 !important;
+  padding: 6px var(--hrms-option-px) !important;
+  border-radius: calc(var(--hrms-control-radius) - 2px) !important;
+  font-size: var(--hrms-control-font) !important;
+  line-height: var(--hrms-control-line) !important;
+  column-gap: var(--hrms-control-gap) !important;
+  text-align: start;
+  min-width: 0;
+}
+:where([role="listbox"]:not(.fui-Listbox), [data-hrms-options]) :where(button, [role="option"]) > :where(span, div) {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Rich-text editors (contenteditable textareas) --------------------- */
+:where([contenteditable="true"][role="textbox"]):not(:where([data-control="free"], [data-control="free"] *)) {
+  padding: 8px var(--hrms-control-px) !important;
+  font-size: var(--hrms-control-font) !important;
+  line-height: var(--hrms-control-line) !important;
+  min-height: var(--hrms-textarea-min);
+  overflow-wrap: anywhere;
+}
+:where(:has(> [contenteditable="true"][role="textbox"])):not(:where([data-control="free"], [data-control="free"] *)) {
+  border-radius: var(--hrms-control-radius);
+}
+
+/* Header search keeps room on the right for its "Ctrl /" hint. */
+@media (min-width: 640px) {
+  .hrms-search-hint {
+    padding-inline-end: 64px !important;
+  }
+}

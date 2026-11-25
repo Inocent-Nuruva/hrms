@@ -959,8 +959,8 @@ export function DepartmentsView() {
       </div>
 
       {openCreate ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="max-h-full w-full max-w-2xl overflow-y-auto rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
             <h3 className="text-lg font-semibold text-slate-900">{editingId === null ? "Add" : "Edit"} Department</h3>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <label className="grid gap-1">

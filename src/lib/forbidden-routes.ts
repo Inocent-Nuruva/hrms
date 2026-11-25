@@ -291,6 +291,24 @@ export function hideSmsNavIfEmpty(
   rememberForbiddenRoute("/dashboard/sms")
 }
 
+/**
+ * /dashboard/users is for platform owners (owner accounts) and company
+ * administrators (COMPANY_ADMIN, their company's users only). The backend
+ * enforces the same rule; this keeps the page out of everyone else's view.
+ */
+export function canOpenUsersAdminPage(options?: {
+  roleNames?: string[]
+  scope?: "platform" | "company" | null
+}) {
+  if (options?.scope === "platform") return true
+  return (options?.roleNames ?? []).some((role) => role.trim().toUpperCase() === "COMPANY_ADMIN")
+}
+
+export function isUsersAdminRoute(url: string) {
+  const path = url.split("?")[0] ?? url
+  return path === "/dashboard/users" || path.startsWith("/dashboard/users/")
+}
+
 export function canSeeDashboardPage(
   url: string,
   permissionLabels: string[],
@@ -317,6 +335,9 @@ export function canSeeDashboardPage(
     return false
   }
   if (isRememberedForbiddenRoute(url)) {
+    return false
+  }
+  if (isUsersAdminRoute(url) && !canOpenUsersAdminPage(options)) {
     return false
   }
   // Fail-closed: company-scoped admins have companies:read but cannot list

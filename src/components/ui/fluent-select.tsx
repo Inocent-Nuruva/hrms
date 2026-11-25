@@ -71,7 +71,7 @@ export function FluentSelect({
         id={dropdownId}
         aria-label={ariaLabel ?? label}
         size={size}
-        className={`!w-full !min-w-0 ${size === "small" ? "[&>button]:!px-[7px] [&>button]:!py-[7px]" : ""}`}
+        className="!w-full !min-w-0"
         placeholder={placeholder}
         value={selected?.label ?? ""}
         selectedOptions={selected ? [selected.value] : []}

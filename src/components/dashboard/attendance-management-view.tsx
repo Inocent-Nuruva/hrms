@@ -107,6 +107,7 @@ import {
 } from "@/components/ui/tooltip"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import {
+  ATTENDANCE_PAGE_STACK,
   AttendanceExportButton,
   AttendancePageHead,
   downloadAttendanceCsv,
@@ -3557,7 +3558,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
   }
 
   return (
-    <div className="mt-1.5 flex w-full flex-col gap-2">
+    <div className={ATTENDANCE_PAGE_STACK}>
       {activeSection === "policies" ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           {setupGuidanceControl}
@@ -4181,6 +4182,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
 
       <ResizableTable
         title={sectionDisplayTitle || "Attendance"}
+        variant="card"
         data={tableRows}
         onRowSelect={(_, row) => {
           if (row) {

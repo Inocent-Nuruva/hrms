@@ -5582,7 +5582,8 @@ export function EmployeeRegisterForm() {
                   showSecondarySelectedLabel
                   showSecondaryOptionLabel
                   selectButtonClassName={cn(
-                    "!h-9 !w-full !min-w-0 !rounded-md !border !px-2.5 !py-1.5 !text-sm !shadow-none",
+                    // Match the shared form control size (app/form-controls.css).
+                    "!h-[var(--hrms-control-height)] !w-full !min-w-0 !rounded-[var(--hrms-control-radius)] !border !px-[var(--hrms-control-px)] !py-0 !text-[length:var(--hrms-control-font)] !shadow-none",
                     draftContactPhoneError ? "!border-destructive" : "!border-input"
                   )}
                   className="w-full min-w-0"

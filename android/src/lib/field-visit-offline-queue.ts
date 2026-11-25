@@ -67,6 +67,11 @@ export async function removeFieldVisitOutboxAction(scope: { companyId: string | 
   await db.runAsync('DELETE FROM field_visit_outbox WHERE id = ? AND company_id = ? AND user_id = ?', id, String(scope.companyId), String(scope.userId));
 }
 
+export async function retryFieldVisitOutboxAction(scope: { companyId: string | number; userId: string | number }, id: string) {
+  const db = await database();
+  await db.runAsync("UPDATE field_visit_outbox SET status = 'QUEUED', last_error = NULL WHERE id = ? AND company_id = ? AND user_id = ? AND status = 'NEEDS_REVIEW'", id, String(scope.companyId), String(scope.userId));
+}
+
 export async function cacheMyFieldVisits(scope: { companyId: string | number; userId: string | number }, visits: Record<string, unknown>[]) {
   const db = await database();
   await db.runAsync('INSERT OR REPLACE INTO field_visit_cache (company_id, user_id, visits_json, cached_at) VALUES (?, ?, ?, ?)', String(scope.companyId), String(scope.userId), JSON.stringify(visits), new Date().toISOString());
