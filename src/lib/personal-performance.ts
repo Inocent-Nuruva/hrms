@@ -34,6 +34,16 @@ export function selectCurrentPersonalScorecard(scorecards: Scorecard[], periodId
   )[0] ?? null;
 }
 
+export function selectVisiblePersonalScorecards(scorecards: Scorecard[], today: string) {
+  const published = scorecards.filter((row) => row.currentVersion?.publishedAt && row.status !== "archived");
+  const active = published.filter((row) => !!row.period?.startDate && !!row.period?.endDate && row.period.startDate <= today && today <= row.period.endDate);
+  const periodId = selectPersonalPeriod([], published, today)?.id;
+  const visible = active.length > 0 ? active : published.filter((row) => row.periodId === periodId);
+  return visible.sort((a, b) =>
+    (b.currentVersion.publishedAt ?? "").localeCompare(a.currentVersion.publishedAt ?? "") || b.id - a.id,
+  );
+}
+
 export function selectCurrentPersonalEvaluation(evaluations: Evaluation[]) {
   return [...evaluations].sort((a, b) =>
     Number(b.status !== "finalized") - Number(a.status !== "finalized") || b.id - a.id,
