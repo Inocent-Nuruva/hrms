@@ -9,6 +9,7 @@ import {
   type LeaveAccrualSummaryRow,
 } from "@/lib/admin-api"
 import { RecalculateLeaveBalanceButton } from "@/components/leave/leave-recalculation-dialog"
+import { LeaveBalanceShowcase, type LeaveBalanceItem } from "@/components/leave/leave-balance-showcase"
 
 const FREQUENCY: Record<LeaveAccrualSummaryRow["accrual_frequency"], string> = {
   daily: "Earned daily",
@@ -104,19 +105,45 @@ export function EmployeeLeaveBalanceCard({
   const [error, setError] = React.useState<string | null>(null)
   React.useEffect(() => {
     if (!token || !employeeId || !canView) return
+    let active = true
+    setRows(null)
+    setError(null)
     getEmployeeLeaveAccrual(token, employeeId)
-      .then(setRows)
-      .catch((e) => setError(e instanceof Error ? e.message : "Could not load leave balances."))
+      .then((result) => { if (active) setRows(result) })
+      .catch((e) => { if (active) setError(e instanceof Error ? e.message : "Could not load leave balances.") })
+    return () => { active = false }
   }, [canView, employeeId, token])
   if (!canView || !employeeId) return null
+  const items: LeaveBalanceItem[] = (rows ?? []).map((row) => {
+    const upfront = row.accrual_frequency === "yearly" && row.accrued_days === row.entitlement_days
+    const accrualNote = `${FREQUENCY[row.accrual_frequency]}${upfront ? " (full entitlement at the start of the leave year)" : ""}${row.accrual_start_date ? ` · from ${date(row.accrual_start_date)}` : ""}${row.next_accrual_date ? ` · next +${d(row.next_accrual_amount)} on ${date(row.next_accrual_date)}` : ""}`
+    const notices = [
+      row.probation_status === "on_probation" ? `On probation: no ${row.leave_type_name ?? "leave"} is earned yet.${row.expected_accrual_start_date ? ` Expected to start ${date(row.expected_accrual_start_date)}, once confirmed.` : ""}` : null,
+      row.probation_status === "not_confirmed" ? row.accrual_explanation : null,
+      row.review_pending ? "A correction to this balance is awaiting HR review." : null,
+    ].filter((notice): notice is string => Boolean(notice))
+    return {
+      key: `${row.fiscal_year}-${row.leave_type_id}`,
+      name: row.leave_type_name ?? "Leave",
+      fiscalYear: row.fiscal_year,
+      entitlement: row.entitlement_days,
+      accrued: row.accrued_days,
+      used: row.used_days,
+      pending: row.pending_days,
+      available: row.available_days,
+      carriedForward: row.carried_forward_days,
+      expired: null,
+      creditDate: null,
+      accrualNote,
+      notices,
+    }
+  })
+  const action = <RecalculateLeaveBalanceButton token={token} employeeId={employeeId} employeeName={employeeName} />
   return (
-    <section aria-label="Leave balance" className="mt-4 space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Leave balance</h3>
-        <RecalculateLeaveBalanceButton token={token} employeeId={employeeId} employeeName={employeeName} />
-      </div>
+    <section aria-label="Leave balance" className="min-w-0 space-y-2">
+      {items.length > 0 ? <LeaveBalanceShowcase items={items} fiscalYear={rows?.[0]?.fiscal_year ?? String(new Date().getFullYear())} title="Leave balance" description={employeeName ? `Entitlement, usage and availability for ${employeeName}.` : "Employee leave entitlement, usage and availability."} ariaLabel="Employee leave balances" actions={action} /> : <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-lg font-semibold">Leave balance</h3>{action}</div>}
       {error ? <p className="text-sm text-destructive" role="alert">{error}</p> : null}
-      {rows ? <LeaveAccrualTable rows={rows} /> : !error ? <p className="text-sm text-muted-foreground" role="status">Loading…</p> : null}
+      {rows?.length === 0 ? <p className="text-sm text-muted-foreground">No leave balances for this leave year yet.</p> : !rows && !error ? <p className="text-sm text-muted-foreground" role="status">Loading…</p> : null}
     </section>
   )
 }

@@ -26,6 +26,8 @@ export type LeaveBalanceItem = {
   carriedForward: number | null;
   expired: number | null;
   creditDate: string | null;
+  accrualNote?: string;
+  notices?: string[];
 };
 
 function formatDays(value: number | null): string {
@@ -50,8 +52,12 @@ function BalanceMetrics({ item }: { item: LeaveBalanceItem }) {
 
 function BalanceFootnote({ item }: { item: LeaveBalanceItem }) {
   const date = item.creditDate ? new Date(item.creditDate) : null;
-  if (!date || Number.isNaN(date.valueOf())) return null;
-  return <p className={styles.footnote}><Calendar20Regular aria-hidden="true" /> Credited {new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "short", year: "numeric" }).format(date)}</p>;
+  const creditText = date && !Number.isNaN(date.valueOf()) ? `Credited ${new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "short", year: "numeric" }).format(date)}` : null;
+  if (!creditText && !item.accrualNote && !item.notices?.length) return null;
+  return <div className={styles.footnotes}>
+    {(item.accrualNote || creditText) && <p className={styles.footnote}><Calendar20Regular aria-hidden="true" /> {item.accrualNote ?? creditText}</p>}
+    {item.notices?.map((notice) => <p key={notice} className={styles.notice}>{notice}</p>)}
+  </div>;
 }
 
 function BalanceCard({ item }: { item: LeaveBalanceItem }) {
@@ -68,21 +74,22 @@ function BalanceCard({ item }: { item: LeaveBalanceItem }) {
   </article>;
 }
 
-export function LeaveBalanceShowcase({ items, fiscalYear }: { items: LeaveBalanceItem[]; fiscalYear: string }) {
+export function LeaveBalanceShowcase({ items, fiscalYear, title = "My leave balance", description = "Your leave entitlement, usage and availability.", ariaLabel = "My leave balances", actions }: { items: LeaveBalanceItem[]; fiscalYear: string; title?: string; description?: string; ariaLabel?: string; actions?: React.ReactNode }) {
   const [view, setView] = React.useState<"summary" | "cards">("summary");
   const featured = items.find((item) => /annual|vacation/i.test(item.name)) ?? items[0];
   const others = items.filter((item) => item.key !== featured.key);
   const negative = featured.available !== null && featured.available < 0;
 
-  return <section className={styles.showcase} aria-label="My leave balances">
+  return <section className={styles.showcase} aria-label={ariaLabel}>
     <div className={styles.heading}>
-      <div><h2>My leave balance</h2><p>Your leave entitlement, usage and availability.</p></div>
+      <div><h2>{title}</h2><p>{description}</p></div>
       <div className={styles.headingControls}>
         <span className={styles.year}>FY {fiscalYear}</span>
         <TabList size="small" aria-label="Leave balance view" selectedValue={view} onTabSelect={(_, data) => setView(data.value as "summary" | "cards")}>
           <Tab value="summary" aria-label="Summary" title="Summary" icon={<TextBulletListLtr20Regular aria-hidden="true" />} />
           <Tab value="cards" aria-label="Cards" title="Cards" icon={<Grid20Regular aria-hidden="true" />} />
         </TabList>
+        {actions}
       </div>
     </div>
 
