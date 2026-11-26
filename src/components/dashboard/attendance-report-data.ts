@@ -1,3 +1,4 @@
+import { attendanceDimensionCategory } from "@/lib/attendance-status"
 import { listAttendanceDailySummariesPage, type AdminRecord } from "@/lib/admin-api"
 
 /** Never present a truncated page as the period's complete attendance. */
@@ -25,6 +26,8 @@ export function attendanceReportRate(present: number, late: number, absent: numb
 }
 
 export function attendanceReportCategory(row: AdminRecord): "present" | "late" | "absent" | null {
+  const byDimension = attendanceDimensionCategory(row)
+  if (byDimension !== undefined) return byDimension
   const value = row.attendanceStatus ?? row.attendance_status ?? row.status ?? row.work_status ?? row.day_status
   const status = typeof value === "string" ? value.toLowerCase() : ""
   if (status.includes("absent") || status.includes("no_show") || status.includes("no show")) return "absent"
