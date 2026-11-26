@@ -2,7 +2,7 @@
 
 import { Input } from "@/components/ui/input";
 import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
-import { fluentPrompt } from "@/components/ui/fluent-dialog-service";
+import { fluentConfirm, fluentPrompt } from "@/components/ui/fluent-dialog-service";
 
 import * as React from "react";
 import { Switch } from "@/components/ui/switch";
@@ -55,6 +55,10 @@ import {
   enableEmployeeDeviceFingerprint,
   getAccessControlAttendanceDeviceSyncStatus,
   getAttendanceDeviceSyncStatus,
+  reviewAttendanceDeviceIdentities,
+  correctAttendanceDeviceUserName,
+  unlinkAttendanceDeviceUser,
+  type AttendanceDeviceIdentityReview,
   getAttendanceResourceById,
   getHikvisionSyncJob,
   listAccessControlResources,
@@ -943,6 +947,45 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
   const actor = useDashboardActor();
   const [activeTab, setActiveTab] = React.useState<DeviceTabKey>("details");
   const [device, setDevice] = React.useState<AdminRecord | null>(null);
+  const [identityReview, setIdentityReview] = React.useState<AttendanceDeviceIdentityReview | null>(null);
+  const [identityReviewLoading, setIdentityReviewLoading] = React.useState(false);
+  const [identityReviewError, setIdentityReviewError] = React.useState<string | null>(null);
+  const correctDeviceName = async (row: AttendanceDeviceIdentityReview["rows"][number]) => {
+    if (!row.employee_id || !row.employee_name || !row.device_name) return;
+    const confirmed = await fluentConfirm(`Device user ${row.device_employee_no} is currently named “${row.device_name}”. Change it to “${row.employee_name}”? Confirm that both records belong to the same person. This does not change past attendance.`, { title: "Correct device name", confirmLabel: "Continue" });
+    if (!confirmed) return;
+    const reason = await fluentPrompt("Why is this device name being corrected?", "", { title: "Reason for correction", confirmLabel: "Update device" });
+    if (!reason?.trim()) return;
+    const token = readStoredToken();
+    if (!token) { setIdentityReviewError("Please sign in again."); return; }
+    setIdentityReviewLoading(true); setIdentityReviewError(null);
+    try {
+      await correctAttendanceDeviceUserName(token, deviceId, { employee_no: row.device_employee_no, expected_employee_id: row.employee_id, expected_device_name: row.device_name, expected_hrms_name: row.employee_name, reason: reason.trim() });
+      setMessage("Device name updated and verified.");
+      setIdentityReview(null);
+      try { setIdentityReview(await reviewAttendanceDeviceIdentities(token, deviceId)); }
+      catch { setIdentityReviewError("The device name was updated and verified, but the review list could not be refreshed. Run the check again."); }
+    } catch (errorObject) { setIdentityReviewError(errorObject instanceof Error ? errorObject.message : "Unable to update device name."); }
+    finally { setIdentityReviewLoading(false); }
+  };
+  const unlinkDeviceUser = async (row: AttendanceDeviceIdentityReview["rows"][number]) => {
+    if (!row.employee_id) return;
+    const confirmed = await fluentConfirm(`Unlink device user ${row.device_employee_no} (${row.device_name || "name unavailable"}) from ${row.employee_name || "the linked employee"}? The device user and its access remain on the device. This action does not modify existing attendance.`, { title: "Unlink from HRMS", confirmLabel: "Continue" });
+    if (!confirmed) return;
+    const reason = await fluentPrompt("Why is this device user being unlinked?", "", { title: "Reason for unlinking", confirmLabel: "Unlink" });
+    if (!reason?.trim()) return;
+    const token = readStoredToken();
+    if (!token) { setIdentityReviewError("Please sign in again."); return; }
+    setIdentityReviewLoading(true); setIdentityReviewError(null);
+    try {
+      await unlinkAttendanceDeviceUser(token, deviceId, { employee_no: row.device_employee_no, expected_employee_id: row.employee_id, reason: reason.trim() });
+      setMessage("Device user unlinked from HRMS.");
+      setIdentityReview(null);
+      try { setIdentityReview(await reviewAttendanceDeviceIdentities(token, deviceId)); }
+      catch { setIdentityReviewError("The user was unlinked, but the review list could not be refreshed. Run the check again."); }
+    } catch (errorObject) { setIdentityReviewError(errorObject instanceof Error ? errorObject.message : "Unable to unlink device user."); }
+    finally { setIdentityReviewLoading(false); }
+  };
   const [assignedEmployees, setAssignedEmployees] = React.useState<
     AdminRecord[]
   >([]);
@@ -1540,7 +1583,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
     setEditingAssignedEmployeeDetails(false);
     setSavingAssignedEmployeeDetails(false);
     setCredentialForm(buildInitialCredentialForm());
-  }, [accessGroupOptions]);
+  }, [accessGroupOptions, setCredentialForm]);
 
   const filteredAssignedEmployees = React.useMemo(() => {
     const normalizedSearch = employeeSearch.trim().toLowerCase();
@@ -2061,7 +2104,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
     (title: string, message: string) => {
       setCredentialAlertState({ title, message });
     },
-    [],
+    [setCredentialAlertState],
   );
 
   const onAssignEmployee = async () => {
@@ -3058,6 +3101,23 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
 
         {activeTab === "employees" ? (
           <div className="space-y-3">
+            {actor.ready && canPerformPermission(actor.permissionLabels, "access_control_sync:execute") && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button type="button" className="rounded border border-amber-600 px-3 py-1 font-medium disabled:opacity-50" disabled={identityReviewLoading} onClick={async () => {
+                    const token = readStoredToken();
+                    if (!token) { setIdentityReviewError("Please sign in again."); return; }
+                    setIdentityReviewLoading(true); setIdentityReviewError(null); setIdentityReview(null);
+                    try { setIdentityReview(await reviewAttendanceDeviceIdentities(token, deviceId)); }
+                    catch (errorObject) { setIdentityReviewError(errorObject instanceof Error ? errorObject.message : "Unable to check device identities."); }
+                    finally { setIdentityReviewLoading(false); }
+                  }}>{identityReviewLoading ? "Checking device…" : "Check device identity differences"}</button>
+                  <span>Checks the device’s current users. It does not verify past attendance.</span>
+                </div>
+                {identityReviewError && <p role="alert" className="mt-2 text-red-700">{identityReviewError}</p>}
+                {identityReview && <div className="mt-3 overflow-x-auto"><p className="mb-2">{identityReview.rows.filter(row => row.status !== "MATCH").length} of {identityReview.total} users need review. Attendance is not automatically held by this check.</p><table className="w-full text-left"><thead><tr><th>Device number</th><th>Device name</th><th>Linked HR employee</th><th>Result</th><th>Action</th></tr></thead><tbody>{identityReview.rows.map((row, index) => <tr key={`${row.device_employee_no}-${index}`}><td>{row.device_employee_no}</td><td>{row.device_name || "Name unavailable"}</td><td>{row.employee_name || "No linked employee"}{row.employee_no ? ` (${row.employee_no})` : ""}</td><td>{row.status.replaceAll("_", " ")}</td><td>{row.employee_id && canPerformPermission(actor.permissionLabels, "employee_device_assignments:update") ? <div className="flex gap-3">{row.device_name && row.employee_name ? <button type="button" disabled={identityReviewLoading} className="font-medium text-primary underline disabled:opacity-50" onClick={() => void correctDeviceName(row)}>Use HRMS name on device</button> : null}<button type="button" disabled={identityReviewLoading} className="font-medium text-red-700 underline disabled:opacity-50" onClick={() => void unlinkDeviceUser(row)}>Unlink from HRMS</button></div> : null}</td></tr>)}</tbody></table></div>}
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative min-w-[12rem] flex-1 sm:max-w-xs">
                 <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
