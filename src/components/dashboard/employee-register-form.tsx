@@ -1162,6 +1162,8 @@ function Field({
   hint,
   reserveHintSpace = false,
   className,
+  required = false,
+  error,
 }: {
   label: string
   htmlFor: string
@@ -1170,15 +1172,35 @@ function Field({
   hint?: React.ReactNode
   reserveHintSpace?: boolean
   className?: string
+  /** Shows a red star after the label. */
+  required?: boolean
+  /** Inline error shown under the input; also outlines the input in red. */
+  error?: string
 }) {
   return (
     <AnimatedField delayMs={delayMs} className={className}>
-      <div className="flex h-full flex-col gap-1">
+      <div
+        className={cn(
+          "flex h-full flex-col gap-1",
+          error &&
+            "[&_[data-slot=input]]:border-destructive [&_[data-slot=select-trigger]]:border-destructive [&_input]:border-destructive"
+        )}
+      >
         <Label htmlFor={htmlFor} className="text-xs font-medium text-foreground">
           {label}
+          {required ? (
+            <span className="ml-0.5 text-destructive" aria-hidden="true">
+              *
+            </span>
+          ) : null}
+          {required ? <span className="sr-only"> (required)</span> : null}
         </Label>
         {children}
-        {hint || reserveHintSpace ? (
+        {error ? (
+          <p id={`${htmlFor}-error`} role="alert" className="text-[11px] leading-snug text-destructive">
+            {error}
+          </p>
+        ) : hint || reserveHintSpace ? (
           <div className="min-h-3.5 text-[11px] leading-snug text-muted-foreground">{hint}</div>
         ) : null}
       </div>
@@ -1290,6 +1312,8 @@ export function EmployeeRegisterForm() {
   const [draftContactPhoneError, setDraftContactPhoneError] = React.useState("")
   const [draftContactEmailError, setDraftContactEmailError] = React.useState("")
   const [isInviteMode, setIsInviteMode] = React.useState(false)
+  // Inline validation messages keyed by field (firstName, gender, contacts, ...).
+  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({})
   // HR chooses whether the new employee goes through onboarding or starts
   // straight away as active (no onboarding request).
   const [registrationStatus, setRegistrationStatus] = React.useState<"onboarding" | "active">("onboarding")
@@ -1987,6 +2011,13 @@ export function EmployeeRegisterForm() {
     setIsContactDialogOpen(true)
   }
 
+  // The first contact with both email and phone becomes the login, so both are
+  // required until one exists (drives the stars in the contact dialog).
+  const draftContactNeedsLogin = !contacts.some(
+    (contact, index) =>
+      index !== editingContactIndex && contact.isPrimary && Boolean(contact.phoneNumber.trim()) && Boolean(contact.email.trim())
+  )
+
   const saveDraftContact = () => {
     const normalizedPhone = draftContact.phoneNumber.trim()
     const normalizedEmail = draftContact.email.trim().toLowerCase()
@@ -1998,6 +2029,13 @@ export function EmployeeRegisterForm() {
         Boolean(contact.email.trim())
     )
     const emailRequired = !hasExistingPrimaryWithEmailAndPhone
+
+    // The login account needs a phone too, so the first full contact needs both.
+    if (emailRequired && !normalizedPhone) {
+      setDraftContactPhoneError("Phone number is required.")
+      if (!normalizedEmail) setDraftContactEmailError("Email is required.")
+      return
+    }
 
     if (emailRequired && !normalizedEmail) {
       setDraftContactEmailError("Email is required.")
@@ -2656,15 +2694,38 @@ export function EmployeeRegisterForm() {
 
   // Checks the fields a step owns before moving past it, so errors show on the
   // step that caused them instead of only at the final save.
-  const getStepError = (step: RegisterStep): string | null => {
+  // Which fields are required right now (drives the red stars).
+  const requiredFields = {
+    firstName: true,
+    lastName: true,
+    gender: true,
+    middleName: isInviteMode,
+    branch: isRegisteringOthers || isInviteMode,
+    department: true,
+    position: isRegisteringOthers || isInviteMode,
+    hireDate: !isOnboardingStatus,
+    invitePhone: isInviteMode,
+    inviteEmail: isInviteMode,
+  }
+
+  // Every missing/invalid field a step owns, keyed by field (shown inline).
+  const getStepErrors = (step: RegisterStep): Record<string, string> => {
+    const errors: Record<string, string> = {}
     if (step === "details") {
-      if (!form.firstName.trim() || !form.lastName.trim()) return "First name and last name are required."
-      if (!form.gender) return "Gender is required."
-      if (isInviteMode && !form.middleName.trim()) return "Middle name is required for send invite."
-      if (isRegisteringOthers && !form.branch.trim()) return "Branch is required."
-      if (!form.department.trim()) return "Department is required."
-      if (isRegisteringOthers && !form.position.trim()) return "Position is required."
-      if (!isOnboardingStatus && !hireDate) return "Hire date is required for an active employee."
+      if (!form.firstName.trim()) errors.firstName = "First name is required."
+      if (requiredFields.middleName && !form.middleName.trim()) errors.middleName = "Middle name is required for send invite."
+      if (!form.lastName.trim()) errors.lastName = "Last name is required."
+      if (requiredFields.branch && !form.branch.trim()) errors.branch = "Branch is required."
+      if (!form.department.trim()) errors.department = "Department is required."
+      if (requiredFields.position && !form.position.trim()) errors.position = "Position is required."
+      if (requiredFields.hireDate && !hireDate) errors.hireDate = "Hire date is required for an active employee."
+      if (!form.gender) errors.gender = "Gender is required."
+      if (isInviteMode) {
+        const inviteEmail = inviteContact.email.trim()
+        if (!inviteContact.phoneNumber.trim()) errors.invitePhone = "Phone number is required."
+        if (!inviteEmail) errors.inviteEmail = "Email is required."
+        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)) errors.inviteEmail = "Enter a valid email address."
+      }
     }
     if (step === "contacts" && !isInviteMode) {
       const usable = contacts
@@ -2674,15 +2735,52 @@ export function EmployeeRegisterForm() {
           phone: joinPhoneWithCountryCode(getDialCodeForCountry(contact.countryIso), contact.phoneNumber),
         }))
         .filter((contact) => contact.email || contact.phone)
-      if (!usable.length) return "At least one contact is required."
       const email = usable.find((c) => c.isPrimary && c.email)?.email ?? usable.find((c) => c.email)?.email
       const phone = usable.find((c) => c.isPrimary && c.phone)?.phone ?? usable.find((c) => c.phone)?.phone
-      if (!email || !phone) return "Contacts must include an email address and a phone number."
-      if (!/^\+(255|256)/.test(phone.replace(/\s+/g, "")))
-        return "The primary phone number must be Tanzanian (+255) or Ugandan (+256)."
+      if (!usable.length) errors.contacts = "Add at least one contact with an email address and a phone number."
+      else if (!email || !phone) errors.contacts = "Contacts must include an email address and a phone number."
+      else if (!/^\+(255|256)/.test(phone.replace(/\s+/g, "")))
+        errors.contacts = "The primary phone number must be Tanzanian (+255) or Ugandan (+256)."
     }
-    return null
+    return errors
   }
+
+  const FIELD_ELEMENT_IDS: Record<string, string> = {
+    hireDate: "hire-date",
+    invitePhone: "invite-phone",
+    inviteEmail: "invite-email",
+  }
+
+  // Shows a step's errors on its fields, moves there and focuses the first.
+  // Returns false when the step has errors.
+  const validateStep = (step: RegisterStep) => {
+    const errors = getStepErrors(step)
+    const keys = Object.keys(errors)
+    if (!keys.length) return true
+    setFieldErrors(errors)
+    setCurrentStep(step)
+    toast.error(keys.length === 1 ? errors[keys[0]] : `Please complete the ${keys.length} highlighted fields.`)
+    window.setTimeout(() => {
+      document.getElementById(FIELD_ELEMENT_IDS[keys[0]] ?? keys[0])?.focus()
+    }, 50)
+    return false
+  }
+
+  // As the user fixes fields, drop the errors that no longer apply.
+  React.useEffect(() => {
+    setFieldErrors((previous) => {
+      const keys = Object.keys(previous)
+      if (!keys.length) return previous
+      const current = { ...getStepErrors("details"), ...getStepErrors("contacts") }
+      const next: Record<string, string> = {}
+      keys.forEach((key) => {
+        if (current[key]) next[key] = current[key]
+      })
+      return Object.keys(next).length === keys.length ? previous : next
+    })
+    // getStepErrors reads exactly these values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, hireDate, contacts, inviteContact, isInviteMode, isOnboardingStatus])
 
   // Returns false (and shows why) when moving forward from `from` to `to`
   // would skip a step that still has errors.
@@ -2690,13 +2788,7 @@ export function EmployeeRegisterForm() {
     const fromIndex = REGISTER_STEP_ORDER.indexOf(from)
     const toIndex = REGISTER_STEP_ORDER.indexOf(to)
     for (let index = fromIndex; index < toIndex; index += 1) {
-      const step = REGISTER_STEP_ORDER[index]
-      const error = getStepError(step)
-      if (error) {
-        setCurrentStep(step)
-        toast.error(error)
-        return false
-      }
+      if (!validateStep(REGISTER_STEP_ORDER[index])) return false
     }
     return true
   }
@@ -2713,17 +2805,8 @@ export function EmployeeRegisterForm() {
       return
     }
 
-    if (!form.firstName.trim() || !form.lastName.trim()) {
-      toast.error("First name and last name are required.")
-      return
-    }
     for (const step of ["details", "contacts"] as RegisterStep[]) {
-      const stepError = getStepError(step)
-      if (stepError) {
-        setCurrentStep(step)
-        toast.error(stepError)
-        return
-      }
+      if (!validateStep(step)) return
     }
     if (isInviteMode && !form.middleName.trim()) {
       toast.error("Middle name is required for send invite.")
@@ -3159,6 +3242,7 @@ export function EmployeeRegisterForm() {
   }
 
   const clearForm = () => {
+    setFieldErrors({})
     setCurrentStep("details")
     setForm({
       ...EMPTY_FORM,
@@ -3452,7 +3536,7 @@ export function EmployeeRegisterForm() {
                     />
                   </Field>
 
-                  <Field label="First Name" htmlFor="firstName" delayMs={40}>
+                  <Field label="First Name" htmlFor="firstName" required={requiredFields.firstName} error={fieldErrors.firstName} delayMs={40}>
                     <Input
                       id="firstName"
                       value={form.firstName}
@@ -3464,6 +3548,8 @@ export function EmployeeRegisterForm() {
                   <Field
                     label={isInviteMode ? "Middle Name" : "Middle Name"}
                     htmlFor="middleName"
+                    required={requiredFields.middleName}
+                    error={fieldErrors.middleName}
                     delayMs={80}
                     hint={isInviteMode ? "Required in send invite mode." : undefined}
                     reserveHintSpace={isInviteMode}
@@ -3476,7 +3562,7 @@ export function EmployeeRegisterForm() {
                     />
                   </Field>
 
-                  <Field label="Last Name" htmlFor="lastName" delayMs={120}>
+                  <Field label="Last Name" htmlFor="lastName" required={requiredFields.lastName} error={fieldErrors.lastName} delayMs={120}>
                     <Input
                       id="lastName"
                       value={form.lastName}
@@ -3485,7 +3571,7 @@ export function EmployeeRegisterForm() {
                     />
                   </Field>
 
-                  <Field label="Branch" htmlFor="branch" delayMs={160}>
+                  <Field label="Branch" htmlFor="branch" required={requiredFields.branch} error={fieldErrors.branch} delayMs={160}>
                     {lockedFields.branch ? (
                       <Input id="branch" value={form.branch} disabled />
                     ) : (
@@ -3511,7 +3597,7 @@ export function EmployeeRegisterForm() {
                     )}
                   </Field>
 
-                  <Field label="Department" htmlFor="department" delayMs={200}>
+                  <Field label="Department" htmlFor="department" required={requiredFields.department} error={fieldErrors.department} delayMs={200}>
                     {lockedFields.department ? (
                       <Input id="department" value={form.department} disabled />
                     ) : (
@@ -3542,7 +3628,7 @@ export function EmployeeRegisterForm() {
                     )}
                   </Field>
 
-                  <Field label="Position" htmlFor="position" delayMs={240}>
+                  <Field label="Position" htmlFor="position" required={requiredFields.position} error={fieldErrors.position} delayMs={240}>
                     {lockedFields.position ? (
                       <Input id="position" value={form.position} disabled />
                     ) : (
@@ -3656,7 +3742,7 @@ export function EmployeeRegisterForm() {
                     />
                   </Field>
 
-                  <Field label="Hire Date" htmlFor="hire-date" delayMs={265}>
+                  <Field label="Hire Date" htmlFor="hire-date" required={requiredFields.hireDate} error={fieldErrors.hireDate} delayMs={265}>
                     <DatePickerPresets
                       value={hireDate ? hireDate.toISOString().slice(0, 10) : ""}
                       onChange={(v) => setHireDate(v ? new Date(v) : undefined)}
@@ -3726,6 +3812,8 @@ export function EmployeeRegisterForm() {
                       <Field
                         label="Phone Number"
                         htmlFor="invite-phone"
+                        required={requiredFields.invitePhone}
+                        error={fieldErrors.invitePhone}
                         delayMs={280}
                         hint={invitePhoneError || "Required for send invite."}
                         reserveHintSpace
@@ -3742,6 +3830,8 @@ export function EmployeeRegisterForm() {
                       <Field
                         label="Email"
                         htmlFor="invite-email"
+                        required={requiredFields.inviteEmail}
+                        error={fieldErrors.inviteEmail}
                         delayMs={300}
                         hint={inviteEmailError || "Required for send invite."}
                         reserveHintSpace
@@ -3763,7 +3853,7 @@ export function EmployeeRegisterForm() {
 
                   {!isInviteMode ? (
                     <>
-                      <Field label="Gender" htmlFor="gender" delayMs={280}>
+                      <Field label="Gender" htmlFor="gender" required={requiredFields.gender} error={fieldErrors.gender} delayMs={280}>
                         <Select value={form.gender} onValueChange={(value) => updateField("gender", value ?? "")}>
                           <SelectTrigger id="gender" className="w-full">
                             <SelectValue placeholder="Select gender" />
@@ -4428,7 +4518,17 @@ export function EmployeeRegisterForm() {
               <TabsContent value="contacts" className={getStepTransitionClass("contacts")}>
                 <div className="grid gap-3">
                   <div className="flex items-center justify-between gap-2">
-                    <Label>Contacts</Label>
+                    <Label>
+                      Contacts
+                      {!isInviteMode ? (
+                        <>
+                          <span className="ml-0.5 text-destructive" aria-hidden="true">
+                            *
+                          </span>
+                          <span className="sr-only"> (required)</span>
+                        </>
+                      ) : null}
+                    </Label>
                     {contacts.length > 0 ? (
                       <Button type="button" size="sm" variant="outline" onClick={openAddContactDialog}>
                         <PlusIcon />
@@ -4436,6 +4536,16 @@ export function EmployeeRegisterForm() {
                       </Button>
                     ) : null}
                   </div>
+                  {fieldErrors.contacts ? (
+                    <p
+                      id="contacts"
+                      role="alert"
+                      tabIndex={-1}
+                      className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+                    >
+                      {fieldErrors.contacts}
+                    </p>
+                  ) : null}
 
                   {contacts.length === 0 ? (
                     <div className="rounded-md border border-dashed border-border/80 bg-muted/20 p-6 text-center">
@@ -5707,7 +5817,10 @@ export function EmployeeRegisterForm() {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="draft-contact-phone">Phone Number</Label>
+              <Label htmlFor="draft-contact-phone">
+                Phone Number
+                {draftContactNeedsLogin ? (<><span className="ml-0.5 text-destructive" aria-hidden="true">*</span><span className="sr-only"> (required)</span></>) : null}
+              </Label>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(9rem,11rem)_minmax(0,1fr)]">
                 <ReactFlagsSelect
                   id="draft-contact-country"
@@ -5749,7 +5862,10 @@ export function EmployeeRegisterForm() {
               {draftContactPhoneError ? <p className="text-xs text-destructive">{draftContactPhoneError}</p> : null}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="draft-contact-email">Email</Label>
+              <Label htmlFor="draft-contact-email">
+                Email
+                {draftContactNeedsLogin ? (<><span className="ml-0.5 text-destructive" aria-hidden="true">*</span><span className="sr-only"> (required)</span></>) : null}
+              </Label>
               <Input
                 id="draft-contact-email"
                 type="email"
