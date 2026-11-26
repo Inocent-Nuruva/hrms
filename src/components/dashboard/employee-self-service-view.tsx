@@ -1,6 +1,6 @@
 "use client"
 import { SharedDashboardHeroBackground } from "@/components/dashboard/welcome-card-background"
-import { MyLeaveAccrualPanel } from "@/components/leave/leave-accrual-summary"
+import { LeaveBalanceShowcase, type LeaveBalanceItem } from "@/components/leave/leave-balance-showcase"
 import { downloadLeavePdfWithFallback } from "@/lib/leave-pdf-download"
 
 import { evidenceDayThreshold, evidenceDueText } from "@/lib/leave-evidence"
@@ -631,14 +631,6 @@ function formatUnknownValue(value: unknown) {
   return "-"
 }
 
-function formatDayValue(value: unknown) {
-  const numeric = readNumberish(value)
-  if (numeric === null) {
-    return "-"
-  }
-  return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1)
-}
-
 function readAttendanceValue(
   record: AdminRecord | null | undefined,
   keys: string[],
@@ -1001,21 +993,6 @@ function downloadLocalBlob(blob: Blob, filename: string) {
   link.click()
   link.remove()
   URL.revokeObjectURL(url)
-}
-
-function readLeaveTotalsValue(totals: Record<string, number> | undefined, keys: string[]) {
-  if (!totals) {
-    return null
-  }
-
-  for (const key of keys) {
-    const value = totals[key]
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value
-    }
-  }
-
-  return null
 }
 
 function formatEmploymentType(value: unknown) {
@@ -6165,36 +6142,6 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     return labels
   }, [leaveTypes])
 
-  const balanceTotals = React.useMemo(() => {
-    const totals = leaveBalancesFull?.totals
-    return [
-      {
-        label: "Allocated",
-        value: readLeaveTotalsValue(totals, ["allocated_days", "allocated"]),
-      },
-      {
-        label: "Used",
-        value: readLeaveTotalsValue(totals, ["used_days", "used"]),
-      },
-      {
-        label: "Pending",
-        value: readLeaveTotalsValue(totals, ["pending_days", "pending"]),
-      },
-      {
-        label: "Carried Forward",
-        value: readLeaveTotalsValue(totals, ["carried_forward_days", "carried_forward"]),
-      },
-      {
-        label: "Expired",
-        value: readLeaveTotalsValue(totals, ["expired_days", "expired"]),
-      },
-      {
-        label: "Available",
-        value: readLeaveTotalsValue(totals, ["available_days", "available", "remaining_days", "remaining"]),
-      },
-    ]
-  }, [leaveBalancesFull?.totals])
-
   const selectedLeaveTypeLabel = React.useMemo(() => {
     if (!requestForm.leave_type_id) {
       return ""
@@ -6821,26 +6768,30 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     )
   }
   if (activeTab === "balances") {
-    const fiscalYear = leaveBalancesFull?.current_fiscal_year || "2026"
+    const fiscalYear = leaveBalancesFull?.current_fiscal_year || String(new Date().getFullYear())
     const showBalancesError = balancesError && balancesError !== SELF_SERVICE_UNAVAILABLE_MESSAGE
-    const balanceMetrics = [
-      { key: "allocated", label: "Annual entitlement", value: balanceTotals[0]?.value, hint: "Full leave year, not all earned yet" },
-      { key: "used", label: "Used", value: balanceTotals[1]?.value, hint: "Days taken" },
-      { key: "pending", label: "Awaiting approval", value: balanceTotals[2]?.value, hint: "Requested days" },
-      { key: "carried", label: "Carried over", value: balanceTotals[3]?.value, hint: "From last year" },
-      { key: "expired", label: "Expired", value: balanceTotals[4]?.value, hint: "No longer available" },
-      { key: "available", label: "Available to use", value: balanceTotals[5]?.value, hint: "Remaining days" },
-    ]
+    const balanceItems: LeaveBalanceItem[] = balances.map((row, index) => {
+      const nestedLeaveType = asRecord(row.leave_type)
+      const leaveTypeId = readNumberish(row.leave_type_id ?? nestedLeaveType?.id)
+      const name = readString(nestedLeaveType, ["name", "display_name", "code"], "") ||
+        readString(row, ["leave_type_name", "leave_type_code"], "") ||
+        (leaveTypeId !== null ? leaveTypeLabelById.get(String(leaveTypeId)) ?? `Leave type #${leaveTypeId}` : "Leave type")
+      return {
+        key: String(row.id ?? `${leaveTypeId ?? "type"}-${index}`),
+        name,
+        fiscalYear: readString(row, ["fiscal_year"], fiscalYear),
+        entitlement: readNumberish(row.allocated_days ?? row.entitlement_days),
+        accrued: readNumberish(row.accrued_days),
+        used: readNumberish(row.used_days),
+        pending: readNumberish(row.pending_days),
+        available: findBalanceAvailableDays(row),
+        carriedForward: readNumberish(row.carried_forward_days),
+        expired: readNumberish(row.expired_days),
+        creditDate: readString(row, ["last_credited_at", "credited_at", "credit_date"], "") || null,
+      }
+    })
     tabContent = (
       <section className="w-full min-w-0 space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-2 border-b border-border/70 pb-3">
-          <div className="space-y-1">
-            <h2 className="text-xl font-semibold tracking-tight text-foreground">Your leave balance</h2>
-            <p className="text-sm text-muted-foreground">A clear view of your allowance, leave taken, and days still available.</p>
-          </div>
-          <FluentBadge appearance="outline" color="informative">Fiscal year {fiscalYear}</FluentBadge>
-        </div>
-        <MyLeaveAccrualPanel token={token || null} />
         {loading ? (
           <div className="flex min-h-24 items-center justify-center gap-3 py-4">
             <FluentLoadingIndicator size="large" />
@@ -6856,72 +6807,10 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
             </FluentText>
           </FluentCard>
         ) : null}
-        {balances.length > 0 ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-          {balanceMetrics.map((item) => (
-            <FluentCard key={item.key} appearance="outline" className={`!min-h-0 min-w-0 p-3 ${item.key === "available" ? "border-primary/40 bg-primary/5" : ""}`}>
-              <div className="flex flex-col items-start gap-2">
-                <FluentText size={200} weight="semibold" className="uppercase tracking-wide text-muted-foreground">
-                  {item.label}
-                </FluentText>
-                <FluentText size={400} weight="semibold" className={item.key === "available" ? "text-primary" : "text-foreground"}>
-                  {formatDayValue(item.value)} <span className="text-xs font-normal text-muted-foreground">days</span>
-                </FluentText>
-                <FluentText size={200} className="text-muted-foreground">{item.hint}</FluentText>
-              </div>
-            </FluentCard>
-          ))}
-        </div> : null}
+        {!loading && balanceItems.length > 0 ? <LeaveBalanceShowcase items={balanceItems} fiscalYear={fiscalYear} /> : null}
         {balances.length > 0 ? <LeaveAccrualProjectionCard token={token} /> : null}
         <LeaveEncashmentSelfPanel token={token} balances={balances} />
         <LeaveCompOffPanel token={token} mode="self" />
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {balances.map((row, index) => (
-            <FluentCard key={String(row.id ?? index)} appearance="outline" className="min-w-0 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 flex-col gap-1">
-                  <FluentText weight="semibold" className="truncate">
-                  {(() => {
-                    const nestedLeaveType = asRecord(row.leave_type)
-                    const nestedLabel =
-                      readString(nestedLeaveType, ["name", "display_name", "code"], "") ||
-                      readString(row, ["leave_type_name", "leave_type_code"], "")
-
-                    if (nestedLabel) {
-                      return nestedLabel
-                    }
-
-                    const leaveTypeId = readNumberish(row.leave_type_id ?? nestedLeaveType?.id)
-                    if (leaveTypeId !== null) {
-                      return leaveTypeLabelById.get(String(leaveTypeId)) ?? `Leave type #${leaveTypeId}`
-                    }
-
-                    return "Leave type"
-                  })()}
-                  </FluentText>
-                  <FluentText size={200} className="text-muted-foreground">Fiscal year {readString(row, ["fiscal_year"], fiscalYear)}</FluentText>
-                </div>
-                <FluentBadge appearance="outline" color="informative">Leave</FluentBadge>
-              </div>
-              <div className="mt-4 divide-y divide-border/70">
-                {[
-                  { label: "Allowance", value: row.allocated_days },
-                  { label: "Used", value: row.used_days },
-                  { label: "Awaiting approval", value: row.pending_days },
-                  { label: "Carried over", value: row.carried_forward_days },
-                  { label: "Expired", value: row.expired_days },
-                  { label: "Available", value: row.available_days ?? row.remaining_days },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
-                    <FluentText size={300} className="text-muted-foreground">{item.label}</FluentText>
-                    <FluentText size={300} weight={item.label === "Available" ? "semibold" : "regular"} className={item.label === "Available" ? "text-primary" : "text-foreground"}>
-                      {formatDayValue(item.value)} days
-                    </FluentText>
-                  </div>
-                ))}
-              </div>
-            </FluentCard>
-          ))}
-        </div>
         {showBalancesError ? <p className="text-sm text-slate-500">{balancesError}</p> : null}
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
       </section>

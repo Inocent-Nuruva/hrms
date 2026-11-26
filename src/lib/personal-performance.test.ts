@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectCurrentPersonalEvaluation, selectCurrentPersonalScorecard, selectPersonalNextStep, selectPersonalPeriod } from "./personal-performance";
+import { selectCurrentPersonalEvaluation, selectCurrentPersonalScorecard, selectPersonalNextStep, selectPersonalPeriod, selectVisiblePersonalScorecards } from "./personal-performance";
 import type { KpiAssignment } from "./kpi-api";
 import type { Scorecard } from "./scorecard-api";
 import type { Evaluation } from "./evaluation-api";
@@ -23,6 +23,10 @@ describe("personal performance selection", () => {
   it("selects the latest published configuration for the chosen period, preserving other records for history", () => {
     const rows = [scorecard(10, periods[0], "2026-10-02"), scorecard(11, periods[1], "2026-11-02"), scorecard(12, periods[1], "2026-11-03"), scorecard(13, periods[1], "", "draft")];
     expect(selectCurrentPersonalScorecard(rows, 2)?.id).toBe(12);
+  });
+  it("shows every published scorecard in active periods while leaving drafts and past periods in history", () => {
+    const rows = [scorecard(10, periods[0], "2026-10-02"), scorecard(11, periods[1], "2026-11-02"), scorecard(12, periods[1], "2026-11-03"), scorecard(13, periods[1], "", "draft")];
+    expect(selectVisiblePersonalScorecards(rows, "2026-11-10").map((row) => row.id)).toEqual([12, 11]);
   });
   it("shows an in-progress evaluation before finalized history", () => {
     const rows = [{ id: 9, status: "finalized" }, { id: 7, status: "self_draft" }] as Evaluation[];

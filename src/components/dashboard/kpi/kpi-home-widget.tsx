@@ -55,7 +55,7 @@ export function KpiHomeWidget({ personal }: { personal: boolean }) {
           <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><ChartMultiple24Regular aria-hidden="true" /></span>
           <div><h2 id="home-kpi-title" className="text-xl font-semibold tracking-tight text-foreground" style={{ fontFamily: "var(--font-fredoka), sans-serif" }}>KPI performance</h2><p className="mt-0.5 text-sm text-muted-foreground">Approved results in your authorized scope</p></div>
         </div>
-        <Link className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline" href={personal ? "/dashboard/me/kpi/overview" : "/dashboard/kpi/analytics"}>View details <ArrowRight20Regular aria-hidden="true" /></Link>
+        <Link className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline" href={personal ? "/dashboard/me/kpi" : "/dashboard/kpi/analytics"}>View details <ArrowRight20Regular aria-hidden="true" /></Link>
       </div>
       <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(13rem,1fr)_minmax(0,2fr)] lg:items-center lg:gap-8">
         <div className="space-y-2">

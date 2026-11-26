@@ -1,0 +1,175 @@
+.collection {
+  container-type: inline-size;
+  min-width: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.grid:has(> :only-child) {
+  grid-template-columns: minmax(0, min(100%, 25rem));
+}
+
+@container (min-width: 54rem) {
+  .grid:not(:has(> :only-child)) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 85rem) {
+  .grid:not(:has(> :only-child)) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.card {
+  --scorecard-ink: var(--primary);
+  --scorecard-panel: color-mix(in srgb, var(--primary) 9%, var(--card));
+  --scorecard-track: color-mix(in srgb, var(--primary) 20%, var(--card));
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2xl);
+  background: var(--card);
+  color: var(--card-foreground);
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+/* The app's compact text preference applies an important 11px rule to every
+   descendant. Keep the scorecard's essential hierarchy readable within it. */
+.collection .card :is(p, span, dt) {
+  font-size: 0.8125rem !important;
+  line-height: 1.4 !important;
+}
+
+.collection .card h3 {
+  font-size: 1rem !important;
+  line-height: 1.35 !important;
+}
+
+.collection .card dd {
+  font-size: 1.125rem !important;
+  line-height: 1.2 !important;
+}
+
+.collection .card .score {
+  font-size: clamp(1.75rem, 2vw, 2rem) !important;
+  line-height: 1.1 !important;
+}
+
+.page .sectionHeading {
+  font-size: 1.125rem !important;
+  line-height: 1.4 !important;
+}
+
+.page .groupHeading {
+  font-size: 1rem !important;
+  line-height: 1.4 !important;
+}
+
+:global(.dark) .card {
+  --scorecard-ink: color-mix(in srgb, var(--primary) 42%, var(--foreground));
+  --scorecard-panel: color-mix(in srgb, var(--primary) 20%, var(--card));
+  --scorecard-track: color-mix(in srgb, var(--primary) 24%, var(--card));
+}
+
+.card:hover {
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--primary) 9%, transparent);
+  transform: translateY(-2px);
+  text-decoration: none;
+}
+
+.card:focus-visible,
+.tableLink:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.iconTile {
+  display: grid;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+  place-items: center;
+  color: var(--scorecard-ink);
+}
+
+.performance {
+  min-height: 0;
+  padding: 0.75rem;
+  border-radius: var(--radius-xl);
+  background: var(--scorecard-panel);
+  color: var(--scorecard-ink);
+}
+
+.score {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--scorecard-ink);
+  font-size: clamp(1.75rem, 2vw, 2rem);
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ringActive {
+  stroke: var(--scorecard-ink);
+}
+
+.ringInactive {
+  stroke: var(--scorecard-track);
+}
+
+.ring {
+  color: var(--scorecard-ink);
+}
+
+.track {
+  height: 0.3rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--scorecard-track);
+}
+
+.fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--scorecard-ink);
+}
+
+.successFill {
+  background: var(--success);
+}
+
+.footer {
+  border-top: 1px solid var(--border);
+}
+
+.action {
+  color: var(--scorecard-ink);
+}
+
+.tableLink {
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.tableLink:hover {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+
+  .card:hover {
+    transform: none;
+  }
+}

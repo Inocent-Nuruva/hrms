@@ -1,4 +1,5 @@
-import { PersonalPerformanceDashboard } from "@/components/dashboard/kpi/personal-performance-dashboard";
+import { redirect } from "next/navigation";
+
 export default function Page() {
-  return <PersonalPerformanceDashboard />;
+  redirect("/dashboard/me/kpi");
 }
