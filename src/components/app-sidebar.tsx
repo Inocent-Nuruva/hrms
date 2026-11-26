@@ -162,7 +162,7 @@ const adminData: SidebarData = {
   navMain: [
     {
       title: "KPI & Performance",
-      url: "/dashboard/me/kpi/overview",
+      url: "/dashboard/me/kpi",
       matchUrls: [
         "/dashboard/me/kpi/overview",
         "/dashboard/me/kpi",
@@ -175,7 +175,7 @@ const adminData: SidebarData = {
       items: [
         {
           title: "My KPI & Performance",
-          url: "/dashboard/me/kpi/overview",
+          url: "/dashboard/me/kpi",
           matchUrls: [
             "/dashboard/me/kpi",
             "/dashboard/me/scorecards",

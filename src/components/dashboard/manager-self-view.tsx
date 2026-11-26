@@ -1,5 +1,7 @@
 "use client";
 
+import { AttendanceStatusStack } from "@/components/dashboard/attendance-ops-ui"
+import { readAttendanceDimensions } from "@/lib/attendance-status"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import { DateInput } from "@/components/ui/date-input";
 import * as React from "react";
@@ -341,17 +343,20 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
         {
           key: "status",
           label: "Status",
-          render: (row) => (
-            <StatusChip
-              value={prettify(
-                readString(
-                  row,
-                  ["status", "attendanceStatus", "attendance_status"],
-                  "—",
-                ),
-              )}
-            />
-          ),
+          render: (row) =>
+            readAttendanceDimensions(row) ? (
+              <AttendanceStatusStack row={row} />
+            ) : (
+              <StatusChip
+                value={prettify(
+                  readString(
+                    row,
+                    ["status", "attendanceStatus", "attendance_status"],
+                    "—",
+                  ),
+                )}
+              />
+            ),
         },
         {
           key: "in",

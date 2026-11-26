@@ -20,6 +20,18 @@ export function KpiWorkflowProgress({ guidance, record, compact = false }: { gui
   const steps = recordStages[record.kind]
   const current = steps.indexOf(record.stage)
   const exceptional = /returned|rejected|disputed|amended|archived|inactive|cancelled/.test(record.status)
+  if (record.kind === "scorecard") return <section aria-label="Scorecard workflow progress" className="rounded-xl border border-border bg-card p-3">
+    <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h2 className="text-base font-semibold">Workflow progress</h2><span className="text-sm text-muted-foreground">Stage {current >= 0 ? current + 1 : "—"} of {steps.length}</span></div>
+    <ol className="grid grid-cols-3 gap-2 md:grid-cols-6" aria-label="Workflow stages">{guidance.stages.filter((stage) => steps.includes(stage.id)).map((stage) => {
+      const index = steps.indexOf(stage.id)
+      const completed = index < current && !exceptional
+      const active = stage.id === record.stage
+      return <li key={stage.id} aria-current={active ? "step" : undefined} className="min-w-0">
+        <Tooltip content={`${stage.name}: ${stage.description} Responsible: ${stage.roles.join(", ")}`} relationship="description"><div className="min-w-0"><span aria-hidden="true" className="mb-1 block h-1 rounded-full" style={{ background: completed ? "var(--success)" : active ? "var(--primary)" : "var(--border)" }} /><span className="block truncate text-xs font-medium" style={{ color: completed ? "var(--success)" : active ? "var(--primary)" : "var(--muted-foreground)" }}>{completed ? "✓ " : ""}{stage.name}</span></div></Tooltip>
+      </li>
+    })}</ol>
+    <div className="mt-2 border-t border-border pt-2 text-sm"><strong>{guidance.stages.find((stage) => stage.id === record.stage)?.name ?? record.stage}</strong><p className="mt-1 text-muted-foreground">Responsible: {record.owner}{record.blockedReason ? ` · ${record.blockedReason}` : ""}</p></div>
+  </section>
   return <Card appearance="outline" className={`rounded-xl ${compact ? "space-y-2 p-3" : "space-y-3 p-4"}`} aria-label={`${record.kind} workflow progress`}>
     <div className="flex flex-wrap items-center justify-between gap-2"><Text weight="semibold">{compact ? "Workflow" : `${record.kind.replace(/^./, (letter) => letter.toUpperCase())} #${record.id} · ${record.status.replaceAll("_", " ")}`}</Text><Badge color={exceptional ? "warning" : "brand"}>{guidance.stages.find((stage) => stage.id === record.stage)?.name ?? record.stage}</Badge></div>
     <ProgressBar value={exceptional ? undefined : (current + 1) / steps.length} aria-label="Workflow stage progress" />

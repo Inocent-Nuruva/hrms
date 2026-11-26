@@ -1,0 +1,33 @@
+.surface:global(.fui-DialogSurface) {
+  background: var(--card) !important;
+}
+
+.surface :where(*:not(svg):not(path)) {
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+}
+
+.surface h2 {
+  font-size: 22px !important;
+  line-height: 1.25 !important;
+}
+
+.surface h3 {
+  font-size: 16px !important;
+  line-height: 1.35 !important;
+}
+
+.surface h4 {
+  font-size: 14px !important;
+  line-height: 1.35 !important;
+}
+
+.surface .headerTitle {
+  font-size: 18px !important;
+  line-height: 1.3 !important;
+}
+
+.surface .actualValue {
+  font-size: 36px !important;
+  line-height: 1.15 !important;
+}

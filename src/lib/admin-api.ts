@@ -251,6 +251,11 @@ export interface AttendanceQueryParams extends UsersQueryParams {
   search?: string;
   check_in_after?: string;
   check_in_before?: string;
+  /** Independent status dimensions; comma-separated for several values. */
+  primary_status?: string;
+  punch_status?: string;
+  arrival_status?: string;
+  departure_status?: string;
   employee_id?: number;
   employee_no?: string;
   device_id?: number;
@@ -1927,6 +1932,10 @@ function buildAttendanceReportQuery(params: AttendanceReportDownloadParams) {
   }
   searchParams.set("format", params.format);
   if (params.include_all_employees) searchParams.set("include_all_employees", "true");
+  for (const key of ["primary_status", "punch_status", "arrival_status", "departure_status"] as const) {
+    const value = params[key];
+    if (value && value.trim()) searchParams.set(key, value.trim());
+  }
   const query = searchParams.toString();
   return query ? `?${query}` : "";
 }
@@ -5351,6 +5360,12 @@ function buildAttendanceQuery(params: AttendanceQueryParams) {
   if (typeof params.is_active === "boolean") {
     searchParams.set("is_active", params.is_active ? "true" : "false");
   }
+  for (const key of ["primary_status", "punch_status", "arrival_status", "departure_status"] as const) {
+    const value = params[key];
+    if (value && value.trim()) searchParams.set(key, value.trim());
+  }
+  if (params.check_in_after && params.check_in_after.trim()) searchParams.set("check_in_after", params.check_in_after.trim());
+  if (params.check_in_before && params.check_in_before.trim()) searchParams.set("check_in_before", params.check_in_before.trim());
   const query = searchParams.toString();
   return query ? `?${query}` : "";
 }
@@ -5886,8 +5901,17 @@ export async function getAttendanceDailySummaryStatusCounts(
   token: string,
   params: AttendanceQueryParams = {},
   options: ListRequestOptions = {},
-): Promise<{ total: number; counts: Record<string, number> }> {
-  const { status: _status, page: _page, limit: _limit, ...rest } = params as AttendanceQueryParams & {
+): Promise<AttendanceDailySummaryStatusCounts> {
+  const {
+    status: _status,
+    page: _page,
+    limit: _limit,
+    primary_status: _p,
+    punch_status: _pu,
+    arrival_status: _a,
+    departure_status: _d,
+    ...rest
+  } = params as AttendanceQueryParams & {
     status?: unknown
     page?: unknown
     limit?: unknown
@@ -5895,6 +5919,7 @@ export async function getAttendanceDailySummaryStatusCounts(
   void _status;
   void _page;
   void _limit;
+  void [_p, _pu, _a, _d];
   const payload = await adminRequest<unknown>(
     `/api/attendance/daily-summaries/status-counts${buildAttendanceQuery(rest as AttendanceQueryParams)}`,
     { token, signal: options.signal },
@@ -5906,8 +5931,29 @@ export async function getAttendanceDailySummaryStatusCounts(
   const rawCounts = body.counts && typeof body.counts === "object" ? (body.counts as Record<string, unknown>) : {};
   const counts: Record<string, number> = {};
   for (const [key, value] of Object.entries(rawCounts)) counts[key] = Number(value) || 0;
-  return { total: Number(body.total) || 0, counts };
+  const rawDims = body.dimensions && typeof body.dimensions === "object" ? (body.dimensions as Record<string, unknown>) : null;
+  const toCounts = (value: unknown) => {
+    const out: Record<string, number> = {};
+    if (value && typeof value === "object") for (const [k, v] of Object.entries(value)) out[k] = Number(v) || 0;
+    return out;
+  };
+  const dimensions = rawDims
+    ? { primary: toCounts(rawDims.primary), punch: toCounts(rawDims.punch), arrival: toCounts(rawDims.arrival), departure: toCounts(rawDims.departure) }
+    : null;
+  return { total: Number(body.total) || 0, counts, dimensions };
 }
+
+export type AttendanceDailySummaryStatusCounts = {
+  total: number;
+  counts: Record<string, number>;
+  /** Per-dimension counts; null from a backend without the status dimensions. */
+  dimensions: {
+    primary: Record<string, number>;
+    punch: Record<string, number>;
+    arrival: Record<string, number>;
+    departure: Record<string, number>;
+  } | null;
+};
 
 /** Single-page daily summaries — use for paged UI and dashboard samples (not full history). */
 export async function listAttendanceDailySummariesPage(

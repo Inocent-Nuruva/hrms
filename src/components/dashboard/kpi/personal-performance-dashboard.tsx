@@ -2,93 +2,66 @@
 
 import * as React from "react";
 import Link from "next/link";
-import {
-  Badge, Button,
-  Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle,
-  ProgressBar, Spinner, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Text, tokens,
-} from "@fluentui/react-components";
-import {
-  ArrowRight20Regular, CheckmarkCircle20Regular, Clock20Regular,
-  DocumentBulletList20Regular, History20Regular,
-  Target20Regular,
-} from "@fluentui/react-icons";
+import { useRouter } from "next/navigation";
+import { Badge, Button, Dropdown, Option, Spinner, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Text } from "@fluentui/react-components";
+import { FluentSearchBox } from "@/components/common/fluent-search-box";
 import { achievementApi, type Achievement } from "@/lib/achievement-api";
-import { evaluationApi, type Evaluation } from "@/lib/evaluation-api";
 import { kpiApi, type KpiAssignment } from "@/lib/kpi-api";
-import { kpiAnalyticsApi, type ScorecardTrend } from "@/lib/kpi-analytics-api";
 import { readKpiToken } from "@/lib/kpi-session";
-import { kpiWorkflowApi, type KpiWorkflowGuidance, type KpiWorkflowWaitingStep } from "@/lib/kpi-workflow-api";
-import { scorecardApi, type Scorecard } from "@/lib/scorecard-api";
-import {
-  selectCurrentPersonalEvaluation, selectCurrentPersonalScorecard,
-  selectPersonalNextStep, selectPersonalPeriod,
-} from "@/lib/personal-performance";
-import { KpiFeedback, KpiPageHeader } from "./kpi-page-elements";
-import { PersonalPerformanceIllustration } from "./personal-performance-illustration";
-import styles from "./personal-performance-dashboard.module.css";
+import { KpiFeedback, KpiPageHeader, KpiStatusBadge } from "./kpi-page-elements";
 
-type PersonalData = {
-  assignments: KpiAssignment[];
-  achievements: Achievement[];
-  scorecards: Scorecard[];
-  evaluations: Evaluation[];
-  trend: ScorecardTrend | null;
-};
+type PersonalData = { assignments: KpiAssignment[]; achievements: Achievement[] };
 
-type JourneyState = "complete" | "current" | "waiting" | "upcoming";
-type JourneyStep = { id: string; title: string; state: JourneyState; owner: string; explanation: string; badgeLabel?: string };
-
-function journeyFromGuidance(guidance: KpiWorkflowGuidance, evaluation: Evaluation | null): JourneyStep[] {
-  const steps = new Map((guidance.waiting ?? []).map((step) => [step.id, step]));
-  const combined = (ids: string[], title: string, fallbackOwner: string): JourneyStep => {
-    const items = ids.map((id) => steps.get(id)).filter((step): step is KpiWorkflowWaitingStep => !!step);
-    const pending = items.find((step) => step.status === "pending");
-    const state: JourneyState = items.length === ids.length && items.every((step) => step.status === "complete")
-      ? "complete" : pending ? pending.owner === "Employee" ? "current" : "waiting" : "upcoming";
-    const lead = pending ?? items.find((step) => step.status === "unavailable") ?? items[0];
-    return { id: ids.join("-"), title, state, owner: lead?.owner ?? fallbackOwner, explanation: lead?.explanation ?? "This step becomes available when its prerequisites are complete.", badgeLabel: lead?.id === "assignment" && state === "waiting" ? "You’re not assigned" : undefined };
-  };
-  const evaluationState: JourneyState = !evaluation ? "upcoming" : evaluation.status === "finalized" ? "complete" : ["self_draft", "self_returned"].includes(evaluation.status) ? "current" : "waiting";
-  return [
-    combined(["period", "definition"], "KPI Setup", "HR"),
-    combined(["assignment", "target"], "Assignment", "HR or authorized manager"),
-    combined(["achievement"], "Achievement", "Employee"),
-    combined(["manager_review"], "Review", "Authorized manager"),
-    { id: "evaluation", title: "Evaluation", state: evaluationState, owner: !evaluation ? "HR or authorized manager" : evaluationState === "current" ? "Employee" : evaluation.status === "finalized" ? "Employee" : "Assigned manager or HR", explanation: !evaluation ? "HR starts an evaluation when the applicable cycle and scorecard are ready." : evaluation.status === "finalized" ? "The finalized result is preserved in your evaluation history." : evaluationState === "current" ? "Your self-assessment needs your input." : "Your evaluation is with its assigned reviewer." },
-  ];
+function displayValue(value: unknown, unit?: string | null): string {
+  if (value == null || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "object" && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    if ("value" in record) return displayValue(record.value, unit);
+    if ("min" in record && "max" in record) return `${record.min}–${record.max}${unit ? ` ${unit}` : ""}`;
+    if ("description" in record) return String(record.description);
+    return Object.values(record).map(String).join(" · ");
+  }
+  return `${String(value)}${unit ? ` ${unit}` : ""}`;
 }
 
-function PerformanceMetric({ title, icon, children, href, linkText }: { title: string; icon: React.ReactNode; children: React.ReactNode; href: string; linkText: string }) {
-  return <section className="flex min-w-0 flex-col gap-2 py-4 sm:px-4 first:sm:pl-0 last:sm:pr-0">
-    <div className="flex items-center gap-2"><span aria-hidden="true" style={{ color: tokens.colorBrandForeground1 }}>{icon}</span><Text as="h2" size={300} weight="semibold">{title}</Text></div>
-    <div className="flex min-h-14 flex-col gap-1">{children}</div>
-    <Button as="a" href={href} appearance="subtle" size="small" className="self-start">{linkText} <ArrowRight20Regular aria-hidden /></Button>
+function formatDate(value?: string): string {
+  if (!value) return "";
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.valueOf()) ? value : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
+
+function AssignmentList({ title, rows, achievements, empty, showHeading = true }: {
+  title: string; rows: KpiAssignment[]; achievements: Map<number, Achievement>; empty?: string; showHeading?: boolean;
+}) {
+  const router = useRouter();
+  return <section className="space-y-3" aria-label={title}>
+    {showHeading && <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+      <Text as="h2" size={500} weight="semibold" className="block" style={{ fontFamily: "var(--font-fredoka), sans-serif" }}>{title}</Text>
+      <Badge appearance="outline" color="brand">{rows.length}</Badge>
+    </div>}
+    {rows.length === 0 ? <p className="py-5 text-sm text-muted-foreground">{empty ?? "No KPIs match your filters."}</p> : <div className="overflow-x-auto border border-border bg-card">
+      <Table aria-label={title} size="small" className="w-full min-w-[720px] text-sm"><TableHeader className="bg-muted/40"><TableRow><TableHeaderCell>KPI</TableHeaderCell><TableHeaderCell>Reporting period</TableHeaderCell><TableHeaderCell>Target</TableHeaderCell><TableHeaderCell>Actual</TableHeaderCell><TableHeaderCell>Status</TableHeaderCell></TableRow></TableHeader><TableBody>
+        {rows.map((assignment) => { const achievement = achievements.get(assignment.id); const unit = assignment.definitionVersion?.measurementUnit; const href = `/dashboard/me/kpi/${assignment.id}`; return <TableRow key={assignment.id} tabIndex={0} aria-label={`Open ${assignment.definitionVersion?.name ?? "assigned KPI"}`} className="cursor-pointer even:bg-muted/15 hover:bg-primary/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" onClick={() => router.push(href)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); router.push(href); } }}><TableCell className="max-w-64 break-words py-4 font-semibold"><Link href={href} onClick={(event) => event.stopPropagation()} className="hover:text-primary hover:underline">{assignment.definitionVersion?.name ?? "Assigned KPI"}</Link></TableCell><TableCell className="max-w-72 break-words py-4"><span className="block font-medium">{assignment.period?.label ?? "Reporting period"}</span>{assignment.period?.startDate && assignment.period?.endDate && <span className="mt-0.5 block text-xs text-muted-foreground">{formatDate(assignment.period.startDate)} – {formatDate(assignment.period.endDate)}</span>}</TableCell><TableCell className="py-4">{displayValue(assignment.currentTarget?.target, unit)}</TableCell><TableCell className="py-4">{displayValue(achievement?.current?.actual, unit)}</TableCell><TableCell className="py-4"><KpiStatusBadge status={achievement?.current?.status ?? (assignment.status === "active" ? "Not submitted" : assignment.status)} /></TableCell></TableRow>; })}
+      </TableBody></Table>
+    </div>}
   </section>;
 }
 
 export function PersonalPerformanceDashboard() {
   const [data, setData] = React.useState<PersonalData | null>(null);
-  const [guidance, setGuidance] = React.useState<KpiWorkflowGuidance | null>(null);
-  const [guidanceError, setGuidanceError] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
-  const [reminder, setReminder] = React.useState<KpiWorkflowWaitingStep | null>(null);
-  const [reminderBusy, setReminderBusy] = React.useState(false);
-  const [reminderNotice, setReminderNotice] = React.useState("");
-  const [reminderError, setReminderError] = React.useState("");
+  const [kpiSearch, setKpiSearch] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState("all");
+  const [periodFilter, setPeriodFilter] = React.useState("all");
   const load = React.useCallback(async () => {
     const token = readKpiToken();
     if (!token) { setError("Sign in to view your performance."); setLoading(false); return; }
     setLoading(true);
     try {
-      const [assignments, achievements, scorecards, evaluations, guidanceResult] = await Promise.all([
-        kpiApi.mine(token), achievementApi.mine(token), scorecardApi.mine(token), evaluationApi.mine(token),
-        kpiWorkflowApi.guidance(token).catch(() => null),
-      ]);
-      const trend = scorecards.length ? await kpiAnalyticsApi.scorecardTrends(token).catch(() => null) : null;
-      setData({ assignments, achievements, scorecards, evaluations, trend });
-      setGuidance(guidanceResult);
-      setGuidanceError(guidanceResult ? "" : "Workflow guidance is temporarily unavailable. Your records below are still current.");
+      const [assignments, achievements] = await Promise.all([kpiApi.mine(token), achievementApi.mine(token)]);
+      setData({ assignments, achievements });
       setError("");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Your performance could not be loaded."); }
     finally { setLoading(false); }
@@ -100,81 +73,44 @@ export function PersonalPerformanceDashboard() {
     window.addEventListener("hrms:refresh-page-data", refresh);
     return () => { window.removeEventListener("focus", refresh); window.removeEventListener("hrms:refresh-page-data", refresh); };
   }, [load]);
-  const sendReminder = async () => {
-    if (!reminder?.reminderKey || reminderBusy) return;
-    const token = readKpiToken();
-    if (!token) { setReminderError("Sign in again before sending a reminder."); return; }
-    setReminderBusy(true);
-    setReminderError("");
-    try {
-      const result = await kpiWorkflowApi.remindHr(token, reminder.reminderKey);
-      setReminderNotice(result.message);
-      setReminder(null);
-      const refreshed = await kpiWorkflowApi.guidance(token);
-      setGuidance(refreshed);
-    } catch (cause) { setReminderError(cause instanceof Error ? cause.message : "The reminder could not be recorded."); }
-    finally { setReminderBusy(false); }
+
+  const date = new Date();
+  const today = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  const allAssignments = data?.assignments ?? [];
+  const current = allAssignments.filter((row) => row.status === "active" && (!row.period?.startDate || row.period.startDate <= today) && (!row.period?.endDate || row.period.endDate >= today));
+  const upcoming = allAssignments.filter((row) => row.status === "active" && !!row.period?.startDate && row.period.startDate > today);
+  const previous = allAssignments.filter((row) => row.status !== "active" || (!!row.period?.endDate && row.period.endDate < today)).sort((a, b) => (b.period?.endDate ?? "").localeCompare(a.period?.endDate ?? ""));
+  const achievements = new Map<number, Achievement>(data?.achievements.map((item) => [item.assignmentId, item]) ?? []);
+  const periodOptions = [...new Map(allAssignments.filter((row) => row.period).map((row) => [row.period.id, row.period])).values()];
+  const searchTerm = kpiSearch.trim().toLocaleLowerCase();
+  const matchesKpiFilters = (row: KpiAssignment) => {
+    const status = achievements.get(row.id)?.current?.status ?? "not_submitted";
+    return (periodFilter === "all" || String(row.periodId) === periodFilter) &&
+      (statusFilter === "all" || status === statusFilter) &&
+      (!searchTerm || `${row.definitionVersion?.name ?? ""} ${row.period?.label ?? ""}`.toLocaleLowerCase().includes(searchTerm));
   };
+  const filteredCurrent = current.filter(matchesKpiFilters);
+  const filteredUpcoming = upcoming.filter(matchesKpiFilters);
+  const filteredPrevious = previous.filter(matchesKpiFilters);
+  const hasKpiFilters = !!searchTerm || statusFilter !== "all" || periodFilter !== "all";
 
-  const today = new Date().toISOString().slice(0, 10);
-  const period = data ? selectPersonalPeriod(data.assignments, data.scorecards, today) : null;
-  const periodIsCurrent = !!period && period.startDate <= today && today <= period.endDate;
-  const assignments = data?.assignments.filter((row) => row.status === "active" && !!row.period?.startDate && !!row.period?.endDate && row.period.startDate <= today && today <= row.period.endDate) ?? [];
-  const upcomingAssignments = data?.assignments.filter((row) => row.status === "active" && !!row.period?.startDate && row.period.startDate > today) ?? [];
-  const pastAssignments = data?.assignments.filter((row) => !!row.period?.endDate && row.period.endDate < today).sort((a, b) => (b.period?.endDate ?? "").localeCompare(a.period?.endDate ?? "")) ?? [];
-  const currentScorecard = data && periodIsCurrent ? selectCurrentPersonalScorecard(data.scorecards, period.id) : null;
-  const currentEvaluation = data ? selectCurrentPersonalEvaluation(data.evaluations) : null;
-  const achievementByAssignment = new Map(data?.achievements.map((row) => [row.assignmentId, row]) ?? []);
-  const approved = assignments.filter((row) => achievementByAssignment.get(row.id)?.approvedRevisionId).length;
-  const pending = assignments.filter((row) => ["submitted", "under_review"].includes(achievementByAssignment.get(row.id)?.current?.status ?? "")).length;
-  const returned = assignments.filter((row) => achievementByAssignment.get(row.id)?.current?.status === "returned").length;
-  const next = data ? selectPersonalNextStep(guidance, data.assignments, data.scorecards) : null;
-  const journey = guidance ? journeyFromGuidance(guidance, currentEvaluation) : [];
-  const finishedSteps = journey.filter((step) => step.state === "complete").length;
-  const hasCurrent = assignments.length > 0 || !!currentScorecard || !!(currentEvaluation && currentEvaluation.status !== "finalized");
-  const hasHistory = !!data && (data.scorecards.some((row) => row.id !== currentScorecard?.id) || data.evaluations.some((row) => row.status === "finalized"));
-  const awaitingFirstAssignment = !hasCurrent && !hasHistory && upcomingAssignments.length === 0 && pastAssignments.length === 0;
-  const history = data?.trend?.points.filter((point) => point.scorecardId !== currentScorecard?.id).slice(-3).reverse() ?? [];
-  const periodLabel = periodIsCurrent ? `${period.label} · ${period.startDate}–${period.endDate}` : null;
-  const performanceStatus = currentScorecard?.performanceStatus === "scored" && currentScorecard.overallScore != null
-    ? `Live approved score ${currentScorecard.overallScore}%` : currentScorecard ? `${currentScorecard.completenessPercent ?? "0"}% data complete` : null;
-  const nextAssignmentId = next?.href?.match(/\/(\d+)(?:[?#].*)?$/)?.[1];
-  const nextAssignment = nextAssignmentId ? data?.assignments.find((row) => row.id === Number(nextAssignmentId)) : undefined;
-  const achievementAction = next?.kind === "action" && /^\/dashboard\/me\/kpi\/\d+/.test(next.href ?? "");
-  const nextHref = achievementAction ? "/dashboard/me/kpi" : next?.href;
-  const nextActionLabel = achievementAction ? "Choose a KPI" : next?.actionLabel;
-  const nextDescription = achievementAction
-    ? "Choose the KPI and reporting period you want to submit an achievement for."
-    : next && nextAssignment
-    ? next.description.replaceAll(`KPI assignment #${nextAssignment.id}`, nextAssignment.definitionVersion?.name ?? "your assigned KPI")
-    : next?.description;
-  const illustrationKind = next?.kind === "waiting" ? next.reminder?.id === "manager_review" || next.reminder?.id === "hr_finalization" ? "review" : "setup" : next?.kind === "complete" ? approved > 0 ? "approved" : hasHistory ? "history" : "setup" : "review";
-
-  return <main className="space-y-5" aria-label="My Performance dashboard">
-    <KpiPageHeader title="My Performance" section="YOUR PERFORMANCE" description="See your assigned KPIs, submit results and follow manager review and evaluation." actions={<><Link href="/dashboard/me/kpi">My KPIs</Link><Link href="/dashboard/me/evaluations">My evaluations</Link></>} />
-    <div className="flex flex-wrap gap-2">{periodLabel && <Badge appearance="outline">{periodLabel}</Badge>}{performanceStatus && <Badge appearance="filled" color={currentScorecard?.performanceStatus === "scored" ? "success" : "informative"}>{performanceStatus}</Badge>}</div>
-    {loading && <div className="py-5"><Spinner label="Loading your performance" size="medium" /></div>}
-    {error && <KpiFeedback intent="error">{error}</KpiFeedback>}
-    {!loading && !error && data && <>
-      <section className={`${styles.enter} ${styles.delayOne} relative overflow-hidden rounded-xl border border-primary/15 bg-gradient-to-br from-primary/[0.08] via-background to-primary/[0.03] px-5 py-6 sm:px-8 sm:py-8`} aria-labelledby="personal-kpi-next-step">
-        <div className="flex flex-col items-start justify-between gap-5 sm:flex-row sm:items-center"><div className="flex max-w-2xl flex-col gap-3"><div className="flex items-center gap-2 text-sm font-semibold text-primary"><Clock20Regular aria-hidden /><span>{awaitingFirstAssignment ? "Waiting for setup" : "Your next step"}</span></div><Text as="h2" id="personal-kpi-next-step" size={600} weight="semibold" className="leading-tight" style={{ fontFamily: "var(--font-fredoka), sans-serif" }}>{awaitingFirstAssignment ? "Your first KPI is on its way" : next?.kind === "complete" && approved > 0 ? "Your achievement has been approved" : next?.title ?? "Next step temporarily unavailable"}</Text><Text as="p" size={300} className="max-w-xl text-muted-foreground">{awaitingFirstAssignment ? "HR or your manager will assign a KPI with a target and reporting period. You’ll see it here when it’s ready." : nextDescription ?? guidanceError}</Text>{next && <div className="mt-1 inline-flex items-center gap-2 self-start rounded-full border border-primary/20 bg-background/80 px-3 py-1.5 text-xs font-medium text-foreground"><span className="size-2 rounded-full bg-primary" aria-hidden="true" /><span>{awaitingFirstAssignment ? "Next: HR or your manager" : `Responsible: ${next.owner}`}</span></div>}
-          <div className="mt-2 flex flex-wrap items-center gap-2">{next?.kind === "action" && nextHref && <Link href={nextHref} className="inline-flex"><Button appearance="primary">{nextActionLabel} <ArrowRight20Regular aria-hidden /></Button></Link>}{next?.reminder?.reminderKey && <Button appearance="secondary" disabled={!!next.reminder.reminderBlockedReason} onClick={() => setReminder(next.reminder ?? null)}>{next.reminder.reminderStatus === "active" ? "HR has already been notified" : next.reminder.reminderStatus === "closed_unresolved" ? "Reminder closed" : "Remind HR"}</Button>}{next?.reminder?.reminderBlockedReason && <Text size={200}>{next.reminder.reminderBlockedReason}</Text>}{next?.kind === "complete" && hasHistory && <Link href="/dashboard/me/scorecards" className="inline-flex"><Button appearance="secondary">View history <ArrowRight20Regular aria-hidden /></Button></Link>}</div>
-        </div><PersonalPerformanceIllustration kind={illustrationKind} className={`${styles.illustration} self-center sm:self-auto`} /></div>
-      </section>
-      {reminderNotice && <KpiFeedback intent="success">{reminderNotice}</KpiFeedback>}
-      {reminderError && <KpiFeedback intent="error">{reminderError}</KpiFeedback>}
-      {guidanceError && <KpiFeedback intent="warning">{guidanceError}</KpiFeedback>}
-      {hasCurrent && <div className={`${styles.enter} ${styles.delayTwo} grid divide-y divide-border border-y border-border md:grid-cols-2 md:divide-y-0 xl:grid-cols-4`}>
-        <PerformanceMetric title="My active KPIs" icon={<Target20Regular />} href="/dashboard/me/kpi" linkText="View assigned KPIs"><Text size={500} weight="semibold">{assignments.length}</Text><Text size={200}>{assignments.length ? "Across all active reporting periods" : period?.label ?? "No current period"}</Text>{assignments.length > 0 && <Text size={200}>{approved} with approved results</Text>}</PerformanceMetric>
-        <PerformanceMetric title="Achievement status" icon={<DocumentBulletList20Regular />} href="/dashboard/me/kpi" linkText="Open achievements"><Text size={300}>{approved} approved · {pending} in review</Text>{returned > 0 && <Text size={200}>{returned} returned for correction</Text>}{assignments.length > 0 && <ProgressBar value={approved / assignments.length} aria-label={`${approved} of ${assignments.length} KPIs have approved results`} />}</PerformanceMetric>
-        <PerformanceMetric title="Current scorecard" icon={<CheckmarkCircle20Regular />} href={currentScorecard ? `/dashboard/me/scorecards/${currentScorecard.id}` : "/dashboard/me/scorecards"} linkText="View scorecard"><Text size={400} weight="semibold">{currentScorecard?.performanceStatus === "scored" && currentScorecard.overallScore != null ? `${currentScorecard.overallScore}% live score` : currentScorecard?.performanceStatus === "status_only" ? "Complete · status only" : currentScorecard?.performanceStatus === "needs_revision" ? "Scorecard revision needed" : "Awaiting approved data"}</Text><Text size={200}>{currentScorecard ? `${currentScorecard.completenessPercent ?? "0"}% of included KPI data complete` : "No published scorecard yet"}</Text></PerformanceMetric>
-        <PerformanceMetric title="My evaluation" icon={<DocumentBulletList20Regular />} href={currentEvaluation ? `/dashboard/me/evaluations/${currentEvaluation.id}` : "/dashboard/me/evaluations"} linkText="View evaluation"><Text size={300} weight="semibold">{currentEvaluation ? currentEvaluation.status.replaceAll("_", " ") : "Not started"}</Text><Text size={200}>{currentEvaluation?.status === "finalized" ? currentEvaluation.ackStatus ? `Receipt ${currentEvaluation.ackStatus}` : "Acknowledgement available" : currentEvaluation ? "Open for the next step" : "HR starts evaluation cycles"}</Text></PerformanceMetric>
-      </div>}
-      {journey.length > 0 && <section className={`${styles.enter} ${styles.delayTwo} space-y-5 border-t border-border pt-7`} aria-labelledby="personal-kpi-journey"><div className="flex flex-wrap items-end justify-between gap-3"><div><Text as="h2" id="personal-kpi-journey" size={500} weight="semibold" style={{ fontFamily: "var(--font-fredoka), sans-serif" }}>{awaitingFirstAssignment ? "What happens next" : "Your KPI journey"}</Text><Text as="p" size={300} className="mt-1 text-muted-foreground">{awaitingFirstAssignment ? "From assignment to your final review, here’s how the process works." : "Follow each step from setup to evaluation."}</Text></div>{!awaitingFirstAssignment && <span className="text-sm font-semibold text-primary">{finishedSteps} of {journey.length} complete</span>}</div>{!awaitingFirstAssignment && <ProgressBar value={finishedSteps / journey.length} aria-label={`${finishedSteps} of ${journey.length} KPI journey steps complete`} />}<ol className="grid gap-0 md:grid-cols-5">{journey.map((step, index) => <li key={step.id} className={`relative flex gap-3 border-l border-border py-3 pl-4 md:block md:border-l-0 md:border-t md:px-3 md:pt-5 ${step.state === "complete" || step.state === "current" || step.state === "waiting" ? "md:border-primary/60" : ""}`}><span className={`relative z-10 flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold md:-mt-10 md:mb-4 ${step.state === "complete" ? "bg-green-600 text-white" : step.state === "current" ? "bg-primary text-primary-foreground" : step.state === "waiting" ? "bg-primary/10 text-primary ring-1 ring-primary/30" : "bg-muted text-muted-foreground"}`} aria-hidden="true">{step.state === "complete" ? <CheckmarkCircle20Regular /> : index + 1}</span><div className="min-w-0 space-y-1"><div className="flex flex-wrap items-center gap-2"><Text as="h3" size={300} weight="semibold">{step.title}</Text>{step.state === "current" && <Badge appearance="filled" color="brand">Your turn</Badge>}{step.state === "waiting" && <Badge appearance="outline" color="informative">Waiting</Badge>}</div><Text as="p" size={200} className="text-muted-foreground">{step.owner}</Text>{!awaitingFirstAssignment && step.state !== "upcoming" && <Text as="p" size={200} className="pt-1 text-muted-foreground">{step.explanation}</Text>}</div></li>)}</ol></section>}
-      {upcomingAssignments.length > 0 && <section className={`${styles.enter} ${styles.delayTwo} space-y-3 border-t border-border pt-5`}><div className="flex flex-wrap items-center justify-between gap-2"><div><Text as="h2" size={400} weight="semibold">Upcoming KPI assignments</Text><Text as="p" size={200} style={{ color: tokens.colorNeutralForeground2 }}>These KPIs become active when their reporting periods start.</Text></div><Button as="a" href="/dashboard/me/kpi" appearance="secondary" size="small">View all My KPIs</Button></div><div className="overflow-x-auto"><Table aria-label="Upcoming KPI assignments" size="small" className="w-full text-left text-sm"><TableHeader><TableRow><TableHeaderCell>KPI</TableHeaderCell><TableHeaderCell>Reporting period</TableHeaderCell><TableHeaderCell>Starts</TableHeaderCell><TableHeaderCell>Target</TableHeaderCell></TableRow></TableHeader><TableBody>{upcomingAssignments.map((row) => <TableRow key={row.id}><TableCell className="font-medium">{row.definitionVersion?.name ?? `KPI assignment #${row.id}`}</TableCell><TableCell>{row.period?.label ?? "—"}</TableCell><TableCell>{row.period?.startDate ?? "—"}</TableCell><TableCell>{row.currentTarget ? Object.entries(row.currentTarget.target).map(([key, value]) => `${key}: ${String(value)}`).join(" · ") : "Not set"}</TableCell></TableRow>)}</TableBody></Table></div></section>}
-      {pastAssignments.length > 0 && <section className={`${styles.enter} ${styles.delayTwo} space-y-3 border-t border-border pt-5`}><div className="flex flex-wrap items-center justify-between gap-2"><div><Text as="h2" size={400} weight="semibold">Previous reporting periods</Text><Text as="p" size={200} style={{ color: tokens.colorNeutralForeground2 }}>Each period has its own assignment and result. Corrections to a result are kept in its revision history.</Text></div><Button as="a" href="/dashboard/me/kpi" appearance="secondary" size="small">View all assignments</Button></div><div className="overflow-x-auto"><Table aria-label="KPI assignments from previous reporting periods" size="small" className="w-full text-left text-sm"><TableHeader><TableRow><TableHeaderCell>KPI</TableHeaderCell><TableHeaderCell>Reporting period</TableHeaderCell><TableHeaderCell>Result status</TableHeaderCell><TableHeaderCell>Actual</TableHeaderCell><TableHeaderCell /></TableRow></TableHeader><TableBody>{pastAssignments.map((row) => { const achievement = achievementByAssignment.get(row.id); return <TableRow key={row.id}><TableCell className="font-medium">{row.definitionVersion?.name ?? "KPI"}</TableCell><TableCell>{row.period?.label ?? "—"}</TableCell><TableCell>{achievement?.current.status.replaceAll("_", " ") ?? "No result submitted"}</TableCell><TableCell>{achievement?.current.actual == null ? "—" : typeof achievement.current.actual === "object" ? Object.entries(achievement.current.actual as Record<string, unknown>).map(([key, value]) => `${key}: ${String(value)}`).join(" · ") : String(achievement.current.actual)}</TableCell><TableCell><Link href={`/dashboard/me/kpi/${row.id}`} className="text-primary underline">View</Link></TableCell></TableRow>})}</TableBody></Table></div></section>}
-      {hasHistory && <section className={`${styles.enter} ${styles.delayTwo} space-y-3 border-t border-border pt-5`}><div className="flex flex-wrap items-center gap-2"><History20Regular aria-hidden style={{ color: tokens.colorBrandForeground1 }} /><Text as="h2" size={400} weight="semibold">Your performance history</Text></div><Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>Approved results can change after corrections; finalized evaluations keep their original snapshot.</Text>{history.length > 0 && <div className="divide-y divide-border">{history.map((point) => <div key={point.scorecardId} className="grid gap-1 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center"><Text weight="semibold">{data.scorecards.find((row) => row.id === point.scorecardId)?.currentVersion.name ?? "Scorecard"} · {point.periodLabel}</Text><Text size={200}>Live: {point.comparable && point.liveScore != null ? `${point.liveScore}%` : "Incomplete or not comparable"}</Text><Text size={200}>Finalized: {point.finalizedScore != null ? `${point.finalizedScore}%` : "None"}</Text>{point.reason && <Text size={200} className="text-muted-foreground sm:col-span-3">{point.reason}</Text>}</div>)}</div>}<div className="flex flex-wrap gap-2"><Button as="a" href="/dashboard/me/scorecards" appearance="secondary" size="small">Scorecards</Button><Button as="a" href="/dashboard/me/evaluations" appearance="secondary" size="small">Evaluations</Button><Button as="a" href="/dashboard/me/kpi/reports" appearance="secondary" size="small">My KPI report</Button></div></section>}
-    </>}
-    <Dialog open={!!reminder} onOpenChange={(_, state) => { if (!state.open && !reminderBusy) setReminder(null); }}><DialogSurface><DialogBody><DialogTitle>Remind HR?</DialogTitle><DialogContent>This records one shared in-app reminder for the unresolved activity. The backend prevents duplicate active reminders.</DialogContent><DialogActions><Button appearance="secondary" disabled={reminderBusy} onClick={() => setReminder(null)}>Cancel</Button><Button appearance="primary" disabled={reminderBusy} onClick={() => void sendReminder()}>{reminderBusy ? "Sending…" : "Send reminder"}</Button></DialogActions></DialogBody></DialogSurface></Dialog>
+  return <main className="min-w-0" aria-label="My Performance">
+    <KpiPageHeader title="My KPIs" section="My Performance" flushBelow />
+    <div className="space-y-8 py-6">
+      {loading && <div className="py-8"><Spinner label="Loading your performance" size="medium" /></div>}
+      {error && <KpiFeedback intent="error">{error}</KpiFeedback>}
+      {!loading && !error && data && <>
+        <div className="flex flex-wrap items-end gap-3" aria-label="Filter my KPIs">
+          <FluentSearchBox aria-label="Search my KPIs" placeholder="Search KPI or reporting period" value={kpiSearch} onChange={(_, value) => setKpiSearch(value.value)} className="w-full sm:max-w-sm" />
+          <Dropdown aria-label="Filter result status" value={{ all: "All statuses", not_submitted: "Not submitted", draft: "Draft", submitted: "Submitted", under_review: "In review", returned: "Returned", approved: "Approved", rejected: "Rejected" }[statusFilter] ?? "All statuses"} selectedOptions={[statusFilter]} onOptionSelect={(_, value) => setStatusFilter(value.optionValue ?? "all")} className="w-full sm:!w-44"><Option value="all">All statuses</Option><Option value="not_submitted">Not submitted</Option><Option value="draft">Draft</Option><Option value="submitted">Submitted</Option><Option value="under_review">In review</Option><Option value="returned">Returned</Option><Option value="approved">Approved</Option><Option value="rejected">Rejected</Option></Dropdown>
+          <Dropdown aria-label="Filter reporting period" value={periodFilter === "all" ? "All periods" : periodOptions.find((item) => String(item.id) === periodFilter)?.label ?? "All periods"} selectedOptions={[periodFilter]} onOptionSelect={(_, value) => setPeriodFilter(value.optionValue ?? "all")} className="w-full sm:!w-56"><Option value="all">All periods</Option>{periodOptions.map((item) => <Option key={item.id} value={String(item.id)}>{item.label}</Option>)}</Dropdown>
+          {hasKpiFilters && <Button appearance="subtle" onClick={() => { setKpiSearch(""); setStatusFilter("all"); setPeriodFilter("all"); }}>Clear filters</Button>}
+          <span className="ml-auto text-sm text-muted-foreground">Showing {filteredCurrent.length + filteredUpcoming.length + filteredPrevious.length} of {allAssignments.length}</span>
+        </div>
+        <AssignmentList title="Current KPIs" showHeading={false} rows={filteredCurrent} achievements={achievements} empty={hasKpiFilters ? "No current KPIs match your filters." : allAssignments.length ? "No KPIs are due in the current reporting period." : "Your manager has not assigned a KPI yet. New assignments will appear here."} />
+        {(upcoming.length > 0 || filteredUpcoming.length > 0) && <AssignmentList title="Upcoming KPIs" rows={filteredUpcoming} achievements={achievements} />}
+        {(previous.length > 0 || filteredPrevious.length > 0) && <AssignmentList title="Previous KPIs" rows={filteredPrevious} achievements={achievements} />}
+      </>}
+    </div>
   </main>;
 }

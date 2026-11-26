@@ -2,6 +2,15 @@
 
 import * as React from "react"
 
+import {
+  ARRIVAL_STATUS,
+  DEPARTURE_STATUS,
+  PRIMARY_STATUS,
+  PUNCH_STATUS,
+  dimensionDef,
+  primaryStatusLabel,
+  readAttendanceDimensions,
+} from "@/lib/attendance-status"
 import { cn } from "@/lib/utils"
 
 /**
@@ -107,6 +116,48 @@ export function AttendanceStatusBadge({
       <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
       {label ?? prettifyStatus(status)}
     </span>
+  )
+}
+
+/**
+ * One grouped cell for the four independent status dimensions: primary
+ * badge, then arrival / departure / completeness as small toned labels.
+ * Falls back to the legacy status badge for rows not yet classified.
+ */
+export function AttendanceStatusStack({
+  row,
+  fallbackStatus,
+  compact = false,
+}: {
+  row: Record<string, unknown> | null | undefined
+  fallbackStatus?: unknown
+  compact?: boolean
+}) {
+  const dims = readAttendanceDimensions(row)
+  if (!dims) return <AttendanceStatusBadge status={fallbackStatus} />
+  const primary = PRIMARY_STATUS[dims.primary ?? ""]
+  const arrival = dimensionDef(ARRIVAL_STATUS, dims.arrival)
+  const departure = dimensionDef(DEPARTURE_STATUS, dims.departure)
+  const punch = dimensionDef(PUNCH_STATUS, dims.punch)
+  const item = (label: string, def: { label: string; tone: AttendanceTone }) => (
+    <span className="whitespace-nowrap">
+      <span className="text-muted-foreground">{label} </span>
+      <span className={cn("font-medium", TONE[def.tone].text)}>{def.label}</span>
+    </span>
+  )
+  return (
+    <div className="flex min-w-0 flex-col items-start gap-1">
+      <AttendanceStatusBadge
+        status={dims.primary}
+        label={primaryStatusLabel(dims)}
+        tone={primary?.tone ?? "neutral"}
+      />
+      <div className={cn("flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] leading-tight", compact && "hidden sm:flex")}>
+        {item("In:", arrival)}
+        {item("Out:", departure)}
+        {dims.punch && dims.punch !== "COMPLETE" && dims.punch !== "NOT_REQUIRED" ? item("Record:", punch) : null}
+      </div>
+    </div>
   )
 }
 
