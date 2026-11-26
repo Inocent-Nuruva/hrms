@@ -31,15 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 import {
   EmployeeAccessRemovalDialog,
@@ -87,8 +78,6 @@ import {
   ArrowClockwise16Regular,
   PersonDelete16Regular,
   Dismiss12Regular,
-  MoreHorizontal16Regular,
-  ShieldKeyhole16Regular,
   Filter16Regular,
 } from "@fluentui/react-icons";
 import {
@@ -1301,102 +1290,71 @@ export function EmployeesListView({
         sortable: false,
         render: (row: AdminRecord) => {
           const name = employeeDisplayName(row);
-          const hasUser = employeeUserId(row) != null;
           const accountReason = !canManageTwoFactor
-            ? "You do not have permission to manage user accounts"
-            : !hasUser
+            ? "You do not have permission to reset user passwords"
+            : employeeUserId(row) == null
               ? "No linked user account"
               : undefined;
-          const twoFactorOn = employeeTwoFactorEnabled(row);
-          const canHardDelete =
-            canDeleteEmployeesPermanently && canDeletePermanently(row);
+          const iconButton =
+            "inline-flex size-8 items-center justify-center rounded-md border border-transparent transition-colors focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-40";
           return (
             <div
-              className="flex items-center gap-1"
+              className="flex items-center gap-0.5"
               onClick={(event) => event.stopPropagation()}
             >
-              <Button
+              <button
                 type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs"
+                className={cn(iconButton, "text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground")}
+                title="View profile"
                 aria-label={`View ${name}`}
                 onClick={(event) => {
                   event.stopPropagation();
                   openEmployeeDetailsRef.current(row);
                 }}
               >
-                <Eye20Regular className="size-3.5" />
-                View
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  className="inline-flex size-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  aria-label={`More actions for ${name}`}
-                  title="More actions"
-                  onClick={(event) => event.stopPropagation()}
+                <Eye20Regular className="size-4" />
+              </button>
+              <button
+                type="button"
+                className={cn(iconButton, "text-muted-foreground hover:border-primary/20 hover:bg-primary/10 hover:text-primary")}
+                disabled={Boolean(accountReason)}
+                title={accountReason ?? "Reset password"}
+                aria-label={`Reset password for ${name}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  requestPasswordReset(row);
+                }}
+              >
+                <KeyRound className="size-4" />
+              </button>
+              {canRemoveEmployee ? (
+                <button
+                  type="button"
+                  className={cn(iconButton, "text-rose-600 hover:border-rose-200 hover:bg-rose-50 dark:hover:border-rose-900/60 dark:hover:bg-rose-950/30")}
+                  title="Remove or disable access"
+                  aria-label={`Remove or disable access for ${name}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openRemovalDialog(row);
+                  }}
                 >
-                  <MoreHorizontal16Regular />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel className="truncate text-xs text-muted-foreground">
-                      {name}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem onClick={() => openEmployeeDetailsRef.current(row)}>
-                      <Eye20Regular />
-                      Open profile
-                    </DropdownMenuItem>
-                  </DropdownMenuGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      Account
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem
-                      disabled={Boolean(accountReason)}
-                      title={accountReason}
-                      onClick={() => requestPasswordReset(row)}
-                    >
-                      <KeyRound />
-                      Reset password
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      disabled={Boolean(accountReason)}
-                      title={accountReason}
-                      onClick={() => requestTwoFactorChange(row)}
-                    >
-                      <ShieldKeyhole16Regular />
-                      {twoFactorOn ? "Disable 2FA" : "Require 2FA"}
-                    </DropdownMenuItem>
-                  </DropdownMenuGroup>
-                  {canRemoveEmployee || canHardDelete ? (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuGroup>
-                        {canRemoveEmployee ? (
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() => openRemovalDialog(row)}
-                          >
-                            <Trash2 />
-                            Remove or disable access
-                          </DropdownMenuItem>
-                        ) : null}
-                        {canHardDelete ? (
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() => openPermanentDelete(row)}
-                          >
-                            <PersonDelete16Regular />
-                            Delete permanently
-                          </DropdownMenuItem>
-                        ) : null}
-                      </DropdownMenuGroup>
-                    </>
-                  ) : null}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                  <Trash2 className="size-4" />
+                </button>
+              ) : null}
+              {canDeleteEmployeesPermanently && canDeletePermanently(row) ? (
+                <button
+                  type="button"
+                  className={cn(iconButton, "text-rose-700 hover:border-rose-200 hover:bg-rose-50 dark:hover:border-rose-900/60 dark:hover:bg-rose-950/30")}
+                  title="Delete employee permanently"
+                  aria-label={`Permanently delete ${name}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openPermanentDelete(row);
+                  }}
+                >
+                  <PersonDelete16Regular className="size-4" />
+                </button>
+              ) : null}
             </div>
           );
         },
