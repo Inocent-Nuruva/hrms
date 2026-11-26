@@ -11,7 +11,6 @@ import {
   Trash2Icon,
 } from "lucide-react"
 import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
-import { Button as FluentButton } from "@fluentui/react-components"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -81,7 +80,6 @@ import {
   formatLabelValue,
   statusTone,
   assignmentTypeTone,
-  SummaryField,
   readNumber,
   readRelatedId,
   isPrimaryEmployeePosition,
@@ -116,6 +114,7 @@ import {
 } from "@/components/dashboard/employee-profile/profile-shared"
 import { Section } from "@/components/dashboard/employee-profile/profile-record-section"
 import { EmployeeIdentitySheet } from "@/components/dashboard/employee-profile/employee-identity-sheet"
+import { EmployeeProfileHero } from "@/components/dashboard/employee-profile/employee-profile-hero"
 
 const PROFILE_SECTION_DEFS: Array<{
   title: string
@@ -231,10 +230,10 @@ function ProfileSectionsTabs({
   }, [activeIndex, activeTitle, sections])
 
   return (
-    <div className="border border-border bg-card">
+    <div className="border-x border-b border-border bg-card">
       {header}
       <div
-        className="flex flex-wrap items-center gap-x-0.5 gap-y-0.5 border-t border-border px-2 py-1"
+        className="sticky top-12 z-20 flex items-center gap-1 overflow-x-auto border-t border-border bg-card/95 px-3 backdrop-blur [scrollbar-width:none]"
         role="tablist"
         aria-label="Employee profile sections"
       >
@@ -251,7 +250,7 @@ function ProfileSectionsTabs({
               aria-selected={isActive}
               onClick={() => selectSection(section.title)}
               className={cn(
-                "inline-flex h-6 items-center border-b-2 px-1.5 text-[10px] font-semibold whitespace-nowrap transition-colors",
+                "inline-flex h-10 shrink-0 items-center gap-1.5 border-b-2 px-2.5 text-xs font-medium whitespace-nowrap transition-colors",
                 isActive
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground",
@@ -261,8 +260,8 @@ function ProfileSectionsTabs({
               {section.tabLabel}
               <span
                 className={cn(
-                  "ml-1 tabular-nums",
-                  isActive ? "text-primary/70" : "text-muted-foreground"
+                  "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] tabular-nums",
+                  isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
                 )}
               >
                 {section.count}
@@ -2573,7 +2572,6 @@ export function EmployeeProfilePage({
   requestedMissingItem?: string | null
 }) {
   const router = useRouter()
-  const motionPreset = useDashboardMotion()
   const [employee, setEmployee] = React.useState<AdminRecord | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -2744,7 +2742,22 @@ export function EmployeeProfilePage({
   }
 
   if (loading) {
-    return <div className="rounded-xl border border-slate-200 bg-white/80 p-6 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">Loading employee profile...</div>
+    return (
+      <div className={cn("animate-pulse border border-border bg-background", pageBleedClass)} aria-busy="true" aria-label="Loading employee profile">
+        <div className="h-12 border-b border-border" />
+        <div className="flex items-center gap-4 px-5 py-5">
+          <div className="size-16 rounded-full bg-muted" />
+          <div className="flex-1 space-y-2">
+            <div className="h-5 w-56 rounded bg-muted" />
+            <div className="h-3 w-40 rounded bg-muted" />
+            <div className="h-3 w-72 rounded bg-muted" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4 border-t border-border px-5 py-4 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((item) => <div key={item} className="h-10 rounded bg-muted" />)}
+        </div>
+      </div>
+    )
   }
 
   if (error || !employee) {
@@ -2763,11 +2776,12 @@ export function EmployeeProfilePage({
   }
 
   return (
-    <div className={cn("space-y-4 pb-4", pageBleedClass)}>
-      <div className="sticky top-0 z-30 border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-5">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-semibold text-primary">{employeeDisplayNameFromLinkedUser(employee)}</h2>
+    <div className={cn("pb-4", pageBleedClass)}>
+      <EmployeeProfileHero
+        employee={employee}
+        onUpdateProfile={() => setIdentityDialogOpen(true)}
+        onUpdateStatus={() => setStatusDialogOpen(true)}
+        searchSlot={
             <Popover open={profileSearchOpen} onOpenChange={setProfileSearchOpen}>
               <PopoverTrigger
                 type="button"
@@ -2825,69 +2839,10 @@ export function EmployeeProfilePage({
                 </div>
               </PopoverContent>
             </Popover>
-          </div>
-          <div className="flex items-center gap-2">
-            <FluentButton
-              appearance="primary"
-              onClick={() => setIdentityDialogOpen(true)}
-            >
-              Update Profile
-            </FluentButton>
-            <FluentButton
-              appearance="secondary"
-              onClick={() => setStatusDialogOpen(true)}
-            >
-              Update Status
-            </FluentButton>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       {(() => {
-          const employeeNo = readString(employee, [
-            "employee_no",
-            "employeeNo",
-            "user_no",
-            "employee_number",
-            "employeeNumber",
-          ])
-          const statusRaw = readString(employee, [
-            "employment_status",
-            "employmentStatus",
-            "status",
-          ])
-          const employmentType = formatLabelValue(
-            readString(employee, ["employment_type", "employmentType"])
-          )
-          const branch =
-            readString(employee, ["branch_name", "branchName"]) !== "-"
-              ? readString(employee, ["branch_name", "branchName"])
-              : readNestedString(employee.primary_branch ?? employee.branch, [
-                  "name",
-                  "branch_name",
-                  "branchName",
-                ])
-          const department =
-            readString(employee, ["department_name", "departmentName"]) !== "-"
-              ? readString(employee, ["department_name", "departmentName"])
-              : readNestedString(employee.primary_department ?? employee.department, [
-                  "name",
-                  "department_name",
-                  "departmentName",
-                ])
-          const position =
-            readString(employee, ["position_name", "positionName"]) !== "-"
-              ? readString(employee, ["position_name", "positionName"])
-              : readNestedString(employee.primary_position ?? employee.position, [
-                  "name",
-                  "position_name",
-                  "positionName",
-                ])
-          const manager =
-            readString(employee, ["manager_name", "managerName"]) !== "-"
-              ? readString(employee, ["manager_name", "managerName"])
-              : employeeDisplayName(asRecord(employee.manager) ?? {})
-
           return (
             <ProfileSectionsTabs
               employee={employee}
@@ -2896,47 +2851,6 @@ export function EmployeeProfilePage({
               requestedRouteKey={requestedRouteKey}
               header={
                 <>
-                <motion.dl
-                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
-                  variants={motionPreset.metrics}
-                  initial="hidden"
-                  animate="show"
-                >
-                  <SummaryField label="Employee No" value={employeeNo} index={0} reduce={motionPreset.reduce} />
-                  <SummaryField label="Status" index={1} reduce={motionPreset.reduce}>
-                    <span className={cn("text-sm font-semibold", statusTone(statusRaw))}>
-                      {formatLabelValue(statusRaw)}
-                    </span>
-                  </SummaryField>
-                  <SummaryField
-                    label="Employment Type"
-                    value={employmentType}
-                    index={2}
-                    reduce={motionPreset.reduce}
-                  />
-                  <SummaryField
-                    label="Hire Date"
-                    value={formatProfileDate(employee.hire_date ?? employee.hireDate)}
-                    index={3}
-                    reduce={motionPreset.reduce}
-                  />
-                  <SummaryField label="Branch" value={branch} index={4} reduce={motionPreset.reduce} />
-                  <SummaryField label="Department" value={department} index={5} reduce={motionPreset.reduce} />
-                  <SummaryField label="Position" value={position} index={6} reduce={motionPreset.reduce} />
-                  <SummaryField label="Manager" value={manager} index={7} reduce={motionPreset.reduce} />
-                  <SummaryField
-                    label="Last Updated"
-                    value={formatDateTime(employee.updated_at ?? employee.updatedAt)}
-                    index={8}
-                    reduce={motionPreset.reduce}
-                  />
-                  <SummaryField
-                    label="Employee Id"
-                    value={String(employee.id ?? "-")}
-                    index={9}
-                    reduce={motionPreset.reduce}
-                  />
-                </motion.dl>
                 <EmployeeCoverCard token={readStoredToken()} employeeId={readNumber(employee.id)} />
                 <EmployeeLeaveBalanceCard
                   token={readStoredToken()}
