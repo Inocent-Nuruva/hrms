@@ -4,7 +4,7 @@ import { Badge, Button, Dialog, DialogActions, DialogBody, DialogContent, Dialog
 import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
 import { KpiFluentTextarea } from "./kpi-fluent-fields";
 import * as React from "react";
-import { Target, TrendingUp, MessageSquare, Paperclip, ListChecks, History, ShieldCheck } from "lucide-react";
+import { ClipboardCheck, X, Paperclip, ListChecks, History } from "lucide-react";
 import { KpiFluentButton } from "./kpi-fluent-button";
 import { KpiFeedback, KpiPageHeader, KpiStatusBadge } from "./kpi-page-elements";
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
@@ -15,16 +15,18 @@ import { kpiApi } from "@/lib/kpi-api";
 import { KpiSearchSelect, type KpiChoice } from "./kpi-search-select";
 import { numericActivityTotal } from "@/lib/kpi-activity-total";
 import Decimal from "decimal.js";
+import detailStyles from "./achievement-review-detail.module.css";
 
 type AdvancedReviewFilters = { employee: string; department: string; branch: string; period: string; category: string; query: string };
 const emptyAdvancedFilters: AdvancedReviewFilters = { employee: "", department: "", branch: "", period: "", category: "", query: "" };
-const reviewOrder: Record<string, number> = { submitted: 0, under_review: 1, returned: 2, rejected: 3, approved: 4 };
+const reviewOrder: Record<string, number> = { submitted: 0, under_review: 1, returned: 2, draft: 3, rejected: 4, approved: 5 };
 async function listReviewRows(token: string, status: string): Promise<Achievement[]> {
   if (status === "awaiting") return achievementApi.pending(token);
   if (status !== "all") return achievementApi.pending(token, status);
   const batches = await Promise.all([
     achievementApi.pending(token),
     achievementApi.pending(token, "returned"),
+    achievementApi.pending(token, "correction_draft"),
     achievementApi.pending(token, "rejected"),
     achievementApi.pending(token, "approved"),
   ]);
@@ -173,7 +175,7 @@ export function AchievementReviews() {
               aria-label="Show submissions"
               className="w-full"
               button={{ className: "!w-full" }}
-              value={{ all: "All submissions", awaiting: "Awaiting review", submitted: "Submitted", under_review: "In review", approved: "Approved", returned: "Returned", rejected: "Rejected" }[status] ?? "All submissions"}
+              value={{ all: "All submissions", awaiting: "Awaiting review", submitted: "Submitted", under_review: "In review", correction_draft: "Correction drafts", approved: "Approved", returned: "Returned", rejected: "Rejected" }[status] ?? "All submissions"}
               selectedOptions={[status]}
               onOptionSelect={(_, data) => {
                 const next = data.optionValue ?? "all";
@@ -187,6 +189,7 @@ export function AchievementReviews() {
               <Option value="awaiting">Awaiting review</Option>
               <Option value="submitted">Submitted</Option>
               <Option value="under_review">In review</Option>
+              <Option value="correction_draft">Correction drafts</Option>
               <Option value="approved">Approved</Option>
               <Option value="returned">Returned</Option>
               <Option value="rejected">Rejected</Option>
@@ -267,7 +270,7 @@ export function AchievementReviews() {
                 </TableCell>
                 <TableCell className="p-3">{text(row.current.actual)}</TableCell>
                 <TableCell className="p-3">
-                  <KpiStatusBadge status={row.current.status} />
+                  {row.current.status === "draft" && row.approvedRevisionId ? <Badge appearance="outline" color="warning">Correction draft</Badge> : <KpiStatusBadge status={row.current.status} />}
                 </TableCell>
                 <TableCell className="p-3">
                   <Button
@@ -292,23 +295,25 @@ export function AchievementReviews() {
           if (!data.open) closeReview();
         }}
       >
-        <DialogSurface style={{ width: "min(1000px, calc(100vw - 32px))", height: "min(900px, calc(100dvh - 32px))", maxWidth: "none", maxHeight: "none", padding: 0, overflow: "hidden", boxSizing: "border-box" }}>
+        <DialogSurface className={detailStyles.surface} style={{ width: "min(1000px, calc(100vw - 32px))", height: "min(900px, calc(100dvh - 32px))", maxWidth: "none", maxHeight: "none", padding: 0, overflow: "hidden", boxSizing: "border-box" }}>
           <DialogBody style={{ display: "flex", flexDirection: "column", height: "100%", minWidth: 0, gap: 0 }}>
-            <DialogTitle
-              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexShrink: 0, minHeight: 64, padding: "12px 24px", margin: 0, borderBottom: "1px solid var(--border)" }}
-            >
-              <span style={{ fontFamily: "var(--font-fredoka), sans-serif", fontSize: "clamp(28px, 3vw, 36px)", fontWeight: 600, lineHeight: 1.2, minWidth: 0, overflowWrap: "anywhere" }}>
-                {(() => {
-                  const selected = rows.find((row) => row.id === selectedReviewId);
-                  return selected
-                    ? `${subjectName(selected, subjectNames)} · ${selected.assignment.period?.label ?? "Reporting period unavailable"} · Revision ${selected.current.revision}`
-                    : "Achievement review";
-                })()}
+            <DialogTitle className="sticky top-0 z-10 !m-0 flex shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-4 py-3 sm:px-6">
+              <span className="flex min-w-0 items-start gap-3">
+                <ClipboardCheck className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
+                <span className="min-w-0">
+                  <span className={`${detailStyles.headerTitle} block font-semibold text-foreground`}>Achievement review</span>
+                  <span className="block break-words text-xs font-normal text-muted-foreground sm:text-sm">
+                    {(() => {
+                      const selected = rows.find((row) => row.id === selectedReviewId);
+                      return selected ? `${subjectName(selected, subjectNames)} · Revision ${selected.current.revision}` : "Loading submission…";
+                    })()}
+                  </span>
+                </span>
               </span>
-              <Button appearance="secondary" onClick={closeReview}>Close</Button>
+              <Button appearance="subtle" icon={<X aria-hidden="true" />} aria-label="Close achievement review" onClick={closeReview} />
             </DialogTitle>
-            <DialogContent style={{ flex: 1, minHeight: 0, minWidth: 0, maxHeight: "none", overflowY: "auto", overflowX: "hidden", padding: "0 clamp(16px, 3vw, 48px) 32px", boxSizing: "border-box" }}>
-              {selectedReviewId !== null && <AchievementReviewDetail id={selectedReviewId} embedded />}
+            <DialogContent style={{ flex: 1, minHeight: 0, minWidth: 0, maxHeight: "none", overflowY: "auto", overflowX: "hidden", padding: "0 clamp(16px, 2vw, 24px) 24px", boxSizing: "border-box" }}>
+              {selectedReviewId !== null && <AchievementReviewDetail id={selectedReviewId} embedded onCorrectionOpened={() => setStatus("correction_draft")} />}
             </DialogContent>
           </DialogBody>
         </DialogSurface>
@@ -342,12 +347,13 @@ function reviewDate(value: string) {
   });
 }
 
-export function AchievementReviewDetail({ id, embedded = false }: { id: number; embedded?: boolean }) {
+export function AchievementReviewDetail({ id, embedded = false, onCorrectionOpened }: { id: number; embedded?: boolean; onCorrectionOpened?: () => void }) {
   const actor = useDashboardActor(),
     token = readKpiToken();
   const [record, setRecord] = React.useState<Achievement | null>(null),
     [comments, setComments] = React.useState(""),
-    [decisionDialog, setDecisionDialog] = React.useState<"review" | "return" | "reject" | null>(null),
+    [decisionDialog, setDecisionDialog] = React.useState<"review" | "return" | "reject" | "correction" | null>(null),
+    [correctionRevision, setCorrectionRevision] = React.useState<number | null>(null),
     [loading, setLoading] = React.useState(true),
     [busy, setBusy] = React.useState(false),
     [error, setError] = React.useState(""),
@@ -365,15 +371,16 @@ export function AchievementReviewDetail({ id, embedded = false }: { id: number; 
       .finally(() => setLoading(false));
   }, [actor.ready, token, id]);
 
-  async function action(task: () => Promise<Achievement>, message: string) {
+  async function action(task: () => Promise<Achievement>, message: string): Promise<Achievement | undefined> {
     setBusy(true);
     setError("");
     setNotice("");
     try {
       const result = await task();
       setRecord(result);
-      setNotice(message);
+      if (message) setNotice(message);
       window.dispatchEvent(new Event("hrms:refresh-page-data"));
+      return result;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Review failed");
     } finally {
@@ -417,14 +424,27 @@ export function AchievementReviewDetail({ id, embedded = false }: { id: number; 
     );
   }
 
-  function openDecisionDialog(decision: "review" | "return" | "reject") {
+  function openDecisionDialog(decision: "review" | "return" | "reject" | "correction") {
     setComments("");
     setError("");
+    setCorrectionRevision(null);
     setDecisionDialog(decision);
   }
 
   async function submitDecisionDialog() {
     if (!record || !decisionDialog || busy) return;
+    if (decisionDialog === "correction") {
+      if (correctionRevision !== null) return;
+      const updated = await action(
+        () => achievementApi.correction(token, id),
+        "",
+      );
+      if (updated) {
+        setCorrectionRevision(updated.current.revision);
+        onCorrectionOpened?.();
+      }
+      return;
+    }
     if (decisionDialog === "review") {
       setDecisionDialog(null);
       await action(
@@ -450,139 +470,82 @@ export function AchievementReviewDetail({ id, embedded = false }: { id: number; 
     : null;
   const activityDiffers = numericTotal && typeof record?.current.actual === "number" &&
     !new Decimal(record.current.actual).eq(numericTotal.total);
-
-  const decisionPanel = record && (canDecide ? (
-    <section aria-labelledby="review-decision-title" className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-border py-4">
-      <h2 id="review-decision-title" className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck size={18} className="text-primary" aria-hidden="true" />Manager action</h2>
-      <div className="flex flex-wrap gap-2">
-          {status === "submitted" && (
-            <KpiFluentButton
-              type="button"
-              disabled={busy}
-              onClick={() => openDecisionDialog("review")}
-            >Start review</KpiFluentButton>
-          )}
-          <KpiFluentButton type="button" className="bg-[var(--primary)]" disabled={busy} onClick={() => void decide("approve")}>
-            {busy ? "Saving…" : "Approve result"}
-          </KpiFluentButton>
-          <KpiFluentButton type="button" disabled={busy} onClick={() => openDecisionDialog("return")}>Return for correction</KpiFluentButton>
-          <KpiFluentButton type="button" className="text-red-700" disabled={busy} onClick={() => openDecisionDialog("reject")}>Reject</KpiFluentButton>
-      </div>
-    </section>
-  ) : (
-    <section aria-label="Review outcome" className="min-w-0 border-y border-border py-4">
-      <div className="flex min-w-0 flex-wrap items-center gap-3">
-        <h2 className="text-base font-semibold">Review outcome</h2>
-        <KpiStatusBadge status={status} />
-      </div>
-      <p className="mt-3 whitespace-pre-wrap break-words text-sm text-muted-foreground">
-        {record.current.reviewComment || "There is no manager feedback on this revision."}
-      </p>
-      {status === "approved" && (
-        <KpiFluentButton
-          type="button"
-          className="mt-4"
-          disabled={busy}
-          onClick={() => void action(
-            () => achievementApi.correction(token, id),
-            "Audited correction draft opened",
-          )}
-        >Open approved correction</KpiFluentButton>
-      )}
-    </section>
-  ));
+  const targetNumber = record?.assignment.currentTarget?.target?.value;
+  const actualNumber = record?.current.actual;
+  const comparable = record?.assignment.definitionVersion?.direction === "higher" &&
+    typeof targetNumber === "number" && Number.isFinite(targetNumber) && targetNumber > 0 &&
+    typeof actualNumber === "number" && Number.isFinite(actualNumber) && actualNumber >= 0;
+  const targetRatio = comparable ? new Decimal(actualNumber).div(targetNumber).times(100).toNumber() : null;
+  const activityCount = record?.current.activities?.length ?? 0;
 
   return (
-    <div className="mx-auto min-w-0 space-y-6 pb-10" style={{ width: "100%", maxWidth: 960 }}>
+    <div className="mx-auto min-w-0 max-w-5xl space-y-4 pb-6 pt-4">
       {!embedded && <KpiPageHeader variant="plain" title="Review achievement" />}
       {loading && <p className="text-sm text-muted-foreground">Loading submission…</p>}
       {error && <KpiFeedback intent="error">{error}</KpiFeedback>}
       {notice && <KpiFeedback intent="success">{notice}</KpiFeedback>}
       {record && (
         <>
-          {decisionPanel}
-          <section aria-labelledby="achievement-summary-title" className="min-w-0 space-y-6 py-3">
-            <div className="min-w-0 border-l-2 border-primary pl-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 space-y-1">
-                  <h2 id="achievement-summary-title" className="break-words font-semibold tracking-tight text-foreground" style={{ fontSize: "clamp(28px, 3vw, 40px)", lineHeight: 1.2, margin: "8px 0" }}>
-                    {record.assignment.definitionVersion?.name ?? "KPI achievement"}
-                  </h2>
-                  {!embedded && <p className="break-words text-sm text-muted-foreground">
-                    {subjectName(record, subjectNames)} · {record.assignment.period?.label ?? "Reporting period unavailable"} · Revision {record.current.revision}
-                  </p>}
-                </div>
-                <KpiStatusBadge status={status} />
-              </div>
+          <section aria-labelledby="achievement-summary-title" className="flex min-w-0 flex-wrap items-start justify-between gap-2 border-b border-border pb-3">
+            <div className="min-w-0">
+              <h2 id="achievement-summary-title" className="break-words text-xl font-semibold text-foreground sm:text-2xl">{record.assignment.definitionVersion?.name ?? "KPI achievement"}</h2>
+              <p className="mt-1 break-words text-sm text-muted-foreground">{record.assignment.period?.label ?? "Reporting period unavailable"}{!embedded && ` · ${subjectName(record, subjectNames)} · Revision ${record.current.revision}`}</p>
             </div>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-5 border-t border-border pt-5 sm:grid-cols-3">
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 text-sm text-muted-foreground"><Target size={18} className="text-primary" aria-hidden="true" />Target</p>
-                <p className="mt-2 break-words font-semibold text-foreground" style={{ fontSize: 30, lineHeight: 1.2 }}>{reviewValue(record.assignment.currentTarget?.target, unit)}</p>
-              </div>
-              <div className="min-w-0 border-l border-border pl-6">
-                <p className="flex items-center gap-2 text-sm text-muted-foreground"><TrendingUp size={18} className="text-primary" aria-hidden="true" />Actual result</p>
-                <p className="mt-2 break-words font-semibold text-primary" style={{ fontSize: 30, lineHeight: 1.2 }}>{reviewValue(record.current.actual, unit)}</p>
-              </div>
-              <div className="col-span-2 min-w-0 border-t border-border pt-4 sm:col-span-1 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
-                <p className="flex items-center gap-2 text-sm text-muted-foreground"><MessageSquare size={18} className="text-primary" aria-hidden="true" />Employee comments</p>
-                <p className="mt-2 whitespace-pre-wrap break-words text-sm font-medium text-foreground">{record.current.comments?.trim() || "No comments provided."}</p>
-              </div>
-            </div>
-            {activityDiffers && <KpiFeedback intent="warning">The submitted actual ({reviewValue(record.current.actual, unit)}) differs from the numeric activity total ({reviewValue(numericTotal.total, unit)}). Check the supporting work before approving.</KpiFeedback>}
+            <KpiStatusBadge status={status} />
           </section>
 
-          <div className="min-w-0">
-            <div className="grid min-w-0 gap-x-8 gap-y-6 border-t border-border pt-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
-              <section aria-labelledby="review-evidence-title" className="min-w-0 py-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 id="review-evidence-title" className="flex items-center gap-2 text-base font-semibold"><Paperclip size={20} className="text-primary" aria-hidden="true" />Evidence</h2>
-                  {record.current.evidence.length > 0 && <span className="text-xs text-muted-foreground">{record.current.evidence.length} files</span>}
+          <div className="grid min-w-0 gap-4 md:grid-cols-2">
+            <section aria-label="Submitted result" className="min-w-0 rounded-xl border border-border p-4" style={{ background: "color-mix(in srgb, var(--primary) 7%, var(--card))" }}>
+              <p className="text-xs font-semibold text-muted-foreground">Actual result</p>
+              <p className={`${detailStyles.actualValue} mt-2 break-words font-semibold text-primary`}>{reviewValue(record.current.actual, unit)}</p>
+              <div className="mt-3 flex min-w-0 flex-wrap items-baseline justify-between gap-2 border-t border-border pt-3 text-sm">
+                <span className="text-muted-foreground">Target</span>
+                <span className="break-words font-semibold">{reviewValue(record.assignment.currentTarget?.target, unit)}</span>
+              </div>
+              {targetRatio !== null && <div className="mt-3">
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted" role="img" aria-label={`Actual is ${targetRatio.toLocaleString(undefined, { maximumFractionDigits: 2 })}% of target; this is not the official achievement score`}>
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(targetRatio, 100)}%` }} />
                 </div>
-                {record.current.evidence.length === 0 ? (
-                  <p className="mt-3 text-sm text-muted-foreground">No attachments</p>
-                ) : (
-                  <ul className="mt-3 space-y-2">
-                    {record.current.evidence.map((file) => (
-                      <li key={file.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-border py-3">
-                        <div className="min-w-0">
-                          <p className="break-all text-sm font-medium">{file.fileName}</p>
-                          <p className="text-xs text-muted-foreground">{(file.fileSize / 1024).toFixed(1)} KB</p>
-                        </div>
-                        <KpiFluentButton
-                          type="button"
-                          className="shrink-0 text-primary underline"
-                          onClick={() => void achievementApi.download(token, id, file).catch((e: unknown) =>
-                            setError(e instanceof Error ? e.message : "Download failed"))}
-                        >Download</KpiFluentButton>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
+                <p className="mt-2 text-xs text-muted-foreground">Actual relative to target: {targetRatio.toLocaleString(undefined, { maximumFractionDigits: 2 })}%</p>
+              </div>}
+            </section>
 
-              <section aria-labelledby="review-activities-title" className="min-w-0 border-t border-border py-4 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h2 id="review-activities-title" className="flex items-center gap-2 text-base font-semibold"><ListChecks size={20} className="text-primary" aria-hidden="true" />Supporting activity</h2>
-                  </div>
-                  <span className="text-xs text-muted-foreground">{record.current.activities?.length ?? 0} {(record.current.activities?.length ?? 0) === 1 ? "entry" : "entries"}</span>
+            <section aria-labelledby="review-outcome-title" className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-4">
+              <h3 id="review-outcome-title" className="text-base font-semibold">Review outcome</h3>
+              <div className="mt-3"><KpiStatusBadge status={status} /></div>
+              {canDecide ? <>
+                <p className="mt-3 text-sm text-muted-foreground">Review this submitted result and its supporting evidence.</p>
+                <div className="mt-auto flex flex-wrap gap-2 pt-4">
+                  {status === "submitted" && <KpiFluentButton type="button" disabled={busy} onClick={() => openDecisionDialog("review")}>Start review</KpiFluentButton>}
+                  <KpiFluentButton type="button" disabled={busy} onClick={() => void decide("approve")}>{busy ? "Saving…" : "Approve result"}</KpiFluentButton>
+                  <KpiFluentButton type="button" disabled={busy} onClick={() => openDecisionDialog("return")}>Return for correction</KpiFluentButton>
+                  <KpiFluentButton type="button" disabled={busy} onClick={() => openDecisionDialog("reject")}>Reject</KpiFluentButton>
                 </div>
-                {record.current.activities?.length ? (
-                  <div className="mt-4 space-y-3">
-                    {record.current.activities.map((activity) => (
-                      <ReviewActivity key={activity.id} activity={activity} achievementId={id} token={token} onError={setError} />
-                    ))}
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      Supporting activity is not included in the actual result automatically.
-                    </p>
-                  </div>
-                ) : (
-                  <p className="mt-3 border-t border-border py-4 text-sm text-muted-foreground">No activities were added. Review the submitted actual and employee comments.</p>
-                )}
+              </> : <>
+                <p className="mt-3 whitespace-pre-wrap break-words text-sm text-muted-foreground">{record.current.reviewComment?.trim() || "No manager feedback on this revision."}</p>
+                {status === "approved" && <KpiFluentButton type="button" className="mt-auto self-start pt-4 text-primary" disabled={busy} onClick={() => openDecisionDialog("correction")}>Open approved correction</KpiFluentButton>}
+              </>}
+            </section>
+          </div>
+
+          {activityDiffers && <KpiFeedback intent="warning">The submitted actual ({reviewValue(record.current.actual, unit)}) differs from the numeric activity total ({reviewValue(numericTotal.total, unit)}). Check the supporting work before approving.</KpiFeedback>}
+
+          <div className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+            <div className="min-w-0 space-y-4">
+              <section aria-labelledby="review-comments-title" className="min-w-0 rounded-xl border border-border bg-card p-4">
+                <h3 id="review-comments-title" className="text-base font-semibold">Employee comments</h3>
+                <p className="mt-3 whitespace-pre-wrap break-words rounded-lg bg-muted p-3 text-sm">{record.current.comments?.trim() || "No comments provided."}</p>
+              </section>
+              <section aria-labelledby="review-evidence-title" className="min-w-0 rounded-xl border border-border bg-card p-4">
+                <div className="flex items-center justify-between gap-2"><h3 id="review-evidence-title" className="flex items-center gap-2 text-base font-semibold"><Paperclip size={18} className="text-primary" aria-hidden="true" />Evidence</h3><span className="text-xs text-muted-foreground">{record.current.evidence.length} {record.current.evidence.length === 1 ? "attachment" : "attachments"}</span></div>
+                {record.current.evidence.length ? <ul className="mt-2 space-y-2">{record.current.evidence.map((file) => <li key={file.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-border pt-2 text-sm"><span className="min-w-0 break-all">{file.fileName} · {(file.fileSize / 1024).toFixed(1)} KB</span><KpiFluentButton type="button" onClick={() => void achievementApi.download(token, id, file).catch((e: unknown) => setError(e instanceof Error ? e.message : "Download failed"))}>Download</KpiFluentButton></li>)}</ul> : <p className="mt-2 text-sm text-muted-foreground">No attachments</p>}
               </section>
             </div>
-
+            <section aria-labelledby="review-activities-title" className="min-w-0 rounded-xl border border-border bg-card p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2"><h3 id="review-activities-title" className="flex items-center gap-2 text-base font-semibold"><ListChecks size={18} className="text-primary" aria-hidden="true" />Supporting activities</h3><span className="text-xs text-muted-foreground">{activityCount} {activityCount === 1 ? "entry" : "entries"}</span></div>
+              {activityCount ? <div className="mt-3 space-y-3">{record.current.activities?.map((activity) => <ReviewActivity key={activity.id} activity={activity} achievementId={id} token={token} onError={setError} unit={unit} />)}</div> : <p className="mt-3 text-sm text-muted-foreground">No supporting activities recorded.</p>}
+              <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Supporting activities are not automatically included in the actual result.</p>
+            </section>
           </div>
 
           <section aria-labelledby="review-history-title" className="min-w-0 border-t border-border pt-6">
@@ -632,20 +595,37 @@ export function AchievementReviewDetail({ id, embedded = false }: { id: number; 
       <Dialog
         open={decisionDialog !== null}
         onOpenChange={(_, data) => {
-          if (!data.open && !busy) setDecisionDialog(null);
+          if (!data.open && !busy) { setDecisionDialog(null); setCorrectionRevision(null); }
         }}
       >
-        <DialogSurface className="!w-[min(32rem,calc(100vw-2rem))]">
+        <DialogSurface className={`${detailStyles.correctionSurface} !w-[min(32rem,calc(100vw-2rem))]`}>
           <DialogBody>
             <DialogTitle>
-              {decisionDialog === "review"
+              {decisionDialog === "correction"
+                ? correctionRevision !== null ? "Correction draft ready" : "Create correction draft?"
+                : decisionDialog === "review"
                 ? "Start review?"
                 : decisionDialog === "return"
                   ? "Return for correction"
                   : "Reject achievement"}
             </DialogTitle>
             <DialogContent>
-              {decisionDialog === "review" ? (
+              {decisionDialog === "correction" ? (
+                <div className="space-y-3 text-sm">
+                  {correctionRevision !== null ? (
+                    <>
+                      <p>Revision {correctionRevision} is now a draft for the assigned employee to update and submit.</p>
+                      <p className="text-muted-foreground">The previously approved result remains on record until a new revision is approved.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p>This creates a new draft revision of <strong>{record?.assignment.definitionVersion?.name ?? "this KPI"}</strong> for the assigned employee.</p>
+                      <p className="text-muted-foreground">The approved result stays on record. Creating the draft does not submit or approve a new result.</p>
+                    </>
+                  )}
+                  {decisionDialog === "correction" && error && <KpiFeedback intent="error">{error}</KpiFeedback>}
+                </div>
+              ) : decisionDialog === "review" ? (
                 <p>This will mark the achievement as under review.</p>
               ) : (
                 <div className="grid gap-2">
@@ -664,20 +644,26 @@ export function AchievementReviewDetail({ id, embedded = false }: { id: number; 
               )}
             </DialogContent>
             <DialogActions>
-              <Button appearance="secondary" disabled={busy} onClick={() => setDecisionDialog(null)}>Cancel</Button>
-              <Button
-                appearance="primary"
-                disabled={busy || (decisionDialog !== "review" && !comments.trim())}
-                onClick={() => void submitDecisionDialog()}
-              >
-                {busy
-                  ? "Saving…"
-                  : decisionDialog === "review"
-                    ? "Start review"
-                    : decisionDialog === "return"
-                      ? "Return"
-                      : "Reject"}
-              </Button>
+              {decisionDialog === "correction" && correctionRevision !== null ? (
+                <Button appearance="primary" onClick={() => { setDecisionDialog(null); setCorrectionRevision(null); }}>Done</Button>
+              ) : <>
+                <Button appearance="secondary" disabled={busy} onClick={() => setDecisionDialog(null)}>Cancel</Button>
+                <Button
+                  appearance="primary"
+                  disabled={busy || (decisionDialog !== "review" && decisionDialog !== "correction" && !comments.trim())}
+                  onClick={() => void submitDecisionDialog()}
+                >
+                  {busy
+                    ? "Saving…"
+                    : decisionDialog === "correction"
+                      ? "Create draft"
+                      : decisionDialog === "review"
+                        ? "Start review"
+                        : decisionDialog === "return"
+                          ? "Return"
+                          : "Reject"}
+                </Button>
+              </>}
             </DialogActions>
           </DialogBody>
         </DialogSurface>
@@ -691,26 +677,28 @@ function ReviewActivity({
   achievementId,
   token,
   onError,
+  unit,
 }: {
   activity: AchievementActivity;
   achievementId: number;
   token: string;
   onError: (message: string) => void;
+  unit?: string | null;
 }) {
   return (
-    <article className="min-w-0 border-t border-border py-4">
+    <article className="min-w-0 rounded-lg border border-border bg-muted/40 p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs font-medium text-muted-foreground">{activity.activityDate}</p>
-          <h3 className="mt-0.5 break-words text-sm font-semibold">{activity.title}</h3>
+          <h4 className="mt-0.5 break-words text-sm font-semibold">{activity.title}</h4>
         </div>
-        <span className="text-xs capitalize text-muted-foreground">{activity.status.replaceAll("_", " ")}</span>
+        <KpiStatusBadge status={activity.status} />
       </div>
-      <p className="mt-3 whitespace-pre-wrap break-words text-sm">{activity.details}</p>
+      {activity.details?.trim() && <p className="mt-2 whitespace-pre-wrap break-words text-sm">{activity.details}</p>}
       <div className="mt-3 grid gap-x-6 gap-y-3 border-t border-border/70 pt-3 text-sm sm:grid-cols-2">
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">Measured result</p>
-          <p className="mt-0.5 break-words font-medium">{reviewValue(activity.measurableResult)}</p>
+          <p className="mt-0.5 break-words font-medium">{reviewValue(activity.measurableResult, unit)}</p>
         </div>
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">Comments</p>
@@ -723,7 +711,7 @@ function ReviewActivity({
           <KpiFluentButton
             key={file.id}
             type="button"
-            className="max-w-full break-all text-left text-primary underline"
+            className="max-w-full break-all text-left text-primary"
             onClick={() => void achievementApi.downloadActivityEvidence(token, achievementId, activity, file).catch((e: unknown) =>
               onError(e instanceof Error ? e.message : "Download failed"))}
           >{file.fileName} · {(file.fileSize / 1024).toFixed(1)} KB</KpiFluentButton>
