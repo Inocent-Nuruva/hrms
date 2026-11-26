@@ -5,9 +5,11 @@ import { Tab, TabList } from "@fluentui/react-components";
 import {
   Calendar20Regular,
   ChevronDown20Regular,
+  Grid20Regular,
   HeartPulse20Regular,
   People20Regular,
   PersonHeart20Regular,
+  TextBulletListLtr20Regular,
   Warning20Regular,
 } from "@fluentui/react-icons";
 import styles from "./leave-balance-showcase.module.css";
@@ -75,11 +77,14 @@ export function LeaveBalanceShowcase({ items, fiscalYear }: { items: LeaveBalanc
   return <section className={styles.showcase} aria-label="My leave balances">
     <div className={styles.heading}>
       <div><h2>My leave balance</h2><p>Your leave entitlement, usage and availability.</p></div>
-      <span className={styles.year}>FY {fiscalYear}</span>
+      <div className={styles.headingControls}>
+        <span className={styles.year}>FY {fiscalYear}</span>
+        <TabList size="small" aria-label="Leave balance view" selectedValue={view} onTabSelect={(_, data) => setView(data.value as "summary" | "cards")}>
+          <Tab value="summary" aria-label="Summary" title="Summary" icon={<TextBulletListLtr20Regular aria-hidden="true" />} />
+          <Tab value="cards" aria-label="Cards" title="Cards" icon={<Grid20Regular aria-hidden="true" />} />
+        </TabList>
+      </div>
     </div>
-    <TabList size="small" aria-label="Leave balance view" selectedValue={view} onTabSelect={(_, data) => setView(data.value as "summary" | "cards")}>
-      <Tab value="summary">Summary</Tab><Tab value="cards">Cards</Tab>
-    </TabList>
 
     {view === "summary" ? <div className={styles.summary}>
       <article className={styles.featured}>

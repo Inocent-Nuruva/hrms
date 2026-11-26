@@ -165,7 +165,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
       const richEditor = (
         <div
           className={cn(
-            "w-full overflow-hidden rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring/30",
+            "w-full overflow-hidden rounded-none border border-input bg-background focus-within:ring-2 focus-within:ring-ring/30",
             disabled && "cursor-not-allowed opacity-70",
             error && "border-destructive ring-2 ring-destructive/15",
             containerClassName,

@@ -8,12 +8,6 @@ import {
   Badge,
   Button,
   Card,
-  DataGrid,
-  DataGridBody,
-  DataGridCell,
-  DataGridHeader,
-  DataGridHeaderCell,
-  DataGridRow,
   Dialog,
   DialogActions,
   DialogBody,
@@ -33,9 +27,7 @@ import {
   TableHeader,
   TableHeaderCell,
   TableRow,
-  TableCellLayout,
   Text,
-  createTableColumn,
   tokens,
 } from "@fluentui/react-components";
 import * as React from "react";
@@ -48,7 +40,8 @@ import { achievementsEnabled, readKpiToken } from "@/lib/kpi-session";
 import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
 import { KpiFluentInput, KpiFluentTextarea } from "./kpi-fluent-fields";
 import { KpiFeedback, KpiStatusBadge } from "./kpi-page-elements";
-import { ArrowLeft20Regular, ArrowUpload20Regular, Attach20Regular, Delete20Regular, Dismiss20Regular, Document20Regular, DocumentBulletList20Regular, Edit20Regular, Target20Regular } from "@fluentui/react-icons";
+import styles from "./achievement-workspace.module.css";
+import { Add20Regular, ArrowLeft20Regular, ArrowUpload20Regular, Attach20Regular, CalendarLtr20Regular, Delete20Regular, Dismiss20Regular, Document20Regular, DocumentBulletList20Regular, Edit20Regular, Target20Regular } from "@fluentui/react-icons";
 
 type AchievementFlowStep = "mode" | "quick" | "activities";
 type ActivityForm = {
@@ -209,6 +202,11 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
     if (!token || !achievementsEnabled) return;
     const sequence = ++loadSequence.current;
     setLoading(true);
+    setAssignment(null);
+    setRecord(null);
+    setSelectedActivityId(null);
+    setActivityOpen(false);
+    setModePickerOpen(false);
     try {
       const [assignments, records] = await Promise.all([kpiApi.mine(token), achievementApi.mine(token)]);
       const item = assignments.find((row) => row.id === assignmentId);
@@ -267,14 +265,6 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
   const targetValue = assignment?.currentTarget?.target?.value;
   const actualValue = record?.current.actual;
   const simpleTarget = isNumericValue(targetValue);
-  const simpleActual = isNumericValue(actualValue);
-  const achievementStatus = record?.current.status ?? assignment?.status ?? "draft";
-  const nextStepTitle = canEditDraft
-    ? record ? "Finish your draft" : "Record your first activity"
-    : ["submitted", "under_review"].includes(achievementStatus) ? "Waiting for manager review"
-    : achievementStatus === "approved" ? "Your result is approved"
-    : ["returned", "rejected"].includes(achievementStatus) ? "Review your manager’s feedback"
-    : "View your recorded work";
 
   function openActivityForm() {
     setEditingActivity(null);
@@ -438,31 +428,43 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
   if (!achievementsEnabled) return <p className="p-6">Achievement submissions are disabled in this environment.</p>;
 
   return (
-    <div className="space-y-4">
-      <header className="-mx-3 border-b border-border bg-background px-3 pb-4 sm:-mx-4 sm:px-4" aria-label="KPI achievement overview">
-        <div className="flex items-center gap-2 py-2">
-          <Button type="button" appearance="subtle" size="small" icon={<ArrowLeft20Regular />} aria-label="Back to KPI listings" title="Back to KPI listings" className="!size-8 !min-w-8 !rounded-full !p-0" onClick={() => router.push("/dashboard/me/kpi")} />
-          <Text size={200} weight="semibold" style={{ color: tokens.colorNeutralForeground2 }}>My KPIs</Text>
+    <div className="mx-auto max-w-6xl space-y-3 pb-5">
+      <header className="space-y-2 border-b border-border pb-3" aria-label="KPI achievement overview">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Button type="button" appearance="subtle" size="small" icon={<ArrowLeft20Regular />} onClick={() => router.push("/dashboard/me/kpi")}>My KPIs</Button>
+          <Button type="button" appearance="secondary" disabled={loading} onClick={() => setSwitcherOpen(true)}>Switch KPI</Button>
         </div>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2"><h1 className="break-words text-xl font-semibold tracking-tight text-foreground sm:text-2xl">{assignment?.definitionVersion?.name ?? "KPI achievement"}</h1><KpiStatusBadge status={achievementStatus} /></div>
-            {assignment?.definitionVersion?.description && <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">{assignment.definitionVersion.description}</p>}
-            <p className="mt-2 text-sm font-medium text-foreground">{nextStepTitle}</p>
+            <h1 className={`${styles.heading} break-words font-semibold tracking-tight text-foreground`}>{loading ? "Loading KPI…" : assignment?.definitionVersion?.name ?? "KPI achievement"}</h1>
+            {assignment?.definitionVersion?.description && <p className="mt-1 max-w-3xl break-words text-sm text-muted-foreground">{assignment.definitionVersion.description}</p>}
           </div>
-          <Button type="button" appearance="secondary" className="!shrink-0" onClick={() => setSwitcherOpen(true)}>Switch to other KPIs</Button>
+          {assignment && <KpiStatusBadge status={assignment.status} />}
         </div>
-        {assignment && <dl className="mt-4 grid grid-cols-2 border-y border-border/70 sm:grid-cols-4">
-          <div className="min-w-0 px-3 py-3 sm:border-r sm:border-border/70"><dt className="text-xs text-muted-foreground">Reporting period</dt><dd className="mt-1 break-words text-sm font-semibold">{displayPeriodDate(assignment.period?.startDate)} – {displayPeriodDate(assignment.period?.endDate)}</dd></div>
-          <div className="min-w-0 border-l border-border/70 px-3 py-3 sm:border-l-0 sm:border-r"><dt className="text-xs text-muted-foreground">Target</dt><dd className="mt-1 break-words text-lg font-semibold text-primary">{simpleTarget ? formatActivityResult(targetValue, assignment.definitionVersion?.measurementUnit) : formatTarget(assignment.currentTarget?.target ?? null, assignment.definitionVersion?.measurementUnit)}</dd></div>
-          <div className="min-w-0 border-t border-border/70 px-3 py-3 sm:border-r sm:border-t-0"><dt className="text-xs text-muted-foreground">Final result</dt><dd className="mt-1 break-words text-lg font-semibold">{simpleActual ? formatActivityResult(actualValue, assignment.definitionVersion?.measurementUnit) : hasFinalResult ? formatActivityResult(actualValue, assignment.definitionVersion?.measurementUnit) : "Not entered"}</dd></div>
-          <div className="min-w-0 border-l border-t border-border/70 px-3 py-3 sm:border-l-0 sm:border-t-0"><dt className="text-xs text-muted-foreground">Activities</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{activities.length}</dd></div>
-        </dl>}
-        {(canEditDraft || (record && ["returned", "rejected"].includes(record.current.status))) && <div className="mt-4 flex flex-wrap justify-end gap-2">
-          {canEditDraft && <><Button type="button" appearance="secondary" onClick={openActivityForm}>Add activity</Button><Button type="button" appearance="primary" disabled={busy} onClick={() => { setFlowStep("quick"); setModePickerOpen(true); }}>Submit achievement</Button></>}
-          {record && ["returned", "rejected"].includes(record.current.status) && <Button type="button" appearance="primary" disabled={busy} onClick={() => void action(() => achievementApi.create(token, assignmentId), "Correction draft created")}>Start a correction</Button>}
-        </div>}
       </header>
+      {!loading && assignment && <>
+        <section aria-label="KPI performance summary" className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <div className="flex min-w-0 flex-col justify-between rounded-xl bg-primary p-4 text-primary-foreground">
+            <div className="flex items-center justify-between gap-3"><p className="text-sm font-medium opacity-85">Assigned target</p><Target20Regular aria-hidden="true" /></div>
+            <p className={`${styles.targetValue} my-2 break-words font-semibold tabular-nums`}>{simpleTarget ? <>{String(targetValue)}{assignment.definitionVersion?.measurementUnit && <span className={`${styles.targetUnit} ml-2 inline-block`}>{assignment.definitionVersion.measurementUnit}</span>}</> : formatTarget(assignment.currentTarget?.target ?? null, assignment.definitionVersion?.measurementUnit)}</p>
+            <div className="flex items-start gap-2 border-t border-primary-foreground/25 pt-3"><CalendarLtr20Regular className="shrink-0" aria-hidden="true" /><div><p className="text-xs opacity-80">Reporting period</p><p className="mt-0.5 break-words text-sm font-medium">{displayPeriodDate(assignment.period?.startDate)} – {displayPeriodDate(assignment.period?.endDate)}</p></div></div>
+          </div>
+          <div className="grid min-w-0 gap-2 sm:grid-cols-2 md:grid-cols-1">
+            <div className="flex min-w-0 flex-col justify-between rounded-xl border border-border bg-card p-3">
+              <div className="flex items-center justify-between gap-2"><p className="text-sm text-muted-foreground">Final result</p><Target20Regular className="text-primary" aria-hidden="true" /></div>
+              <div><p className={`${styles.metricValue} mt-1 break-words font-semibold tabular-nums text-foreground`}>{hasFinalResult ? formatActivityResult(actualValue, assignment.definitionVersion?.measurementUnit) : "Not entered"}</p><p className="text-xs text-muted-foreground">{!record ? "Awaiting submission" : friendlyStatus(record.current.status)}</p></div>
+            </div>
+            <div className="flex min-w-0 flex-col justify-between rounded-xl border border-border bg-card p-3">
+              <div className="flex items-center justify-between gap-2"><p className="text-sm text-muted-foreground">Activities recorded</p><DocumentBulletList20Regular className="text-primary" aria-hidden="true" /></div>
+              <div><p className={`${styles.metricValue} mt-1 font-semibold tabular-nums text-foreground`}>{activities.length}</p><p className="text-xs text-muted-foreground">This reporting period</p></div>
+            </div>
+          </div>
+        </section>
+        {(canEditDraft || (record && ["returned", "rejected"].includes(record.current.status))) && <div className="flex flex-wrap items-center justify-end gap-2">
+          {canEditDraft && <><Button type="button" size="small" appearance="secondary" icon={<Add20Regular />} className="!min-h-8" onClick={openActivityForm}>Add activity</Button><Button type="button" size="small" appearance="primary" icon={<ArrowUpload20Regular />} className={`${styles.submitKpiButton} !min-h-8`} disabled={busy} onClick={() => { setFlowStep("quick"); setModePickerOpen(true); }}>Submit KPI</Button></>}
+          {record && ["returned", "rejected"].includes(record.current.status) && <Button type="button" size="small" appearance="primary" className="!min-h-8" disabled={busy} onClick={() => void action(() => achievementApi.create(token, assignmentId), "Correction draft created")}>Start a correction</Button>}
+        </div>}
+      </>}
       {record?.current.reviewComment && <Card appearance="outline" className="p-4 sm:p-5" aria-label="Manager feedback"><Text as="h2" size={400} weight="semibold">Manager feedback</Text><Text as="p" size={300} className="whitespace-pre-wrap">{record.current.reviewComment}</Text></Card>}
       {!!record?.current.evidence.length && <div className="flex flex-wrap items-center gap-2"><Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>Supporting files</Text>{record.current.evidence.map((evidence) => <Button key={evidence.id} size="small" appearance="subtle" icon={<Document20Regular />} onClick={() => void achievementApi.download(token, record.id, evidence).catch((e: unknown) => setError(e instanceof Error ? e.message : "Download failed"))}>{evidence.fileName}</Button>)}</div>}
       {loading && <p>Loading achievement…</p>}
@@ -470,9 +472,9 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
       {notice && <KpiFeedback intent="success">{notice}</KpiFeedback>}
       {blockedAchievement && <KpiFeedback intent="warning">{blockedAchievement}</KpiFeedback>}
       {assignment?.status !== "active" && assignment && !!assignment.targetHistory?.length && <Card appearance="outline" className="p-5" aria-label="Target history"><Text as="h2" size={400} weight="semibold">Target changes</Text><div className="mt-3 space-y-2">{assignment.targetHistory.map((item) => <Text as="p" size={300} key={item.revision} style={{ color: tokens.colorNeutralForeground2 }}>Revision {item.revision} · {formatTarget(item.target, assignment.definitionVersion?.measurementUnit)} · {item.reason} · {displayDateTime(item.changedAt)}</Text>)}</div></Card>}
-      {assignment && <section className="space-y-4" aria-label="KPI activity list">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><Text as="h2" size={500} weight="semibold" style={{ display: "block" }}>Work recorded</Text><Text as="p" size={200} className="mt-1" style={{ color: tokens.colorNeutralForeground2, display: "block" }}>{activities.length === 1 ? "1 activity" : `${activities.length} activities`} during this reporting period</Text></div>{canEditDraft && activities.length > 0 && <Button type="button" appearance="secondary" onClick={openActivityForm}>Add another activity</Button>}</div>
-        {activities.length === 0 ? <Card appearance="filled-alternative" className="items-center p-7 text-center"><Text as="h3" size={400} weight="semibold">No work recorded yet</Text><Text as="p" size={300} className="max-w-md" style={{ color: tokens.colorNeutralForeground2 }}>{assignment.status === "active" ? "Add an activity to show what you did during this period." : "No activities were recorded for this assignment."}</Text>{canEditDraft && <Button type="button" appearance="secondary" onClick={openActivityForm}>Add your first activity</Button>}</Card> : <ActivityTable activities={activities} unit={assignment.definitionVersion?.measurementUnit} onOpen={(activityId) => { setError(""); setNotice(""); setSelectedActivityId(activityId); }} />}
+      {!loading && assignment && <section className="space-y-2 border-t border-border pt-3" aria-label="KPI activity journal">
+        <div className="flex flex-wrap items-end justify-between gap-2"><div><h2 className={`${styles.journalHeading} font-semibold text-foreground`}>Activity journal</h2><p className="mt-1 text-sm text-muted-foreground">Work recorded during this reporting period.</p></div><span className="text-sm text-muted-foreground">{activities.length} {activities.length === 1 ? "entry" : "entries"}</span></div>
+        {activities.length === 0 ? <div className="flex flex-col items-center rounded-xl border border-dashed border-border bg-card px-4 py-5 text-center"><DocumentBulletList20Regular className="size-6 text-primary" aria-hidden="true" /><h3 className="mt-2 text-base font-semibold">Start your activity journal</h3><p className="mt-1 text-sm text-muted-foreground">Keep a record of your work throughout the reporting period.</p>{canEditDraft && <Button type="button" appearance="secondary" className="mt-2" icon={<Add20Regular />} onClick={openActivityForm}>Add your first activity</Button>}</div> : <ActivityJournal activities={activities} unit={assignment.definitionVersion?.measurementUnit} onOpen={(activityId) => { setError(""); setNotice(""); setSelectedActivityId(activityId); }} />}
       </section>}
 
       <ActivityDetailsDialog
@@ -518,7 +520,7 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
 
       <Dialog open={modePickerOpen} onOpenChange={(_, data) => { if (!busy) setModePickerOpen(data.open); }}>
         <DialogSurface className="max-h-[min(88vh,52rem)] w-[min(46rem,calc(100vw-2rem))] overflow-y-auto"><DialogBody>
-          <DialogTitle>{flowStep === "mode" ? "Record achievement" : flowStep === "quick" ? "Submit achievement" : flowStep === "activities" ? "Detailed Activity Log" : editingActivity ? "Edit activity" : "Add activity"}</DialogTitle>
+          <DialogTitle>{flowStep === "mode" ? "Record achievement" : flowStep === "quick" ? "Submit KPI" : flowStep === "activities" ? "Detailed Activity Log" : editingActivity ? "Edit activity" : "Add activity"}</DialogTitle>
           {flowStep === "mode" && <>
             <DialogContent className="space-y-3">
               <p className="text-sm text-muted-foreground">Choose how you want to record this KPI result. Your choice opens the entry form here.</p>
@@ -586,49 +588,28 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
   );
 }
 
-function ActivityTable({ activities, unit, onOpen }: { activities: AchievementActivity[]; unit?: string | null; onOpen: (activityId: number) => void }) {
-  const columns = React.useMemo(() => [
-    createTableColumn<AchievementActivity>({
-      columnId: "activity",
-      compare: (a, b) => a.title.localeCompare(b.title),
-      renderHeaderCell: () => "Activity",
-      renderCell: (item) => <TableCellLayout media={<DocumentBulletList20Regular aria-hidden />}><Button type="button" appearance="subtle" size="small" className="!max-w-full !justify-start !px-1" onClick={(event) => { event.stopPropagation(); onOpen(item.id); }} title={`View ${item.title}`}>{item.title}</Button></TableCellLayout>,
-    }),
-    createTableColumn<AchievementActivity>({
-      columnId: "date",
-      compare: (a, b) => a.activityDate.localeCompare(b.activityDate),
-      renderHeaderCell: () => "Date",
-      renderCell: (item) => displayPeriodDate(item.activityDate.slice(0, 10)),
-    }),
-    createTableColumn<AchievementActivity>({
-      columnId: "progress",
-      compare: (a, b) => a.status.localeCompare(b.status),
-      renderHeaderCell: () => "Progress",
-      renderCell: (item) => <ActivityProgressBadge status={item.status} />,
-    }),
-    createTableColumn<AchievementActivity>({
-      columnId: "result",
-      compare: (a, b) => formatActivityResult(a.measurableResult, unit).localeCompare(formatActivityResult(b.measurableResult, unit)),
-      renderHeaderCell: () => "Result",
-      renderCell: (item) => item.measurableResult === null || item.measurableResult === undefined || item.measurableResult === "" ? <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>Not entered</Text> : formatActivityResult(item.measurableResult, unit),
-    }),
-    createTableColumn<AchievementActivity>({
-      columnId: "files",
-      compare: (a, b) => a.evidence.length - b.evidence.length,
-      renderHeaderCell: () => "Files",
-      renderCell: (item) => item.evidence.length === 1 ? "1 file" : `${item.evidence.length} files`,
-    }),
-  ], [onOpen, unit]);
-  const widths: Record<string, string> = { activity: "37%", date: "17%", progress: "16%", result: "18%", files: "12%" };
-
-  return <Card appearance="outline" className="min-w-0 overflow-hidden p-0">
-    <div className="overflow-x-auto" role="region" aria-label="Recorded activities table" tabIndex={0}>
-      <DataGrid items={activities} columns={columns} getRowId={(item) => item.id} sortable defaultSortState={{ sortColumn: "date", sortDirection: "descending" }} size="small" aria-label="Recorded activities" style={{ minWidth: "640px", width: "100%", tableLayout: "fixed" }}>
-        <DataGridHeader style={{ backgroundColor: tokens.colorNeutralBackground2 }}><DataGridRow>{({ columnId, renderHeaderCell }) => <DataGridHeaderCell key={columnId} style={{ width: widths[String(columnId)] }}>{renderHeaderCell()}</DataGridHeaderCell>}</DataGridRow></DataGridHeader>
-        <DataGridBody<AchievementActivity>>{({ item, rowId }) => <DataGridRow<AchievementActivity> key={rowId} className="cursor-pointer" onClick={() => onOpen(item.id)} aria-label={`Open ${item.title}, ${friendlyStatus(item.status)}`}>{({ columnId, renderCell }) => <DataGridCell key={columnId} style={{ width: widths[String(columnId)] }}>{renderCell(item)}</DataGridCell>}</DataGridRow>}</DataGridBody>
-      </DataGrid>
-    </div>
-  </Card>;
+function ActivityJournal({ activities, unit, onOpen }: { activities: AchievementActivity[]; unit?: string | null; onOpen: (activityId: number) => void }) {
+  const ordered = [...activities].sort((a, b) => b.activityDate.localeCompare(a.activityDate) || b.id - a.id);
+  return <div className="grid min-w-0 gap-2 lg:grid-cols-2" aria-label="Recorded activities">
+    {ordered.map((activity) => <button
+      key={activity.id}
+      type="button"
+      className="min-w-0 rounded-xl border border-border bg-card p-3 text-left text-foreground transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary motion-reduce:transition-none"
+      onClick={() => onOpen(activity.id)}
+      aria-label={`Open ${activity.title}, ${friendlyStatus(activity.status)}`}
+    >
+      <span className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <span className="min-w-0"><span className={`${styles.activityHeading} block break-words font-semibold`}>{activity.title}</span><span className="block text-xs text-muted-foreground">{displayPeriodDate(activity.activityDate.slice(0, 10))}</span></span>
+        <ActivityProgressBadge status={activity.status} />
+      </span>
+      <span className="mt-2 block whitespace-pre-wrap break-words text-sm text-muted-foreground">{activity.details}</span>
+      <span className="mt-2 flex min-w-0 flex-wrap items-end justify-between gap-2 border-t border-border pt-2">
+        <span className="min-w-0"><span className="block text-xs text-muted-foreground">Measured result</span><span className={`${styles.activityResult} block break-words font-semibold tabular-nums`}>{activity.measurableResult === null || activity.measurableResult === undefined || activity.measurableResult === "" ? "Not entered" : formatActivityResult(activity.measurableResult, unit)}</span></span>
+        <span className="text-xs text-muted-foreground">{activity.evidence.length} {activity.evidence.length === 1 ? "attachment" : "attachments"}</span>
+      </span>
+      {activity.comments?.trim() && <span className="mt-2 block break-words text-xs text-muted-foreground">Comment: {activity.comments}</span>}
+    </button>)}
+  </div>;
 }
 
 function ActivityDetailsDialog({

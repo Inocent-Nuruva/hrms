@@ -5,6 +5,7 @@ import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
 import { KpiFluentTextarea } from "./kpi-fluent-fields";
 import * as React from "react";
 import { ClipboardCheck, X, Paperclip, ListChecks, History } from "lucide-react";
+import { ArrowReply20Regular, CheckmarkCircle20Regular, ClipboardTask20Regular, DismissCircle20Regular, DocumentEdit20Regular } from "@fluentui/react-icons";
 import { KpiFluentButton } from "./kpi-fluent-button";
 import { KpiFeedback, KpiPageHeader, KpiStatusBadge } from "./kpi-page-elements";
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
@@ -517,20 +518,20 @@ export function AchievementReviewDetail({ id, embedded = false, onCorrectionOpen
               {canDecide ? <>
                 <p className="mt-3 text-sm text-muted-foreground">Review this submitted result and its supporting evidence.</p>
                 <div className="mt-auto flex flex-wrap gap-2 pt-4">
-                  {status === "submitted" && <KpiFluentButton type="button" disabled={busy} onClick={() => openDecisionDialog("review")}>Start review</KpiFluentButton>}
-                  <KpiFluentButton type="button" disabled={busy} onClick={() => void decide("approve")}>{busy ? "Saving…" : "Approve result"}</KpiFluentButton>
-                  <KpiFluentButton type="button" disabled={busy} onClick={() => openDecisionDialog("return")}>Return for correction</KpiFluentButton>
-                  <KpiFluentButton type="button" disabled={busy} onClick={() => openDecisionDialog("reject")}>Reject</KpiFluentButton>
+                  {status === "submitted" && <KpiFluentButton type="button" icon={<ClipboardTask20Regular />} disabled={busy} onClick={() => openDecisionDialog("review")}>Start review</KpiFluentButton>}
+                  <KpiFluentButton type="button" icon={<CheckmarkCircle20Regular />} disabled={busy} onClick={() => void decide("approve")}>{busy ? "Saving…" : "Approve result"}</KpiFluentButton>
+                  <KpiFluentButton type="button" icon={<ArrowReply20Regular />} disabled={busy} onClick={() => openDecisionDialog("return")}>Return for correction</KpiFluentButton>
+                  <KpiFluentButton type="button" icon={<DismissCircle20Regular />} disabled={busy} onClick={() => openDecisionDialog("reject")}>Reject</KpiFluentButton>
                 </div>
               </> : <>
                 <p className="mt-3 whitespace-pre-wrap break-words text-sm text-muted-foreground">{record.current.reviewComment?.trim() || "No manager feedback on this revision."}</p>
                 {status === "approved" && <div className="mt-auto space-y-2 pt-4">
                   <p className="text-xs text-muted-foreground">Need to change this approved result? Create a new draft for the employee. The approved result remains on record until a new revision is approved.</p>
-                  {!confirmCorrection ? <KpiFluentButton type="button" className="text-primary" disabled={busy} onClick={() => { setError(""); setConfirmCorrection(true); }}>Create correction draft</KpiFluentButton> : <div role="group" aria-label="Confirm correction draft" className="rounded-lg border border-border bg-muted/40 p-3">
+                  {!confirmCorrection ? <KpiFluentButton type="button" icon={<DocumentEdit20Regular />} className="text-primary" disabled={busy} onClick={() => { setError(""); setConfirmCorrection(true); }}>Create correction draft</KpiFluentButton> : <div role="group" aria-label="Confirm correction draft" className="rounded-lg border border-border bg-muted/40 p-3">
                     <p className="text-sm font-medium">Create a correction draft for this KPI?</p>
                     <p className="mt-1 text-xs text-muted-foreground">The employee can edit and submit the new revision. This will not change the approved result yet.</p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <Button appearance="primary" disabled={busy} onClick={() => void createCorrectionDraft()}>{busy ? "Creating…" : "Confirm and create draft"}</Button>
+                      <Button appearance="primary" icon={<DocumentEdit20Regular />} disabled={busy} onClick={() => void createCorrectionDraft()}>{busy ? "Creating…" : "Confirm and create draft"}</Button>
                       <Button appearance="secondary" disabled={busy} onClick={() => setConfirmCorrection(false)}>Cancel</Button>
                     </div>
                   </div>}
@@ -643,6 +644,7 @@ export function AchievementReviewDetail({ id, embedded = false, onCorrectionOpen
                 <Button appearance="secondary" disabled={busy} onClick={() => setDecisionDialog(null)}>Cancel</Button>
                 <Button
                   appearance="primary"
+                  icon={decisionDialog === "review" ? <ClipboardTask20Regular /> : decisionDialog === "return" ? <ArrowReply20Regular /> : <DismissCircle20Regular />}
                   disabled={busy || (decisionDialog !== "review" && !comments.trim())}
                   onClick={() => void submitDecisionDialog()}
                 >

@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Button, tokens } from "@fluentui/react-components";
+import { Button, tokens, type ButtonProps } from "@fluentui/react-components";
 import { fluentControlClass } from "./kpi-fluent-class";
 
-type Props = React.ButtonHTMLAttributes<HTMLButtonElement>;
+type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & { icon?: ButtonProps["icon"] };
 
 /** Keeps the native button submit behavior used by existing KPI forms. */
 export function KpiFluentButton({ className = "", type = "submit", style, ...props }: Props) {

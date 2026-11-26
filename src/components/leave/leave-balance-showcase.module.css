@@ -1,29 +1,26 @@
 .showcase {
   --leave-accent: var(--primary);
-  width: min(100%, 52rem);
-  margin-inline: auto;
-  padding: 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-2xl);
-  background: var(--card);
-  color: var(--card-foreground);
+  width: 100%;
+  min-width: 0;
+  color: var(--foreground);
 }
 
 :global(.dark) .showcase { --leave-accent: color-mix(in srgb, var(--primary) 40%, var(--foreground)); }
 
-.heading, .otherHeading, .featuredHeading, .cardHeading {
+.heading, .headingControls, .otherHeading, .featuredHeading, .cardHeading {
   display: flex;
   align-items: center;
   gap: 0.75rem;
 }
 
 .heading, .otherHeading { justify-content: space-between; }
-.heading { margin-bottom: 0.75rem; }
+.heading { align-items: flex-end; }
+.headingControls { flex: none; align-items: center; }
 .heading h2 { font-size: 1.25rem; font-weight: 650; }
 .heading p, .featuredHeading p, .otherHeading span, .cardHeading + p { color: var(--muted-foreground); font-size: 0.875rem; }
-.year { flex: none; padding: 0.4rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius-lg); font-size: 0.75rem; }
+.year { flex: none; color: var(--primary); font-size: 0.8125rem; font-weight: 650; }
 .summary, .cardGrid { margin-top: 1rem; }
-.summary { width: 100%; }
+.summary { display: grid; width: 100%; gap: 1rem; }
 
 .featured {
   padding: 1.25rem;
@@ -47,9 +44,9 @@
 .footnote { display: flex; align-items: center; gap: 0.4rem; margin-top: 1rem; color: var(--muted-foreground); font-size: 0.75rem; }
 .footnote svg { width: 0.875rem; height: 0.875rem; }
 
-.otherBalances { margin-top: 1.25rem; }
-.otherHeading { margin-bottom: 0.75rem; }
-.accordion { margin-top: 0.625rem; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-xl); }
+.otherBalances { display: grid; min-width: 0; gap: 0.625rem 1rem; }
+.otherHeading { grid-column: 1 / -1; margin-bottom: 0.125rem; }
+.accordion { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-xl); }
 .accordion > summary { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; list-style: none; cursor: pointer; }
 .accordion > summary::-webkit-details-marker { display: none; }
 .accordion > summary:hover { background: color-mix(in srgb, var(--primary) 3%, var(--card)); }
@@ -87,8 +84,19 @@
 :global(body[data-app-text-scale="compact"]) .showcase :is(.heading p, .featuredHeading p, .featuredValue > span:first-child, .availablePanel > span:first-child) { font-size: 0.8125rem !important; line-height: 1.4 !important; }
 :global(body[data-app-text-scale="compact"]) .showcase :is(.featuredValue small, .availablePanel small) { font-size: 0.875rem !important; line-height: 1.2 !important; }
 
+@media (min-width: 48rem) {
+  .otherBalances { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 64rem) {
+  .featured { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr); align-items: center; gap: 1.25rem; }
+  .featuredValue { margin-top: 0; }
+  .featuredMetrics { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0; padding-top: 0; padding-left: 1.25rem; border-top: 0; border-left: 1px solid var(--border); }
+  .featured > .footnote { grid-column: 1 / -1; margin-top: 0; }
+  .cardGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 @media (max-width: 42rem) {
-  .showcase { padding: 0.875rem; }
   .cardGrid { grid-template-columns: minmax(0, 1fr); }
   .featuredMetrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

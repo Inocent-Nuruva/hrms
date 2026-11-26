@@ -1,0 +1,76 @@
+.workspace { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.filters { display: flex; flex: 1 1 640px; align-items: center; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.search { flex: 1 1 260px; max-width: 420px; min-width: 190px; }
+.filter { flex: 0 1 190px; min-width: 160px; }
+.viewSwitcher { flex: 0 0 auto; }
+.search, .filter, .rangeSelect { background: var(--card) !important; color: var(--foreground) !important; border-color: var(--border) !important; }
+.search input { color: var(--foreground) !important; background: transparent !important; }
+.viewSwitcher button, .timelineControls button { color: var(--foreground) !important; }
+.viewSwitcher button[aria-selected="true"] { color: var(--primary) !important; }
+.count { color: var(--muted-foreground); font-size: 12px; margin: 0; }
+.message { border: 1px dashed var(--border); background: var(--card); padding: 28px 20px; text-align: center; color: var(--muted-foreground); }
+.tableWrap { min-width: 0; overflow-x: auto; border: 1px solid var(--border); background: var(--card); }
+.table { width: 100%; min-width: 740px; table-layout: fixed; }
+.table th { color: var(--muted-foreground); font-weight: 600; background: color-mix(in srgb, var(--muted) 68%, var(--card)); }
+.table th, .table td { padding: 12px 14px; vertical-align: middle; }
+.table th:first-child { width: 34%; }
+.table th:nth-child(2) { width: 16%; }
+.table th:nth-child(3) { width: 23%; }
+.table th:last-child { width: 27%; }
+.nameCell { display: flex; align-items: flex-start; gap: 10px; min-width: 0; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.nameCell svg { flex: 0 0 auto; color: var(--primary); margin-top: 1px; }
+.timezoneAction { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.timezone { min-width: 0; overflow-wrap: anywhere; }
+.unconfigured { color: var(--muted-foreground); min-width: 0; }
+.actionButton { color: var(--primary) !important; flex: 0 0 auto; text-decoration: none !important; }
+.timezoneEditor { display: grid; gap: 7px; width: 100%; min-width: 0; }
+.timezoneEditor input { min-width: 0; }
+.editorActions { display: flex; gap: 6px; flex-wrap: wrap; }
+.cards { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+.card { display: flex; flex-direction: column; min-width: 0; max-width: 440px; min-height: 230px; padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--card-foreground); }
+.cardTop { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--muted-foreground); }
+.cardTop svg { color: var(--primary); }
+.card h3 { margin: 13px 0 16px; font-size: 16px; font-weight: 650; line-height: 1.4; overflow-wrap: anywhere; }
+.datePanel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(24px, .6fr) minmax(0, 1fr); align-items: center; gap: 7px; padding: 12px; border-radius: 10px; background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
+.dateEndpoint { display: grid; gap: 2px; min-width: 0; }
+.dateEndpoint span { font-size: 11px; color: var(--muted-foreground); }
+.dateEndpoint strong { font-size: 24px; line-height: 1.1; color: var(--foreground); }
+.dateEndpoint small { font-size: 11px; color: var(--muted-foreground); white-space: nowrap; }
+.dateEndpoint:last-child { text-align: right; }
+.connector { height: 1px; background: var(--primary); position: relative; }
+.connector::before, .connector::after { content: ""; position: absolute; top: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); }
+.connector::before { left: 0; }.connector::after { right: 0; }
+.cardFooter { margin-top: auto; padding-top: 13px; }
+.timelineSection { min-width: 0; max-width: 100%; }
+.timelineTools { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.timelineTools strong { font-size: 14px; }.timelineTools p { margin: 3px 0 0; color: var(--muted-foreground); font-size: 12px; }
+.timelineControls { display: flex; min-width: 0; max-width: 100%; align-items: center; flex-wrap: wrap; gap: 5px; }
+.rangeSelect { min-width: 130px; }
+.timelineScroll { width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; border: 1px solid var(--border); background: var(--card); }
+.timelineBody { min-width: 100%; }
+.timelineRow { display: flex; min-height: 58px; border-bottom: 1px solid var(--border); }
+.timelineRow:last-child { border-bottom: 0; }
+.stickyName { position: sticky; left: 0; z-index: 3; flex: 0 0 15rem; width: 15rem; min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 9px 13px; border-right: 1px solid var(--border); background: var(--card); font-size: 12px; font-weight: 600; }
+.stickyName small { margin-top: 3px; color: var(--muted-foreground); font-weight: 400; }
+.timelineName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timelineTrack { position: relative; flex: 0 0 auto; overflow: visible; background: color-mix(in srgb, var(--muted) 35%, var(--card)); }
+.monthHeader { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 5px 9px; border-left: 1px solid var(--border); color: var(--muted-foreground); font-size: 10px; }
+.monthHeader strong { align-self: flex-start; color: var(--foreground); font-size: 12px; white-space: nowrap; }
+.monthHeader span { align-self: flex-end; }
+.monthGrid { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); }
+.todayMarker { position: absolute; top: 0; bottom: 0; z-index: 1; width: 2px; background: color-mix(in srgb, var(--primary) 70%, var(--foreground)); pointer-events: none; }
+.periodBar { position: absolute; z-index: 2; top: 13px; height: 32px; padding: 0 9px; overflow: hidden; border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: var(--primary-foreground); font: inherit; font-size: 11px; font-weight: 600; text-align: left; cursor: pointer; }
+.periodBar:hover { filter: brightness(1.1); }.periodBar:focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }
+.periodBar span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.unconfiguredBar { border-style: dashed; background: color-mix(in srgb, var(--primary) 68%, var(--card)); }
+.outsideWindow { display: block; padding: 20px 12px; color: var(--muted-foreground); font-size: 11px; }
+.periodPopover { max-width: min(360px, calc(100vw - 32px)); min-width: min(300px, calc(100vw - 32px)); padding: 16px !important; background: var(--popover) !important; color: var(--popover-foreground) !important; }
+.periodPopover h3 { margin: 0 0 12px; font-size: 16px; font-weight: 650; overflow-wrap: anywhere; }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 13px; }
+.facts div { min-width: 0; }.facts dt { font-size: 11px; color: var(--muted-foreground); }.facts dd { margin: 2px 0 0; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.timelineHint { margin: 8px 0 0; color: var(--muted-foreground); font-size: 11px; }
+@media (min-width: 660px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1200px) { .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .toolbar { align-items: stretch; }.viewSwitcher { width: 100%; }.filters { flex-basis: 100%; }.search, .filter { flex: 1 1 100%; max-width: none; }.card { max-width: none; }.timelineTools { align-items: flex-start; } }
+@media (prefers-reduced-motion: no-preference) { .card, .periodBar { transition: border-color 170ms ease, filter 170ms ease; } .card:hover { border-color: color-mix(in srgb, var(--primary) 42%, var(--border)); } }

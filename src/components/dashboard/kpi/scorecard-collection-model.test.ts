@@ -44,4 +44,17 @@ describe("scorecard collection display", () => {
   it("keeps lifecycle status when the record is a draft", () => {
     expect(scorecardDisplay(fixture({ status: "draft" })).status).toBe("draft");
   });
+  it("shows approved result coverage instead of weighted completeness for a strategic scorecard", () => {
+    const strategic = fixture({
+      currentVersion: { id: 2, version: 1, name: "Status only", description: null, mode: "strategic", policyVersionId: null, entries: [], publishedAt: "2026-11-01" },
+      entries: [{ assignmentId: 1, status: "scored" }, { assignmentId: 2, status: "awaiting_data" }] as Scorecard["entries"],
+      overallScore: null,
+      completenessPercent: "0",
+      performanceStatus: "partial",
+    });
+    expect(scorecardDisplay(strategic)).toMatchObject({
+      scoreText: "Status only", completenessLabel: "Approved results",
+      completenessText: "1 of 2", completenessProgress: 50, isComplete: false,
+    });
+  });
 });

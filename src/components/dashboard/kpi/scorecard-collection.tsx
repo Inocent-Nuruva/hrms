@@ -50,14 +50,14 @@ export function ScorecardPreviewCard({ scorecard }: { scorecard: Scorecard }) {
 
       <div className={styles.performance} data-scorecard-performance>
         <div className="flex min-w-0 items-center justify-between gap-3">
-          <div className="min-w-0"><p className="text-xs">Live approved score</p><p data-scorecard-score className={`mt-0.5 ${styles.score}`}>{display.scoreText}</p></div>
-          <ScoreRing progress={display.scoreProgress} />
+          <div className="min-w-0"><p className="text-xs">{display.scoreLabel}</p><p data-scorecard-score className={`mt-0.5 ${styles.score}`}>{display.scoreText}</p></div>
+          {scorecard.currentVersion.mode === "weighted" && <ScoreRing progress={display.scoreProgress} />}
         </div>
         <div className={`mt-2 ${styles.track}`} aria-hidden="true"><div data-scorecard-progress className={styles.fill} style={{ width: `${display.scoreProgress}%` }} /></div>
       </div>
 
       <dl className="grid grid-cols-2 gap-3 py-0.5">
-        <div className="min-w-0"><dt className="text-xs text-muted-foreground">Data completeness</dt><dd className="mt-0.5 flex items-center gap-1 text-lg font-semibold leading-tight tabular-nums text-foreground">{display.completenessText}{display.isComplete && <CheckmarkCircle16Regular aria-label="Complete" className="shrink-0 text-[var(--success)]" />}</dd><div className={`mt-1.5 ${styles.track}`} aria-hidden="true"><div className={`${styles.fill} ${styles.successFill}`} style={{ width: `${display.completenessProgress}%` }} /></div></div>
+        <div className="min-w-0"><dt className="text-xs text-muted-foreground">{display.completenessLabel}</dt><dd className="mt-0.5 flex items-center gap-1 text-lg font-semibold leading-tight tabular-nums text-foreground">{display.completenessText}{display.isComplete && <CheckmarkCircle16Regular aria-label="Complete" className="shrink-0 text-[var(--success)]" />}</dd><div className={`mt-1.5 ${styles.track}`} aria-hidden="true"><div className={`${styles.fill} ${styles.successFill}`} style={{ width: `${display.completenessProgress}%` }} /></div></div>
         <div className="min-w-0 border-l border-border pl-3"><dt className="text-xs text-muted-foreground">KPIs included</dt><dd className="mt-0.5 text-lg font-semibold leading-tight tabular-nums text-foreground">{display.kpiCount}</dd></div>
       </dl>
 
@@ -108,7 +108,7 @@ export function ScorecardCollection({ scorecards, view, label }: { scorecards: S
             <TableHeaderCell>Scorecard</TableHeaderCell>
             <TableHeaderCell>Reporting period</TableHeaderCell>
             <TableHeaderCell>Approved score</TableHeaderCell>
-            <TableHeaderCell>Completeness</TableHeaderCell>
+            <TableHeaderCell>Data status</TableHeaderCell>
             <TableHeaderCell>KPIs</TableHeaderCell>
             <TableHeaderCell>Status</TableHeaderCell>
           </TableRow></TableHeader>
