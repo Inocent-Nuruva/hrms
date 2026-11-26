@@ -6792,6 +6792,35 @@ export async function getAttendanceDeviceSyncStatus(
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
+export type AttendanceDeviceIdentityReview = {
+  device_id: number;
+  checked_at: string;
+  total: number;
+  rows: Array<{
+    device_employee_no: string;
+    device_name: string | null;
+    employee_id: number | null;
+    employee_no: string | null;
+    employee_name: string | null;
+    status: string;
+  }>;
+};
+
+export async function reviewAttendanceDeviceIdentities(token: string, deviceId: string | number) {
+  return adminRequest<AttendanceDeviceIdentityReview>(
+    `/api/hikvision/devices/${deviceId}/attendance/identity-review`,
+    { token },
+  );
+}
+
+export async function correctAttendanceDeviceUserName(token: string, deviceId: string | number, data: { employee_no: string; expected_employee_id: number; expected_device_name: string; expected_hrms_name: string; reason: string }) {
+  return adminRequest(`/api/hikvision/devices/${deviceId}/attendance/identity-review/device-name`, { method: "POST", token, body: data });
+}
+
+export async function unlinkAttendanceDeviceUser(token: string, deviceId: string | number, data: { employee_no: string; expected_employee_id: number; reason: string }) {
+  return adminRequest(`/api/hikvision/devices/${deviceId}/attendance/identity-review/unlink`, { method: "POST", token, body: data });
+}
+
 export async function testAttendanceDeviceConnection(
   token: string,
   id: string | number,
