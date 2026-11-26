@@ -4,6 +4,7 @@ import { DateInput } from "@/components/ui/date-input"
 import { DateTimeInput } from "@/components/ui/date-time-input"
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { toast } from "@/components/ui/fluent-toast-store"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { env } from "@/lib/env"
@@ -1092,7 +1093,10 @@ function resolveInitializedRoleId(
   return byLabel?.id ?? ""
 }
 
-const REGISTER_DRAFT_STORAGE_KEY = "hrms.employee.register.draft.v2"
+// Session-scoped (cleared when the tab closes) and never holds IDs or bank
+// accounts, so sensitive data is not left behind for the next browser user.
+const REGISTER_DRAFT_STORAGE_KEY = "hrms.employee.register.draft.v3"
+const LEGACY_REGISTER_DRAFT_STORAGE_KEY = "hrms.employee.register.draft.v2"
 
 type StoredRegisterDraft = {
   currentStep?: RegisterStep
@@ -1254,6 +1258,7 @@ function MultiSelectChecklist({
 export function EmployeeRegisterForm() {
   const actor = useDashboardActor()
   const isRegisteringOthers = actor.ready && hasPermission(actor.permissionLabels, EMPLOYEE_REGISTRATION_PERMISSION)
+  const router = useRouter()
   const canConfigureEmployeeProvisioning =
     actor.ready && hasPermission(actor.permissionLabels, "onboarding_requests:create")
   const canConfigureTechnicalAccess =
@@ -1285,6 +1290,10 @@ export function EmployeeRegisterForm() {
   const [draftContactPhoneError, setDraftContactPhoneError] = React.useState("")
   const [draftContactEmailError, setDraftContactEmailError] = React.useState("")
   const [isInviteMode, setIsInviteMode] = React.useState(false)
+  // HR chooses whether the new employee goes through onboarding or starts
+  // straight away as active (no onboarding request).
+  const [registrationStatus, setRegistrationStatus] = React.useState<"onboarding" | "active">("onboarding")
+  const isOnboardingStatus = !isRegisteringOthers || isInviteMode || registrationStatus === "onboarding"
   const [inviteContact, setInviteContact] = React.useState<InviteContactFormState>({
     ...EMPTY_INVITE_CONTACT,
   })
@@ -2587,7 +2596,9 @@ export function EmployeeRegisterForm() {
   React.useEffect(() => {
     if (typeof window === "undefined") return
     try {
-      const raw = window.localStorage.getItem(REGISTER_DRAFT_STORAGE_KEY)
+      // Purge the old shared localStorage draft that held IDs and bank data.
+      window.localStorage.removeItem(LEGACY_REGISTER_DRAFT_STORAGE_KEY)
+      const raw = window.sessionStorage.getItem(REGISTER_DRAFT_STORAGE_KEY)
       if (raw) {
         const parsed = JSON.parse(raw) as StoredRegisterDraft
         if (parsed.form || parsed.inviteContact || parsed.contacts?.length || parsed.addresses?.length) {
@@ -2596,7 +2607,7 @@ export function EmployeeRegisterForm() {
       }
     } catch {
       // ignore corrupted draft
-      window.localStorage.removeItem(REGISTER_DRAFT_STORAGE_KEY)
+      window.sessionStorage.removeItem(REGISTER_DRAFT_STORAGE_KEY)
     } finally {
       setRegisterDraftReady(true)
     }
@@ -2615,15 +2626,13 @@ export function EmployeeRegisterForm() {
       contacts,
       addresses,
       relatives,
-      identifications,
-      bankAccounts,
       academicQualifications,
       professionalQualifications,
       experienceDetails,
       onboarding,
       savedAt: new Date().toISOString(),
     }
-    window.localStorage.setItem(REGISTER_DRAFT_STORAGE_KEY, JSON.stringify(payload))
+    window.sessionStorage.setItem(REGISTER_DRAFT_STORAGE_KEY, JSON.stringify(payload))
   }, [
     registerDraftReady,
     savedRegisterDraft,
@@ -2645,6 +2654,53 @@ export function EmployeeRegisterForm() {
     onboarding,
   ])
 
+  // Checks the fields a step owns before moving past it, so errors show on the
+  // step that caused them instead of only at the final save.
+  const getStepError = (step: RegisterStep): string | null => {
+    if (step === "details") {
+      if (!form.firstName.trim() || !form.lastName.trim()) return "First name and last name are required."
+      if (!form.gender) return "Gender is required."
+      if (isInviteMode && !form.middleName.trim()) return "Middle name is required for send invite."
+      if (isRegisteringOthers && !form.branch.trim()) return "Branch is required."
+      if (!form.department.trim()) return "Department is required."
+      if (isRegisteringOthers && !form.position.trim()) return "Position is required."
+      if (!isOnboardingStatus && !hireDate) return "Hire date is required for an active employee."
+    }
+    if (step === "contacts" && !isInviteMode) {
+      const usable = contacts
+        .map((contact) => ({
+          isPrimary: contact.isPrimary,
+          email: contact.email.trim(),
+          phone: joinPhoneWithCountryCode(getDialCodeForCountry(contact.countryIso), contact.phoneNumber),
+        }))
+        .filter((contact) => contact.email || contact.phone)
+      if (!usable.length) return "At least one contact is required."
+      const email = usable.find((c) => c.isPrimary && c.email)?.email ?? usable.find((c) => c.email)?.email
+      const phone = usable.find((c) => c.isPrimary && c.phone)?.phone ?? usable.find((c) => c.phone)?.phone
+      if (!email || !phone) return "Contacts must include an email address and a phone number."
+      if (!/^\+(255|256)/.test(phone.replace(/\s+/g, "")))
+        return "The primary phone number must be Tanzanian (+255) or Ugandan (+256)."
+    }
+    return null
+  }
+
+  // Returns false (and shows why) when moving forward from `from` to `to`
+  // would skip a step that still has errors.
+  const canAdvance = (from: RegisterStep, to: RegisterStep) => {
+    const fromIndex = REGISTER_STEP_ORDER.indexOf(from)
+    const toIndex = REGISTER_STEP_ORDER.indexOf(to)
+    for (let index = fromIndex; index < toIndex; index += 1) {
+      const step = REGISTER_STEP_ORDER[index]
+      const error = getStepError(step)
+      if (error) {
+        setCurrentStep(step)
+        toast.error(error)
+        return false
+      }
+    }
+    return true
+  }
+
   const submitRegistration = async () => {
     if (isSubmitting) {
       return
@@ -2661,6 +2717,14 @@ export function EmployeeRegisterForm() {
       toast.error("First name and last name are required.")
       return
     }
+    for (const step of ["details", "contacts"] as RegisterStep[]) {
+      const stepError = getStepError(step)
+      if (stepError) {
+        setCurrentStep(step)
+        toast.error(stepError)
+        return
+      }
+    }
     if (isInviteMode && !form.middleName.trim()) {
       toast.error("Middle name is required for send invite.")
       return
@@ -2669,8 +2733,9 @@ export function EmployeeRegisterForm() {
     const normalizedEmployeeNo = form.employeeNo.trim()
     const employeeNoForCreate = employeeNoTouched && normalizedEmployeeNo ? normalizedEmployeeNo : undefined
 
-    if (isInviteMode && !form.branch.trim()) {
-      toast.error("Branch is required for send invite.")
+    if (isRegisteringOthers && !form.branch.trim()) {
+      setCurrentStep("details")
+      toast.error("Branch is required.")
       return
     }
 
@@ -2680,8 +2745,9 @@ export function EmployeeRegisterForm() {
       return
     }
 
-    if (isInviteMode && !form.position.trim()) {
-      toast.error("Position is required for send invite.")
+    if (isRegisteringOthers && !form.position.trim()) {
+      setCurrentStep("details")
+      toast.error("Position is required.")
       return
     }
 
@@ -2729,11 +2795,30 @@ export function EmployeeRegisterForm() {
           email: contact.email.trim().toLowerCase(),
           notes: contact.notes.trim(),
         }))
-        .filter((contact) => Boolean(contact.email))
+        .filter((contact) => Boolean(contact.email || contact.phone_number))
 
       if (normalizedContacts.length === 0) {
         setCurrentStep("contacts")
         toast.error("At least one contact is required before saving employee.")
+        return
+      }
+
+      // The backend builds the login account from the primary contact (falling
+      // back to any contact): it needs an email and a +255/+256 phone.
+      const loginEmail =
+        normalizedContacts.find((contact) => contact.is_primary && contact.email)?.email ??
+        normalizedContacts.find((contact) => contact.email)?.email
+      const loginPhone =
+        normalizedContacts.find((contact) => contact.is_primary && contact.phone_number)?.phone_number ??
+        normalizedContacts.find((contact) => contact.phone_number)?.phone_number
+      if (!loginEmail || !loginPhone) {
+        setCurrentStep("contacts")
+        toast.error("Contacts must include an email address and a phone number.")
+        return
+      }
+      if (!/^\+(255|256)/.test(loginPhone.replace(/\s+/g, ""))) {
+        setCurrentStep("contacts")
+        toast.error("The primary phone number must be Tanzanian (+255) or Ugandan (+256).")
         return
       }
     }
@@ -2877,10 +2962,19 @@ export function EmployeeRegisterForm() {
     const registrationProvisioningEnabled = isInviteMode
       ? onboarding.enabled
       : isRegisteringOthers && canConfigureEmployeeProvisioning
-    const provisioningDraft = canConfigureTechnicalAccess
+    const technicalDraft = canConfigureTechnicalAccess
       ? onboarding
       : {
           ...onboarding,
+          deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
+        }
+    // Active registrations skip onboarding: only the picked roles are sent
+    // (the server grants them); attendance comes from the default timetable.
+    const provisioningDraft = isOnboardingStatus
+      ? technicalDraft
+      : {
+          ...technicalDraft,
+          attendanceMode: "none" as typeof onboarding.attendanceMode,
           deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
         }
     const { error: onboardingError, onboarding: onboardingPayload } = buildEmployeeOnboardingInput({
@@ -2908,7 +3002,7 @@ export function EmployeeRegisterForm() {
         primary_department_id: selectedDepartmentId ?? undefined,
         primary_position_id: selectedPositionId ?? undefined,
         position_id: selectedPositionId ?? undefined,
-        employment_status: "onboarding",
+        employment_status: isOnboardingStatus ? "onboarding" : "active",
         employment_type: (form.employmentType || "full_time") as
           "full_time" | "part_time" | "contract" | "intern" | "consultant" | "temporary" | "probation",
         reports_to: selectedReportsToId ?? undefined,
@@ -2971,6 +3065,7 @@ export function EmployeeRegisterForm() {
             metadata: employeePayload.metadata,
           })
       const normalizedResponse = response as CreateEmployeeResponse
+      let selfSubmittedToHr = false
       if (!isRegisteringOthers) {
         const myRequests = await listMyOnboardingRequests(accessToken)
         const draftRequest = myRequests.find((row) =>
@@ -2979,11 +3074,12 @@ export function EmployeeRegisterForm() {
         const draftRequestId = readRecordId(draftRequest ?? null)
         if (draftRequestId !== null) {
           await submitMyOnboardingDetails(accessToken, draftRequestId)
+          selfSubmittedToHr = true
         }
       }
       const createdEmployeeId = readRecordId(normalizedResponse)
       let onboardingRequest = normalizedResponse.onboarding_request ?? null
-      if (!onboardingRequest && onboardingPayload && createdEmployeeId !== null && isRegisteringOthers) {
+      if (!onboardingRequest && isOnboardingStatus && onboardingPayload && createdEmployeeId !== null && isRegisteringOthers) {
         const selectedWorkflowId =
           onboarding.workflowId && onboarding.workflowId !== "none" ? Number(onboarding.workflowId) : null
         const defaultWorkflow =
@@ -3034,7 +3130,9 @@ export function EmployeeRegisterForm() {
       const createWarning = typeof normalizedResponse.warning === "string" ? normalizedResponse.warning.trim() : ""
       showSuccessAlert(
         !isRegisteringOthers
-          ? "Your details were submitted to HR for review."
+          ? selfSubmittedToHr
+            ? "Your details were submitted to HR for review."
+            : "Your details were saved. There is no open onboarding request to submit, so HR has not been notified."
           : createWarning
             ? `Employee saved. ${createWarning}`
             : onboardingRequest
@@ -3046,6 +3144,11 @@ export function EmployeeRegisterForm() {
                 : "Employee saved successfully."
       )
       clearForm()
+      // Open the new employee so HR can continue from their profile.
+      const createdEmployeeNo = String((normalizedResponse as AdminRecord).employee_no ?? "").trim()
+      if (isRegisteringOthers && createdEmployeeNo) {
+        router.push(`/dashboard/employees/profile/${encodeURIComponent(createdEmployeeNo)}`)
+      }
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Failed to save employee."
       setSubmitError(message)
@@ -3110,7 +3213,7 @@ export function EmployeeRegisterForm() {
     setEmployeeNoTouched(false)
     setSavedRegisterDraft(null)
     if (typeof window !== "undefined") {
-      window.localStorage.removeItem(REGISTER_DRAFT_STORAGE_KEY)
+      window.sessionStorage.removeItem(REGISTER_DRAFT_STORAGE_KEY)
     }
     toast.message("Form reset.")
   }
@@ -3182,7 +3285,7 @@ export function EmployeeRegisterForm() {
   const discardRegisterDraft = () => {
     setSavedRegisterDraft(null)
     if (typeof window !== "undefined") {
-      window.localStorage.removeItem(REGISTER_DRAFT_STORAGE_KEY)
+      window.sessionStorage.removeItem(REGISTER_DRAFT_STORAGE_KEY)
     }
   }
 
@@ -3247,6 +3350,7 @@ export function EmployeeRegisterForm() {
             if (REGISTER_STEP_ORDER.includes(value as RegisterStep)) {
               const nextStep = value as RegisterStep
               const nextIndex = REGISTER_STEP_ORDER.indexOf(nextStep)
+              if (nextIndex > currentStepIndex && !canAdvance(currentStep, nextStep)) return
               if (nextIndex !== -1 && nextIndex !== currentStepIndex) {
                 setTabDirection(nextIndex > currentStepIndex ? "forward" : "backward")
               }
@@ -3495,6 +3599,30 @@ export function EmployeeRegisterForm() {
                       </SelectContent>
                     </Select>
                   </Field>
+
+                  {isRegisteringOthers && !isInviteMode ? (
+                    <Field
+                      label="Registration status"
+                      htmlFor="registrationStatus"
+                      delayMs={257}
+                      hint="Onboarding starts an onboarding request; Active skips it."
+                    >
+                      <Select
+                        value={registrationStatus}
+                        onValueChange={(value) =>
+                          setRegistrationStatus(value === "active" ? "active" : "onboarding")
+                        }
+                      >
+                        <SelectTrigger id="registrationStatus" className="w-full">
+                          <SelectValue>{registrationStatus === "active" ? "Active" : "Onboarding"}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="onboarding">Onboarding</SelectItem>
+                          <SelectItem value="active">Active</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  ) : null}
 
                   <Field label="Employment Type" htmlFor="employmentType" delayMs={258}>
                     <Select
@@ -3747,6 +3875,8 @@ export function EmployeeRegisterForm() {
                     </div>
 
                     <div className="mt-5 space-y-6">
+                        {isOnboardingStatus ? (
+                        <>
                         <div className="grid gap-4 md:grid-cols-2">
                           <Field label="Onboarding workflow" htmlFor="onboarding-workflow" delayMs={30}>
                             <Select
@@ -3845,6 +3975,12 @@ export function EmployeeRegisterForm() {
                             placeholder="Add onboarding notes or instructions (optional)"
                           />
                         </div>
+                        </>
+                        ) : (
+                          <p className="rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+                            Registered as Active: no onboarding request is created. The employee is attached to the default timetable (and its shifts), and the roles below are granted straight away.
+                          </p>
+                        )}
 
                         <div className="grid gap-4 lg:grid-cols-2">
                           <MultiSelectChecklist
@@ -3873,6 +4009,8 @@ export function EmployeeRegisterForm() {
                           />
                         </div>
 
+                        {isOnboardingStatus ? (
+                        <>
                         <div className="grid gap-4 rounded-xl border border-border bg-card p-4 md:grid-cols-2">
                           <div className="md:col-span-2">
                             <p className="text-sm font-semibold text-foreground">Attendance assignment</p>
@@ -4280,6 +4418,8 @@ export function EmployeeRegisterForm() {
                             </div>
                           ) : null}
                         </div> : null}
+                        </>
+                        ) : null}
                       </div>
                   </div>
                 ) : null}
@@ -4809,6 +4949,7 @@ export function EmployeeRegisterForm() {
                     size="sm"
                     className="h-8 px-2.5 text-xs"
                     onClick={() => {
+                      if (!canAdvance(currentStep, nextVisibleStep)) return
                       setTabDirection("forward")
                       setCurrentStep(nextVisibleStep)
                     }}
