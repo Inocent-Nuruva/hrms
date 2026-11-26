@@ -48,7 +48,11 @@ export default function EmployeesLayout({
 
   return (
     <div className="flex min-w-0 max-w-full flex-col gap-0">
-      <DashboardSectionTabs groups={employeeSectionTabGroups} />
+      {/* A single employee's profile has its own header and tabs, so the
+          section menu is hidden there. */}
+      {path.startsWith("/dashboard/employees/profile/") ? null : (
+        <DashboardSectionTabs groups={employeeSectionTabGroups} />
+      )}
       <div className="min-w-0 max-w-full">{children}</div>
     </div>
   )
