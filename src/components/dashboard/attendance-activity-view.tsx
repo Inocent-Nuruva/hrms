@@ -1484,7 +1484,6 @@ function resolveVisibleColumns(rows: AdminRecord[], section: AttendanceActivityS
           "check_in_time",
           "check_out_time",
           "attendance_status",
-          "arrival_cutoff",
           "arrival_status",
           "departure_status",
           "worked_minutes",
