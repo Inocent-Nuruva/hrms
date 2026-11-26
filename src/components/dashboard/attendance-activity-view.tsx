@@ -73,7 +73,6 @@ import {
   downloadAttendanceCsv,
   AttendanceShiftTimeline,
   AttendanceStatusBadge,
-  AttendanceStatusStack,
   AttendanceStatusCounters,
   attendanceStatusTone,
   buildStatusCounters,
@@ -1487,6 +1486,9 @@ function resolveVisibleColumns(rows: AdminRecord[], section: AttendanceActivityS
           "branch_name",
           "attendance_date",
           "attendance_status",
+          "punch_status",
+          "arrival_status",
+          "departure_status",
           "check_in_time",
           "check_out_time",
           "worked_minutes",
@@ -2507,7 +2509,19 @@ function UnmatchedLogDetailsContent({
 function resolveTableCellValue(section: AttendanceActivitySectionKey, column: string, row: AdminRecord): React.ReactNode {
   if (section === "daily-summaries") {
     if (column === "attendance_status") {
-      return <AttendanceStatusStack row={row} fallbackStatus={resolveDailySummaryCellValue(column, row)} />
+      const dims = readAttendanceDimensions(row)
+      return dims
+        ? <AttendanceStatusBadge status={dims.primary} label={primaryStatusLabel(dims)} tone={PRIMARY_STATUS[dims.primary ?? ""]?.tone ?? "neutral"} />
+        : <AttendanceStatusBadge status={resolveDailySummaryCellValue(column, row)} />
+    }
+    if (column === "punch_status" || column === "arrival_status" || column === "departure_status") {
+      const dims = readAttendanceDimensions(row)
+      if (!dims) return "—"
+      const value = column === "punch_status" ? dims.punch : column === "arrival_status" ? dims.arrival : dims.departure
+      const definitions = column === "punch_status" ? PUNCH_STATUS : column === "arrival_status" ? ARRIVAL_STATUS : DEPARTURE_STATUS
+      if (!value) return "—"
+      const definition = dimensionDef(definitions, value)
+      return <AttendanceStatusBadge status={value} label={definition.label} tone={definition.tone} />
     }
     if (column === "employee_name") {
       const employee = readNestedRecord(row, ["employee"])
@@ -2835,7 +2849,9 @@ function TableBlock({
                   : section === "daily-summaries" && c === "attendance_date"
                     ? "Date"
                     : section === "daily-summaries" && c === "attendance_status"
-                      ? "Status"
+                      ? "Attendance status"
+                      : section === "daily-summaries" && c === "punch_status"
+                        ? "Completeness"
                       : section === "daily-summaries" && c === "check_in_time"
                         ? "Check in"
                         : section === "daily-summaries" && c === "check_out_time"
@@ -2843,7 +2859,7 @@ function TableBlock({
                           : section === "daily-summaries" && c === "worked_minutes"
                             ? "Worked"
                             : prettifyLabel(c),
-          sortable: c !== "shift_timeline",
+          sortable: !["shift_timeline", "punch_status", "arrival_status", "departure_status"].includes(c),
           defaultWidth:
             section === "daily-summaries"
               ? c === "employee_name" ? 250 : c === "shift_timeline" ? 190 : c === "attendance_status" ? 150 : 120
