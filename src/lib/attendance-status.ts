@@ -29,7 +29,7 @@ export const PUNCH_STATUS: Record<string, Def> = {
   MISSING_CHECK_OUT: { label: "Missing Check-Out", tone: "bad" },
   MISSING_BOTH: { label: "Missing Both Punches", tone: "bad" },
   IN_PROGRESS: { label: "In Progress", tone: "info" },
-  INVALID: { label: "Invalid Records", tone: "bad" },
+  INVALID: { label: "In Progress", tone: "info" },
   NOT_REQUIRED: { label: "Not Required", tone: "neutral" },
 }
 
@@ -89,7 +89,7 @@ export function readAttendanceDimensions(row: Row | null | undefined): Attendanc
 export function primaryStatusLabel(dims: AttendanceDimensions): string {
   if (dims.primary === "LEAVE" && dims.leaveTypeName) return dims.leaveTypeName
   const label = PRIMARY_STATUS[dims.primary ?? ""]?.label ?? dims.primary ?? "—"
-  return dims.isProvisional ? `${label} (Provisional)` : label
+  return dims.isProvisional && dims.primary !== "PRESENT" ? `${label} (Provisional)` : label
 }
 
 export function dimensionDef(table: Record<string, Def>, value: string | null): Def {

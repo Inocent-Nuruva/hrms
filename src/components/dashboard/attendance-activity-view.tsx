@@ -1446,8 +1446,6 @@ function enrichRowsWithReadableNames(
         "firstPunchAt",
         "clock_in_at",
         "clockInAt",
-        "expected_check_in_time",
-        "expectedCheckInTime",
       ])
       if (checkInTime) {
         next.check_in_time = checkInTime
@@ -1466,8 +1464,6 @@ function enrichRowsWithReadableNames(
         "lastPunchAt",
         "clock_out_at",
         "clockOutAt",
-        "expected_check_out_time",
-        "expectedCheckOutTime",
       ])
       if (checkOutTime) {
         next.check_out_time = checkOutTime
@@ -1485,14 +1481,14 @@ function resolveVisibleColumns(rows: AdminRecord[], section: AttendanceActivityS
           "employee_name",
           "branch_name",
           "attendance_date",
+          "check_in_time",
+          "check_out_time",
           "attendance_status",
+          "arrival_cutoff",
           "punch_status",
           "arrival_status",
           "departure_status",
-          "check_in_time",
-          "check_out_time",
           "worked_minutes",
-          "shift_timeline",
         ]
       : section === "processing-exceptions"
       ? [
@@ -1677,8 +1673,6 @@ function resolveDailySummaryCellValue(column: string, row: AdminRecord): React.R
       "firstPunchAt",
       "clock_in_at",
       "clockInAt",
-      "expected_check_in_time",
-      "expectedCheckInTime",
     ]))
   }
   if (column === "check_out_time") {
@@ -1693,8 +1687,6 @@ function resolveDailySummaryCellValue(column: string, row: AdminRecord): React.R
       "lastPunchAt",
       "clock_out_at",
       "clockOutAt",
-      "expected_check_out_time",
-      "expectedCheckOutTime",
     ]))
   }
   return stringifyValue(row[column])
@@ -2508,6 +2500,21 @@ function UnmatchedLogDetailsContent({
 
 function resolveTableCellValue(section: AttendanceActivitySectionKey, column: string, row: AdminRecord): React.ReactNode {
   if (section === "daily-summaries") {
+    if (column === "arrival_cutoff") {
+      const start = readFirstValue(row, ["scheduleStartAt", "schedule_start_at"])
+      const flags = readNestedRecord(row, ["flags"])
+      const grace = flags?.graceInMinutes
+      if (typeof start !== "string" || typeof grace !== "number") return "—"
+      const cutoff = new Date(new Date(start).getTime() + Math.max(0, grace) * 60000)
+      if (Number.isNaN(cutoff.getTime())) return "—"
+      const zone = readStringFromRow(row, ["timezone"])
+      try {
+        const time = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", ...(zone ? { timeZone: zone } : {}) }).format(cutoff)
+        return <span>{time} <span className="text-muted-foreground">({grace} min grace)</span></span>
+      } catch {
+        return "—"
+      }
+    }
     if (column === "attendance_status") {
       const dims = readAttendanceDimensions(row)
       return dims
@@ -2521,7 +2528,8 @@ function resolveTableCellValue(section: AttendanceActivitySectionKey, column: st
       const definitions = column === "punch_status" ? PUNCH_STATUS : column === "arrival_status" ? ARRIVAL_STATUS : DEPARTURE_STATUS
       if (!value) return "—"
       const definition = dimensionDef(definitions, value)
-      return <AttendanceStatusBadge status={value} label={definition.label} tone={definition.tone} />
+      const lateMinutes = readFirstValue(row, ["lateMinutes", "late_minutes"])
+      return <div><AttendanceStatusBadge status={value} label={definition.label} tone={definition.tone} />{column === "arrival_status" && value === "LATE" && Number(lateMinutes) > 0 ? <div className="text-xs text-muted-foreground">{String(lateMinutes)} min late</div> : null}</div>
     }
     if (column === "employee_name") {
       const employee = readNestedRecord(row, ["employee"])
@@ -2859,7 +2867,7 @@ function TableBlock({
                           : section === "daily-summaries" && c === "worked_minutes"
                             ? "Worked"
                             : prettifyLabel(c),
-          sortable: !["shift_timeline", "punch_status", "arrival_status", "departure_status"].includes(c),
+          sortable: !["shift_timeline", "arrival_cutoff", "punch_status", "arrival_status", "departure_status"].includes(c),
           defaultWidth:
             section === "daily-summaries"
               ? c === "employee_name" ? 250 : c === "shift_timeline" ? 190 : c === "attendance_status" ? 150 : 120
@@ -3054,6 +3062,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [dailySummaryRows, setDailySummaryRows] = React.useState<AdminRecord[]>([])
+  const [dailySummaryFetchedAt, setDailySummaryFetchedAt] = React.useState<Date | null>(null)
   const [dailySummaryPage, setDailySummaryPage] = React.useState(1)
   const [exceptionPage, setExceptionPage] = React.useState(1)
   // Server paging for Unmatched logs and Recalculation jobs.
@@ -3541,6 +3550,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
               ? dailySummaryPage + 1
               : dailySummaryPage)
         setDailySummaryRows(visibleRows)
+        setDailySummaryFetchedAt(new Date())
         setDailySummaryTotal(resultTotal ?? visibleRows.length)
         setDailySummaryTotalPages(totalPages)
         setRows(visibleRows)
@@ -4550,7 +4560,9 @@ export function AttendanceActivityView({ section }: { section: string }) {
                   }
                   options={[
                     { value: "", label: "All" },
-                    ...Object.entries(filter.options).map(([value, def]) => ({ value, label: def.label })),
+                    ...Object.entries(filter.options)
+                      .filter(([value]) => filter.param !== "punch_status" || value !== "INVALID")
+                      .map(([value, def]) => ({ value: filter.param === "punch_status" && value === "IN_PROGRESS" ? IN_PROGRESS_PUNCH_VALUES : value, label: def.label })),
                   ]}
                 />
               </label>
@@ -5905,6 +5917,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                     />
                   </div>
                   {dailySummaryFilterPopover}
+                  {dailySummaryFetchedAt ? <span className="text-xs text-muted-foreground">Fetched {dailySummaryFetchedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span> : null}
                   {refreshButton}
                 </>
               }
@@ -6519,6 +6532,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
 const DIMENSION_FILTER_KEYS = ["status", "primary_status", "punch_status", "arrival_status", "departure_status"] as const
 const MISSING_PUNCH_VALUES = "MISSING_CHECK_IN,MISSING_CHECK_OUT,MISSING_BOTH"
+const IN_PROGRESS_PUNCH_VALUES = "IN_PROGRESS,INVALID"
 
 /** Counter keys: "" (all), "primary:X", "arrival:LATE", "departure:EARLY_DEPARTURE", "punch:missing". */
 function dimensionCounterFilterPatch(key: string): Record<string, string> {
@@ -6527,7 +6541,7 @@ function dimensionCounterFilterPatch(key: string): Record<string, string> {
   if (dimension === "primary") patch.primary_status = value
   else if (dimension === "arrival") patch.arrival_status = value
   else if (dimension === "departure") patch.departure_status = value
-  else if (dimension === "punch") patch.punch_status = value === "missing" ? MISSING_PUNCH_VALUES : value
+  else if (dimension === "punch") patch.punch_status = value === "missing" ? MISSING_PUNCH_VALUES : value === "in_progress" ? IN_PROGRESS_PUNCH_VALUES : value
   return patch
 }
 
@@ -6535,7 +6549,7 @@ function activeDimensionCounterKey(filters: Record<string, string>): string {
   if (filters.primary_status) return `primary:${filters.primary_status}`
   if (filters.arrival_status) return `arrival:${filters.arrival_status}`
   if (filters.departure_status) return `departure:${filters.departure_status}`
-  if (filters.punch_status) return filters.punch_status === MISSING_PUNCH_VALUES ? "punch:missing" : `punch:${filters.punch_status}`
+  if (filters.punch_status) return filters.punch_status === MISSING_PUNCH_VALUES ? "punch:missing" : filters.punch_status === IN_PROGRESS_PUNCH_VALUES ? "punch:in_progress" : `punch:${filters.punch_status}`
   return ""
 }
 
@@ -6557,6 +6571,6 @@ function buildDimensionCounters(
     { key: "arrival:LATE", label: "Late arrival", count: dims.arrival.LATE ?? 0, tone: "warn" as const },
     { key: "departure:EARLY_DEPARTURE", label: "Early departure", count: dims.departure.EARLY_DEPARTURE ?? 0, tone: "warn" as const },
     { key: "punch:missing", label: "Missing punches", count: missing, tone: "bad" as const },
-    { key: "punch:INVALID", label: "Invalid records", count: dims.punch.INVALID ?? 0, tone: "bad" as const },
+    { key: "punch:in_progress", label: "In progress", count: (dims.punch.INVALID ?? 0) + (dims.punch.IN_PROGRESS ?? 0), tone: "info" as const },
   ]
 }
