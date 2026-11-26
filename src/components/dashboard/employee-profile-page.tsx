@@ -10,8 +10,18 @@ import {
   PlusIcon,
   Trash2Icon,
 } from "lucide-react"
-import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
-import { Button as FluentButton } from "@fluentui/react-components"
+import {
+  Briefcase20Regular,
+  CalendarLtr20Regular,
+  CheckmarkCircle16Regular,
+  ChevronRight16Regular,
+  DocumentText20Regular,
+  HatGraduation20Regular,
+  LockClosed20Regular,
+  Person20Regular,
+  SearchSparkle20Regular as SearchIcon,
+  Warning16Regular,
+} from "@fluentui/react-icons"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -81,7 +91,6 @@ import {
   formatLabelValue,
   statusTone,
   assignmentTypeTone,
-  SummaryField,
   readNumber,
   readRelatedId,
   isPrimaryEmployeePosition,
@@ -116,6 +125,7 @@ import {
 } from "@/components/dashboard/employee-profile/profile-shared"
 import { Section } from "@/components/dashboard/employee-profile/profile-record-section"
 import { EmployeeIdentitySheet } from "@/components/dashboard/employee-profile/employee-identity-sheet"
+import { EmployeeProfileHero } from "@/components/dashboard/employee-profile/employee-profile-hero"
 
 const PROFILE_SECTION_DEFS: Array<{
   title: string
@@ -123,11 +133,13 @@ const PROFILE_SECTION_DEFS: Array<{
   tabLabel: string
   keys: string[]
   special?: "company_user"
+  hideCount?: boolean
 }> = [
   { title: "Contacts", tabLabel: "Contacts", keys: ["contacts", "contact_details", "contactDetails"] },
   { title: "Documents", tabLabel: "Documents", keys: ["documents", "employee_documents", "employeeDocuments"] },
   { title: "Letters", tabLabel: "Letters", keys: [] },
   { title: "Contracts", tabLabel: "Contracts", keys: [] },
+  { title: "Leave", tabLabel: "Leave", keys: [], hideCount: true },
   { title: "Addresses", tabLabel: "Addresses", keys: ["addresses", "address_details", "addressDetails"] },
   { title: "Relatives", tabLabel: "Relatives", keys: ["relatives", "next_of_kin", "nextOfKin"] },
   { title: "Identifications", tabLabel: "IDs", keys: ["identifications", "identification_documents", "identificationDocuments"] },
@@ -175,6 +187,77 @@ function resolveProfileSectionItems(employee: AdminRecord, def: (typeof PROFILE_
     : []
 }
 
+type ProfileGroupKey = "overview" | "personal" | "employment" | "leave" | "documents" | "skills" | "account"
+
+const PROFILE_GROUPS: Array<{
+  key: Exclude<ProfileGroupKey, "overview">
+  label: string
+  description: string
+  icon: React.ComponentType<{ className?: string }>
+  sections: string[]
+}> = [
+  {
+    key: "personal",
+    label: "Personal",
+    description: "Contacts, addresses, family and bank details",
+    icon: Person20Regular,
+    sections: ["Contacts", "Addresses", "Relatives", "Identifications", "Bank Accounts"],
+  },
+  {
+    key: "employment",
+    label: "Employment",
+    description: "Placement, contracts and career history",
+    icon: Briefcase20Regular,
+    sections: ["Departments", "Positions", "Contracts", "Movements", "Status History"],
+  },
+  {
+    key: "leave",
+    label: "Leave",
+    description: "Balances and cover arrangements",
+    icon: CalendarLtr20Regular,
+    sections: ["Leave"],
+  },
+  {
+    key: "documents",
+    label: "Documents",
+    description: "Uploaded files and generated letters",
+    icon: DocumentText20Regular,
+    sections: ["Documents", "Letters"],
+  },
+  {
+    key: "skills",
+    label: "Skills",
+    description: "Education, certifications and experience",
+    icon: HatGraduation20Regular,
+    sections: ["Academic Qualifications", "Professional Qualifications", "Experience Details"],
+  },
+  {
+    key: "account",
+    label: "Account",
+    description: "System login linked to this employee",
+    icon: LockClosed20Regular,
+    sections: ["Company User"],
+  },
+]
+
+/** Sections an HR file is expected to have at least one record in. */
+const EXPECTED_PROFILE_SECTIONS = new Set([
+  "Contacts",
+  "Addresses",
+  "Relatives",
+  "Identifications",
+  "Bank Accounts",
+  "Departments",
+  "Positions",
+  "Documents",
+  "Company User",
+])
+
+function groupForSection(title: string | null | undefined): ProfileGroupKey | null {
+  if (!title) return null
+  return PROFILE_GROUPS.find((group) => group.sections.includes(title))?.key ?? null
+}
+
 function ProfileSectionsTabs({
   employee,
   employeeId,
@@ -198,9 +281,14 @@ function ProfileSectionsTabs({
           routeKey: sectionTitleToRouteKey(def.title),
           items,
           count: items.length,
+          hideCount: Boolean(def.hideCount) || (def.keys.length === 0 && !def.special),
         }
       }),
     [employee]
+  )
+  const sectionByTitle = React.useMemo(
+    () => new Map(sections.map((section) => [section.title, section])),
+    [sections]
   )
 
   const actor = useDashboardActor()
@@ -208,130 +296,310 @@ function ProfileSectionsTabs({
   const fullName = `${String(employee.first_name ?? "")} ${String(employee.last_name ?? "")}`.trim()
 
   const requestedTitle = routeKeyToSectionTitle(requestedRouteKey)
-  const [activeTitle, setActiveTitle] = React.useState(
-    () => requestedTitle ?? sections[0]?.title ?? "Contacts"
+  const [activeGroup, setActiveGroup] = React.useState<ProfileGroupKey>(
+    () => groupForSection(requestedTitle) ?? "overview"
   )
+  const [activeTitles, setActiveTitles] = React.useState<Partial<Record<ProfileGroupKey, string>>>(() => {
+    const group = groupForSection(requestedTitle)
+    return group && requestedTitle ? { [group]: requestedTitle } : {}
+  })
 
   React.useEffect(() => {
-    if (requestedTitle) {
-      setActiveTitle(requestedTitle)
+    const group = groupForSection(requestedTitle)
+    if (group && requestedTitle) {
+      setActiveGroup(group)
+      setActiveTitles((current) => ({ ...current, [group]: requestedTitle }))
     }
   }, [requestedTitle])
 
-  const active = sections.find((section) => section.title === activeTitle) ?? sections[0]
-  const activeIndex = Math.max(0, sections.findIndex((section) => section.title === active?.title))
-  const [slideDirection, setSlideDirection] = React.useState(1)
   const motionPreset = useDashboardMotion()
+  const groupOrder: ProfileGroupKey[] = ["overview", ...PROFILE_GROUPS.map((group) => group.key)]
+  const [slideDirection, setSlideDirection] = React.useState(1)
 
-  const selectSection = React.useCallback((title: string) => {
-    const nextIndex = sections.findIndex((section) => section.title === title)
-    if (nextIndex < 0 || title === activeTitle) return
-    setSlideDirection(nextIndex > activeIndex ? 1 : -1)
-    setActiveTitle(title)
-  }, [activeIndex, activeTitle, sections])
+  const selectGroup = React.useCallback(
+    (key: ProfileGroupKey, sectionTitle?: string) => {
+      setSlideDirection(groupOrder.indexOf(key) >= groupOrder.indexOf(activeGroup) ? 1 : -1)
+      setActiveGroup(key)
+      if (sectionTitle) setActiveTitles((current) => ({ ...current, [key]: sectionTitle }))
+    },
+    // groupOrder is derived from a constant
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeGroup]
+  )
 
-  return (
-    <div className="border border-border bg-card">
-      {header}
-      <div
-        className="flex flex-wrap items-center gap-x-0.5 gap-y-0.5 border-t border-border px-2 py-1"
-        role="tablist"
-        aria-label="Employee profile sections"
-      >
-        {sections.map((section) => {
-          const isActive = section.title === active?.title
-          const needsAttention = requestedRouteKey === section.routeKey
+  const groupSummaries = React.useMemo(
+    () =>
+      PROFILE_GROUPS.map((group) => {
+        const groupSections = group.sections
+          .map((title) => sectionByTitle.get(title))
+          .filter((section): section is NonNullable<typeof section> => Boolean(section))
+        const missing = groupSections.filter(
+          (section) => EXPECTED_PROFILE_SECTIONS.has(section.title) && section.count === 0
+        )
+        const records = groupSections.reduce((total, section) => total + (section.hideCount ? 0 : section.count), 0)
+        return { group, sections: groupSections, missing, records }
+      }),
+    [sectionByTitle]
+  )
+  const totalExpected = groupSummaries.reduce(
+    (total, summary) => total + summary.sections.filter((section) => EXPECTED_PROFILE_SECTIONS.has(section.title)).length,
+    0
+  )
+  const totalMissing = groupSummaries.reduce((total, summary) => total + summary.missing.length, 0)
+  const completeness = totalExpected ? Math.round(((totalExpected - totalMissing) / totalExpected) * 100) : 100
+
+  const currentGroup = PROFILE_GROUPS.find((group) => group.key === activeGroup) ?? null
+  const currentSections = currentGroup
+    ? currentGroup.sections
+        .map((title) => sectionByTitle.get(title))
+        .filter((section): section is NonNullable<typeof section> => Boolean(section))
+    : []
+  const active = currentGroup
+    ? currentSections.find((section) => section.title === activeTitles[activeGroup]) ?? currentSections[0]
+    : null
+
+  const renderSection = (section: NonNullable<typeof active>) => {
+    switch (section.title) {
+      case "Departments":
+        return (
+          <DepartmentAssignmentsSection
+            items={section.items}
+            employee={employee}
+            employeeId={employeeId}
+            onMutated={onMutated}
+            requestedRouteKey={requestedRouteKey}
+          />
+        )
+      case "Positions":
+        return (
+          <PositionAssignmentsSection
+            items={section.items}
+            employeeId={employeeId}
+            onMutated={onMutated}
+            requestedRouteKey={requestedRouteKey}
+          />
+        )
+      case "Movements":
+        return (
+          <EmployeeMovementsSection
+            items={section.items}
+            employeeId={employeeId}
+            onMutated={onMutated}
+            requestedRouteKey={requestedRouteKey}
+          />
+        )
+      case "Status History":
+        return <EmployeeStatusHistorySection employeeId={employeeId} token={readStoredToken()} />
+      case "Contracts":
+        return <EmploymentContractsView employee={{ id: employeeId, full_name: fullName }} canManage={canManageContracts} />
+      case "Leave":
+        return (
+          <div className="flex flex-col gap-4">
+            <EmployeeLeaveBalanceCard
+              token={readStoredToken()}
+              employeeId={employeeId}
+              employeeName={employeeDisplayNameFromLinkedUser(employee)}
+            />
+            <EmployeeCoverCard token={readStoredToken()} employeeId={employeeId} />
+          </div>
+        )
+      case "Letters":
+        return <EmployeeLettersSection employeeId={employeeId} />
+      default:
+        return (
+          <Section
+            title={section.title}
+            items={section.items}
+            employeeId={employeeId}
+            onMutated={onMutated}
+            requestedRouteKey={requestedRouteKey}
+          />
+        )
+    }
+  }
+
+  const overview = (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2 rounded-lg border border-border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">Profile completeness</p>
+          <p className="text-xs text-muted-foreground">
+            {totalMissing === 0
+              ? "Every expected record is on file."
+              : `${totalMissing} expected record type${totalMissing === 1 ? " is" : "s are"} still empty.`}
+          </p>
+        </div>
+        <div className="flex items-center gap-3 sm:w-64">
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={completeness} aria-valuemin={0} aria-valuemax={100} aria-label="Profile completeness">
+            <div
+              className={cn("h-full rounded-full", completeness === 100 ? "bg-emerald-500" : completeness >= 70 ? "bg-primary" : "bg-amber-500")}
+              style={{ width: `${completeness}%` }}
+            />
+          </div>
+          <span className="w-10 text-right text-sm font-semibold tabular-nums text-foreground">{completeness}%</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {groupSummaries.map(({ group, missing, records, sections: groupSections }) => {
+          const Icon = group.icon
+          const hasMissing = missing.length > 0
           return (
             <button
-              key={section.routeKey}
+              key={group.key}
               type="button"
-              role="tab"
-              title={`${section.title} (${section.count})`}
-              aria-label={`${section.title}, ${section.count} items`}
-              aria-selected={isActive}
-              onClick={() => selectSection(section.title)}
+              onClick={() => selectGroup(group.key, missing[0]?.title)}
               className={cn(
-                "inline-flex h-6 items-center border-b-2 px-1.5 text-[10px] font-semibold whitespace-nowrap transition-colors",
-                isActive
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
-                needsAttention && !isActive ? "text-primary" : null
+                "group flex min-w-0 flex-col gap-3 rounded-lg border bg-background p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/[0.03] focus-visible:outline-2 focus-visible:outline-primary",
+                hasMissing ? "border-amber-300 dark:border-amber-800/70" : "border-border"
               )}
             >
-              {section.tabLabel}
-              <span
-                className={cn(
-                  "ml-1 tabular-nums",
-                  isActive ? "text-primary/70" : "text-muted-foreground"
-                )}
-              >
-                {section.count}
-              </span>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span
+                    className={cn(
+                      "inline-flex size-9 shrink-0 items-center justify-center rounded-md",
+                      hasMissing ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" : "bg-primary/10 text-primary"
+                    )}
+                  >
+                    <Icon className="size-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">{group.label}</p>
+                    <p className="truncate text-xs text-muted-foreground">{group.description}</p>
+                  </div>
+                </div>
+                <ChevronRight16Regular className="mt-1 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {groupSections.map((section) => {
+                  const isMissing = missing.includes(section)
+                  return (
+                    <span
+                      key={section.routeKey}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]",
+                        isMissing
+                          ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300"
+                          : "border-border bg-muted/40 text-muted-foreground"
+                      )}
+                    >
+                      {section.tabLabel}
+                      {section.hideCount ? null : <span className="font-semibold tabular-nums">{section.count}</span>}
+                    </span>
+                  )
+                })}
+              </div>
+              <p className={cn("flex items-center gap-1 text-xs", hasMissing ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground")}>
+                {hasMissing ? <Warning16Regular className="size-3.5" /> : <CheckmarkCircle16Regular className="size-3.5 text-emerald-600" />}
+                {hasMissing
+                  ? `Missing ${missing.map((section) => section.tabLabel.toLowerCase()).join(", ")}`
+                  : records > 0
+                    ? `${records} record${records === 1 ? "" : "s"} on file`
+                    : "Open section"}
+              </p>
             </button>
           )
         })}
       </div>
+    </div>
+  )
 
-        <div className="relative overflow-hidden border-t border-border p-4 sm:p-5">
-          <AnimatePresence mode="wait" custom={slideDirection} initial={false}>
-            {active ? (
-              <motion.div
-                key={active.routeKey}
-                custom={slideDirection}
-                initial={
-                  motionPreset.reduce
-                    ? { opacity: 1, x: 0 }
-                    : { opacity: 0, x: slideDirection * 48 }
-                }
-                animate={{ opacity: 1, x: 0 }}
-                exit={
-                  motionPreset.reduce
-                    ? { opacity: 1, x: 0 }
-                    : { opacity: 0, x: slideDirection * -48 }
-                }
-                transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-              >
-                {active.title === "Departments" ? (
-                  <DepartmentAssignmentsSection
-                    items={active.items}
-                    employee={employee}
-                    employeeId={employeeId}
-                    onMutated={onMutated}
-                    requestedRouteKey={requestedRouteKey}
-                  />
-                ) : active.title === "Positions" ? (
-                  <PositionAssignmentsSection
-                    items={active.items}
-                    employeeId={employeeId}
-                    onMutated={onMutated}
-                    requestedRouteKey={requestedRouteKey}
-                  />
-                ) : active.title === "Movements" ? (
-                  <EmployeeMovementsSection
-                    items={active.items}
-                    employeeId={employeeId}
-                    onMutated={onMutated}
-                    requestedRouteKey={requestedRouteKey}
-                  />
-                ) : active.title === "Status History" ? (
-                  <EmployeeStatusHistorySection employeeId={employeeId} token={readStoredToken()} />
-                ) : active.title === "Contracts" ? (
-                  <EmploymentContractsView employee={{ id: employeeId, full_name: fullName }} canManage={canManageContracts} />
-                ) : active.title === "Letters" ? (
-                  <EmployeeLettersSection employeeId={employeeId} />
-                ) : (
-                  <Section
-                    title={active.title}
-                    items={active.items}
-                    employeeId={employeeId}
-                    onMutated={onMutated}
-                    requestedRouteKey={requestedRouteKey}
-                  />
-                )}
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
+  return (
+    <div className="border-x border-b border-border bg-card">
+      {header}
+      <div className="sticky top-12 z-20 border-t border-border bg-card/95 backdrop-blur">
+        <div className="px-3 py-2 sm:hidden">
+          <label className="sr-only" htmlFor="employee-profile-group">Profile section</label>
+          <select
+            id="employee-profile-group"
+            value={activeGroup}
+            onChange={(event) => selectGroup(event.target.value as ProfileGroupKey)}
+            className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
+          >
+            <option value="overview">Overview</option>
+            {groupSummaries.map(({ group, missing }) => (
+              <option key={group.key} value={group.key}>
+                {group.label}
+                {missing.length ? ` (${missing.length} missing)` : ""}
+              </option>
+            ))}
+          </select>
         </div>
+        <div
+          className="hidden items-center gap-1 overflow-x-auto px-3 [scrollbar-width:none] sm:flex"
+          role="tablist"
+          aria-label="Employee profile sections"
+        >
+          {[{ key: "overview" as const, label: "Overview", missing: 0 }, ...groupSummaries.map(({ group, missing }) => ({ key: group.key, label: group.label, missing: missing.length }))].map((tab) => {
+            const isActive = tab.key === activeGroup
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => selectGroup(tab.key)}
+                className={cn(
+                  "inline-flex h-11 shrink-0 items-center gap-1.5 border-b-2 px-3 text-sm font-medium whitespace-nowrap transition-colors",
+                  isActive ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {tab.label}
+                {tab.missing ? (
+                  <span className="size-1.5 rounded-full bg-amber-500" aria-label={`${tab.missing} missing`} />
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {currentSections.length > 1 ? (
+        <div className="flex gap-1.5 overflow-x-auto border-t border-border px-3 py-2 [scrollbar-width:none]" role="tablist" aria-label={`${currentGroup?.label} records`}>
+          {currentSections.map((section) => {
+            const isActive = section.title === active?.title
+            const isMissing = EXPECTED_PROFILE_SECTIONS.has(section.title) && section.count === 0
+            return (
+              <button
+                key={section.routeKey}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setActiveTitles((current) => ({ ...current, [activeGroup]: section.title }))}
+                className={cn(
+                  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium whitespace-nowrap transition-colors",
+                  isActive
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : isMissing
+                      ? "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300"
+                      : "border-border bg-background text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {section.title}
+                {section.hideCount ? null : (
+                  <span className={cn("tabular-nums", isActive ? "text-primary-foreground/80" : "opacity-80")}>{section.count}</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+
+      <div className="relative overflow-hidden border-t border-border p-4 sm:p-5">
+        <AnimatePresence mode="wait" custom={slideDirection} initial={false}>
+          <motion.div
+            key={active ? `${activeGroup}:${active.routeKey}` : activeGroup}
+            custom={slideDirection}
+            initial={motionPreset.reduce ? { opacity: 1, x: 0 } : { opacity: 0, x: slideDirection * 32 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={motionPreset.reduce ? { opacity: 1, x: 0 } : { opacity: 0, x: slideDirection * -32 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {activeGroup === "overview" || !active ? overview : renderSection(active)}
+          </motion.div>
+        </AnimatePresence>
+      </div>
     </div>
   )
 }
@@ -2573,7 +2841,6 @@ export function EmployeeProfilePage({
   requestedMissingItem?: string | null
 }) {
   const router = useRouter()
-  const motionPreset = useDashboardMotion()
   const [employee, setEmployee] = React.useState<AdminRecord | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -2744,7 +3011,22 @@ export function EmployeeProfilePage({
   }
 
   if (loading) {
-    return <div className="rounded-xl border border-slate-200 bg-white/80 p-6 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">Loading employee profile...</div>
+    return (
+      <div className={cn("animate-pulse border border-border bg-background", pageBleedClass)} aria-busy="true" aria-label="Loading employee profile">
+        <div className="h-12 border-b border-border" />
+        <div className="flex items-center gap-4 px-5 py-5">
+          <div className="size-16 rounded-full bg-muted" />
+          <div className="flex-1 space-y-2">
+            <div className="h-5 w-56 rounded bg-muted" />
+            <div className="h-3 w-40 rounded bg-muted" />
+            <div className="h-3 w-72 rounded bg-muted" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4 border-t border-border px-5 py-4 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((item) => <div key={item} className="h-10 rounded bg-muted" />)}
+        </div>
+      </div>
+    )
   }
 
   if (error || !employee) {
@@ -2763,11 +3045,12 @@ export function EmployeeProfilePage({
   }
 
   return (
-    <div className={cn("space-y-4 pb-4", pageBleedClass)}>
-      <div className="sticky top-0 z-30 border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-5">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-semibold text-primary">{employeeDisplayNameFromLinkedUser(employee)}</h2>
+    <div className={cn("pb-4", pageBleedClass)}>
+      <EmployeeProfileHero
+        employee={employee}
+        onUpdateProfile={() => setIdentityDialogOpen(true)}
+        onUpdateStatus={() => setStatusDialogOpen(true)}
+        searchSlot={
             <Popover open={profileSearchOpen} onOpenChange={setProfileSearchOpen}>
               <PopoverTrigger
                 type="button"
@@ -2825,126 +3108,16 @@ export function EmployeeProfilePage({
                 </div>
               </PopoverContent>
             </Popover>
-          </div>
-          <div className="flex items-center gap-2">
-            <FluentButton
-              appearance="primary"
-              onClick={() => setIdentityDialogOpen(true)}
-            >
-              Update Profile
-            </FluentButton>
-            <FluentButton
-              appearance="secondary"
-              onClick={() => setStatusDialogOpen(true)}
-            >
-              Update Status
-            </FluentButton>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       {(() => {
-          const employeeNo = readString(employee, [
-            "employee_no",
-            "employeeNo",
-            "user_no",
-            "employee_number",
-            "employeeNumber",
-          ])
-          const statusRaw = readString(employee, [
-            "employment_status",
-            "employmentStatus",
-            "status",
-          ])
-          const employmentType = formatLabelValue(
-            readString(employee, ["employment_type", "employmentType"])
-          )
-          const branch =
-            readString(employee, ["branch_name", "branchName"]) !== "-"
-              ? readString(employee, ["branch_name", "branchName"])
-              : readNestedString(employee.primary_branch ?? employee.branch, [
-                  "name",
-                  "branch_name",
-                  "branchName",
-                ])
-          const department =
-            readString(employee, ["department_name", "departmentName"]) !== "-"
-              ? readString(employee, ["department_name", "departmentName"])
-              : readNestedString(employee.primary_department ?? employee.department, [
-                  "name",
-                  "department_name",
-                  "departmentName",
-                ])
-          const position =
-            readString(employee, ["position_name", "positionName"]) !== "-"
-              ? readString(employee, ["position_name", "positionName"])
-              : readNestedString(employee.primary_position ?? employee.position, [
-                  "name",
-                  "position_name",
-                  "positionName",
-                ])
-          const manager =
-            readString(employee, ["manager_name", "managerName"]) !== "-"
-              ? readString(employee, ["manager_name", "managerName"])
-              : employeeDisplayName(asRecord(employee.manager) ?? {})
-
           return (
             <ProfileSectionsTabs
               employee={employee}
               employeeId={readNumber(employee.id)}
               onMutated={fetchEmployee}
               requestedRouteKey={requestedRouteKey}
-              header={
-                <>
-                <motion.dl
-                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
-                  variants={motionPreset.metrics}
-                  initial="hidden"
-                  animate="show"
-                >
-                  <SummaryField label="Employee No" value={employeeNo} index={0} reduce={motionPreset.reduce} />
-                  <SummaryField label="Status" index={1} reduce={motionPreset.reduce}>
-                    <span className={cn("text-sm font-semibold", statusTone(statusRaw))}>
-                      {formatLabelValue(statusRaw)}
-                    </span>
-                  </SummaryField>
-                  <SummaryField
-                    label="Employment Type"
-                    value={employmentType}
-                    index={2}
-                    reduce={motionPreset.reduce}
-                  />
-                  <SummaryField
-                    label="Hire Date"
-                    value={formatProfileDate(employee.hire_date ?? employee.hireDate)}
-                    index={3}
-                    reduce={motionPreset.reduce}
-                  />
-                  <SummaryField label="Branch" value={branch} index={4} reduce={motionPreset.reduce} />
-                  <SummaryField label="Department" value={department} index={5} reduce={motionPreset.reduce} />
-                  <SummaryField label="Position" value={position} index={6} reduce={motionPreset.reduce} />
-                  <SummaryField label="Manager" value={manager} index={7} reduce={motionPreset.reduce} />
-                  <SummaryField
-                    label="Last Updated"
-                    value={formatDateTime(employee.updated_at ?? employee.updatedAt)}
-                    index={8}
-                    reduce={motionPreset.reduce}
-                  />
-                  <SummaryField
-                    label="Employee Id"
-                    value={String(employee.id ?? "-")}
-                    index={9}
-                    reduce={motionPreset.reduce}
-                  />
-                </motion.dl>
-                <EmployeeCoverCard token={readStoredToken()} employeeId={readNumber(employee.id)} />
-                <EmployeeLeaveBalanceCard
-                  token={readStoredToken()}
-                  employeeId={readNumber(employee.id)}
-                  employeeName={employeeDisplayNameFromLinkedUser(employee)}
-                />
-                </>
-              }
             />
           )
         })()}

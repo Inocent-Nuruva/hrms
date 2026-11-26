@@ -839,6 +839,7 @@ export function routeKeyToSectionTitle(routeKey: string | null | undefined) {
       movements: "Movements",
       status_history: "Status History",
       contracts: "Contracts",
+      leave: "Leave",
       academic_qualifications: "Academic Qualifications",
       professional_qualifications: "Professional Qualifications",
       experience_details: "Experience Details",

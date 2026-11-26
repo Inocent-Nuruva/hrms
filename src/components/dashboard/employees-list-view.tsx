@@ -43,7 +43,10 @@ import {
   disableUserTwoFactor,
   enableUserTwoFactor,
   listAllEmployees,
+  listBranches,
+  listDepartments,
   listEmployees,
+  listPositions,
   readTwoFactorEnabled,
   resetUserPassword,
   resolveBackendMediaUrl,
@@ -74,6 +77,8 @@ import {
   EyeOff20Regular,
   ArrowClockwise16Regular,
   PersonDelete16Regular,
+  Dismiss12Regular,
+  Filter16Regular,
 } from "@fluentui/react-icons";
 import {
   KeyRound,
@@ -346,6 +351,65 @@ function employeeProfileHref(employeeNo: string, missingItemKey?: string) {
   return query ? `${basePath}?${query}` : basePath;
 }
 
+type FilterOption = { id: number; name: string };
+
+function toFilterOptions(rows: AdminRecord[]): FilterOption[] {
+  return rows
+    .map((row) => ({
+      id: Number(row.id),
+      name: String(row.name ?? row.title ?? "").trim(),
+    }))
+    .filter((option) => Number.isInteger(option.id) && option.id > 0 && option.name)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+const ALL_OPTIONS_VALUE = "__all__";
+
+function FilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+  allLabel,
+}: {
+  label: string;
+  value: number;
+  options: FilterOption[];
+  onChange: (value: number) => void;
+  allLabel: string;
+}) {
+  const selected = value > 0 ? options.find((option) => option.id === value) : undefined;
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <Select
+        value={value > 0 ? String(value) : ALL_OPTIONS_VALUE}
+        onValueChange={(next) =>
+          onChange(!next || next === ALL_OPTIONS_VALUE ? 0 : Number(next))
+        }
+      >
+        <SelectTrigger
+          size="sm"
+          className="w-full bg-background"
+          aria-label={"Filter " + label.toLowerCase()}
+        >
+          <SelectValue placeholder={allLabel}>{selected?.name ?? allLabel}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            <SelectItem value={ALL_OPTIONS_VALUE}>{allLabel}</SelectItem>
+            {options.map((option) => (
+              <SelectItem key={option.id} value={String(option.id)}>
+                {option.name}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 function readSnapshot(cacheKey: string) {
   const inMemory = employeeListSnapshotCache.get(cacheKey);
   if (inMemory && Date.now() - inMemory.cachedAt < EMPLOYEE_LIST_CACHE_TTL_MS) {
@@ -420,6 +484,41 @@ export function EmployeesListView({
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [page, setPage] = React.useState(1);
+  const [filterOptions, setFilterOptions] = React.useState<{
+    branches: FilterOption[];
+    departments: FilterOption[];
+    positions: FilterOption[];
+  }>({ branches: [], departments: [], positions: [] });
+
+  React.useEffect(() => {
+    const token = readStoredToken();
+    if (!token) return;
+    let cancelled = false;
+    const params = { page: 1, limit: 200 };
+    void Promise.all([
+      listBranches(token, params).catch(() => null),
+      listDepartments(token, params).catch(() => null),
+      listPositions(token, params).catch(() => null),
+    ]).then(([branches, departments, positions]) => {
+      if (cancelled) return;
+      setFilterOptions({
+        branches: toFilterOptions(branches?.rows ?? []),
+        departments: toFilterOptions(departments?.rows ?? []),
+        positions: toFilterOptions(positions?.rows ?? []),
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const updateFilter = React.useCallback(
+    (patch: Partial<typeof DEFAULT_QUERY>) => {
+      setPage(1);
+      setQuery((previous) => ({ ...previous, ...patch }));
+    },
+    [],
+  );
   const [totalPages, setTotalPages] = React.useState<number | null>(null);
   const [total, setTotal] = React.useState<number | null>(null);
   const [missingDialog, setMissingDialog] = React.useState<{
@@ -777,6 +876,10 @@ export function EmployeesListView({
     }
     router.push(employeeProfileHref(employeeNo, missingItemKey));
   };
+  const openEmployeeDetailsRef = React.useRef(openEmployeeDetails);
+  React.useEffect(() => {
+    openEmployeeDetailsRef.current = openEmployeeDetails;
+  });
 
   const openRemovalDialog = React.useCallback((row: AdminRecord) => {
     const employeeId = employeeRecordId(row);
@@ -1183,62 +1286,78 @@ export function EmployeesListView({
       {
         key: "actions",
         label: "Actions",
-        defaultWidth: 120,
+        defaultWidth: 150,
         sortable: false,
-        render: (row: AdminRecord) => (
-          <div
-            className="flex items-center gap-1"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!canManageTwoFactor || employeeUserId(row) == null}
-              title={
-                !canManageTwoFactor
-                  ? "You do not have permission to reset user passwords"
-                  : employeeUserId(row) == null
-                    ? "No linked user account"
-                    : "Reset password"
-              }
-              aria-label={`Reset password for ${employeeDisplayName(row)}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                requestPasswordReset(row);
-              }}
+        render: (row: AdminRecord) => {
+          const name = employeeDisplayName(row);
+          const accountReason = !canManageTwoFactor
+            ? "You do not have permission to reset user passwords"
+            : employeeUserId(row) == null
+              ? "No linked user account"
+              : undefined;
+          const iconButton =
+            "inline-flex size-8 items-center justify-center rounded-md border border-transparent transition-colors focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-40";
+          return (
+            <div
+              className="flex items-center gap-0.5"
+              onClick={(event) => event.stopPropagation()}
             >
-              <KeyRound className="h-3.5 w-3.5" />
-            </button>
-            {canRemoveEmployee ? (
               <button
                 type="button"
-                className="inline-flex size-7 items-center justify-center rounded-md text-rose-600 transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                title="Remove / disable access"
-                aria-label="Remove or disable access"
+                className={cn(iconButton, "text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground")}
+                title="View profile"
+                aria-label={`View ${name}`}
                 onClick={(event) => {
                   event.stopPropagation();
-                  openRemovalDialog(row);
+                  openEmployeeDetailsRef.current(row);
                 }}
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Eye20Regular className="size-4" />
               </button>
-            ) : null}
-            {canDeleteEmployeesPermanently && canDeletePermanently(row) ? (
               <button
                 type="button"
-                className="inline-flex size-7 items-center justify-center rounded-md text-rose-700 transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                title="Delete employee permanently"
-                aria-label={`Permanently delete ${employeeDisplayName(row)}`}
+                className={cn(iconButton, "text-muted-foreground hover:border-primary/20 hover:bg-primary/10 hover:text-primary")}
+                disabled={Boolean(accountReason)}
+                title={accountReason ?? "Reset password"}
+                aria-label={`Reset password for ${name}`}
                 onClick={(event) => {
                   event.stopPropagation();
-                  openPermanentDelete(row);
+                  requestPasswordReset(row);
                 }}
               >
-                <PersonDelete16Regular />
+                <KeyRound className="size-4" />
               </button>
-            ) : null}
-          </div>
-        ),
+              {canRemoveEmployee ? (
+                <button
+                  type="button"
+                  className={cn(iconButton, "text-rose-600 hover:border-rose-200 hover:bg-rose-50 dark:hover:border-rose-900/60 dark:hover:bg-rose-950/30")}
+                  title="Remove or disable access"
+                  aria-label={`Remove or disable access for ${name}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openRemovalDialog(row);
+                  }}
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              ) : null}
+              {canDeleteEmployeesPermanently && canDeletePermanently(row) ? (
+                <button
+                  type="button"
+                  className={cn(iconButton, "text-rose-700 hover:border-rose-200 hover:bg-rose-50 dark:hover:border-rose-900/60 dark:hover:bg-rose-950/30")}
+                  title="Delete employee permanently"
+                  aria-label={`Permanently delete ${name}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openPermanentDelete(row);
+                  }}
+                >
+                  <PersonDelete16Regular className="size-4" />
+                </button>
+              ) : null}
+            </div>
+          );
+        },
       },
     ],
     [
@@ -1289,6 +1408,183 @@ export function EmployeesListView({
         </div>
       ) : null}
 
+      {(() => {
+        const nameOf = (options: FilterOption[], id: number) =>
+          options.find((option) => option.id === id)?.name ?? `#${id}`;
+        const statusLabels: Record<string, string> = {
+          onboarding: "Onboarding",
+          active: "Active",
+          suspended: "Suspended",
+        };
+        const resultCount = total ?? rows.length;
+        const chips: { key: string; label: string; clear: () => void }[] = [];
+        if (query.search.trim()) {
+          chips.push({
+            key: "search",
+            label: `Search: ${query.search.trim()}`,
+            clear: () => updateFilter({ search: "" }),
+          });
+        }
+        if (directoryMode === "current" && query.employment_status) {
+          chips.push({
+            key: "status",
+            label: `Status: ${statusLabels[query.employment_status] ?? query.employment_status}`,
+            clear: () => updateFilter({ employment_status: "" }),
+          });
+        }
+        if (query.branch_id > 0) {
+          chips.push({
+            key: "branch",
+            label: `Location: ${nameOf(filterOptions.branches, query.branch_id)}`,
+            clear: () => updateFilter({ branch_id: 0 }),
+          });
+        }
+        if (query.department_id > 0) {
+          chips.push({
+            key: "department",
+            label: `Department: ${nameOf(filterOptions.departments, query.department_id)}`,
+            clear: () => updateFilter({ department_id: 0 }),
+          });
+        }
+        if (query.position_id > 0) {
+          chips.push({
+            key: "position",
+            label: `Position: ${nameOf(filterOptions.positions, query.position_id)}`,
+            clear: () => updateFilter({ position_id: 0 }),
+          });
+        }
+        return (
+          <div className="border-b border-border bg-muted/[0.12] px-3 py-3">
+            <div className="rounded-md border border-border bg-background p-3 shadow-sm">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <Filter16Regular className="text-muted-foreground" />
+                  Filter employees
+                  {chips.length > 0 ? (
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                      {chips.length} active
+                    </span>
+                  ) : null}
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {loading
+                    ? "Loading…"
+                    : `${resultCount} result${resultCount === 1 ? "" : "s"}`}
+                </span>
+              </div>
+              <div
+                className={cn(
+                  "grid grid-cols-1 gap-3 sm:grid-cols-2",
+                  directoryMode === "current" ? "lg:grid-cols-5" : "lg:grid-cols-4",
+                )}
+              >
+                <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 lg:col-span-1">
+                  <span className="text-xs font-medium text-muted-foreground">Search</span>
+                  <FluentSearchBox
+                    size="small"
+                    aria-label="Search employees"
+                    className="w-full !max-w-none"
+                    placeholder="Name, employee number…"
+                    value={query.search}
+                    onChange={(_event, data) => updateFilter({ search: data.value })}
+                  />
+                </div>
+                {directoryMode === "current" ? (
+                  <div className="flex min-w-0 flex-col gap-1.5">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Employment status
+                    </span>
+                    <Select
+                      value={query.employment_status || ALL_STATUSES_VALUE}
+                      onValueChange={(value) =>
+                        updateFilter({
+                          employment_status:
+                            !value || value === ALL_STATUSES_VALUE
+                              ? ""
+                              : (value as typeof query.employment_status),
+                        })
+                      }
+                    >
+                      <SelectTrigger
+                        size="sm"
+                        className="w-full bg-background"
+                        aria-label="Filter employment status"
+                      >
+                        <SelectValue placeholder="All statuses">
+                          {query.employment_status
+                            ? statusLabels[query.employment_status]
+                            : "All statuses"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value={ALL_STATUSES_VALUE}>All statuses</SelectItem>
+                          <SelectItem value="onboarding">Onboarding</SelectItem>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="suspended">Suspended</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
+                <FilterSelect
+                  label="Location"
+                  allLabel="All locations"
+                  value={query.branch_id}
+                  options={filterOptions.branches}
+                  onChange={(id) => updateFilter({ branch_id: id })}
+                />
+                <FilterSelect
+                  label="Department"
+                  allLabel="All departments"
+                  value={query.department_id}
+                  options={filterOptions.departments}
+                  onChange={(id) => updateFilter({ department_id: id })}
+                />
+                <FilterSelect
+                  label="Position"
+                  allLabel="All positions"
+                  value={query.position_id}
+                  options={filterOptions.positions}
+                  onChange={(id) => updateFilter({ position_id: id })}
+                />
+              </div>
+              {chips.length > 0 ? (
+                <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
+                  {chips.map((chip) => (
+                    <button
+                      key={chip.key}
+                      type="button"
+                      onClick={chip.clear}
+                      aria-label={`Remove filter ${chip.label}`}
+                      className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2.5 py-0.5 text-xs text-foreground hover:bg-muted"
+                    >
+                      {chip.label}
+                      <Dismiss12Regular className="text-muted-foreground" />
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="ml-1 text-xs font-medium text-primary hover:underline"
+                    onClick={() =>
+                      updateFilter({
+                        search: "",
+                        employment_status: "",
+                        branch_id: 0,
+                        department_id: 0,
+                        position_id: 0,
+                      })
+                    }
+                  >
+                    Clear all
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        );
+      })()}
+
       <ResizableTable
         title="Employee"
         data={rows}
@@ -1315,59 +1611,6 @@ export function EmployeesListView({
         toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
         frameClassName="rounded-none border-0 shadow-none"
         fluent
-        filterCount={Number(Boolean(query.search.trim())) + Number(Boolean(query.employment_status))}
-        filterContent={
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">Search employees</span>
-              <FluentSearchBox
-                size="small"
-                aria-label="Search employees"
-                className="w-full"
-                placeholder="Name, employee number…"
-                value={query.search}
-                onChange={(_event, data) => {
-                  setPage(1);
-                  setQuery((previous) => ({ ...previous, search: data.value }));
-                }}
-              />
-            </div>
-            {directoryMode === "current" ? (
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-muted-foreground">Employment status</span>
-                <Select
-                  value={query.employment_status || ALL_STATUSES_VALUE}
-                  onValueChange={(value) => {
-                    setPage(1);
-                    setQuery((previous) => ({
-                      ...previous,
-                      employment_status:
-                        value === ALL_STATUSES_VALUE
-                          ? ""
-                          : (value as typeof previous.employment_status),
-                    }));
-                  }}
-                >
-                  <SelectTrigger
-                    size="sm"
-                    className="w-full bg-background"
-                    aria-label="Filter employment status"
-                  >
-                    <SelectValue placeholder="All" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value={ALL_STATUSES_VALUE}>All</SelectItem>
-                      <SelectItem value="onboarding">Onboarding</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="suspended">Suspended</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
-          </div>
-        }
         toolbarActions={
           <>
             {canArchiveEmployees && selectedEmployees.length > 0 ? (
