@@ -352,7 +352,8 @@ export function AchievementReviewDetail({ id, embedded = false, onCorrectionOpen
     token = readKpiToken();
   const [record, setRecord] = React.useState<Achievement | null>(null),
     [comments, setComments] = React.useState(""),
-    [decisionDialog, setDecisionDialog] = React.useState<"review" | "return" | "reject" | "correction" | null>(null),
+    [decisionDialog, setDecisionDialog] = React.useState<"review" | "return" | "reject" | null>(null),
+    [confirmCorrection, setConfirmCorrection] = React.useState(false),
     [correctionRevision, setCorrectionRevision] = React.useState<number | null>(null),
     [loading, setLoading] = React.useState(true),
     [busy, setBusy] = React.useState(false),
@@ -424,27 +425,27 @@ export function AchievementReviewDetail({ id, embedded = false, onCorrectionOpen
     );
   }
 
-  function openDecisionDialog(decision: "review" | "return" | "reject" | "correction") {
+  function openDecisionDialog(decision: "review" | "return" | "reject") {
     setComments("");
     setError("");
-    setCorrectionRevision(null);
     setDecisionDialog(decision);
+  }
+
+  async function createCorrectionDraft() {
+    if (!record || busy || correctionRevision !== null) return;
+    const updated = await action(
+      () => achievementApi.correction(token, id),
+      "",
+    );
+    if (updated) {
+      setCorrectionRevision(updated.current.revision);
+      setConfirmCorrection(false);
+      onCorrectionOpened?.();
+    }
   }
 
   async function submitDecisionDialog() {
     if (!record || !decisionDialog || busy) return;
-    if (decisionDialog === "correction") {
-      if (correctionRevision !== null) return;
-      const updated = await action(
-        () => achievementApi.correction(token, id),
-        "",
-      );
-      if (updated) {
-        setCorrectionRevision(updated.current.revision);
-        onCorrectionOpened?.();
-      }
-      return;
-    }
     if (decisionDialog === "review") {
       setDecisionDialog(null);
       await action(
@@ -523,7 +524,18 @@ export function AchievementReviewDetail({ id, embedded = false, onCorrectionOpen
                 </div>
               </> : <>
                 <p className="mt-3 whitespace-pre-wrap break-words text-sm text-muted-foreground">{record.current.reviewComment?.trim() || "No manager feedback on this revision."}</p>
-                {status === "approved" && <KpiFluentButton type="button" className="mt-auto self-start pt-4 text-primary" disabled={busy} onClick={() => openDecisionDialog("correction")}>Open approved correction</KpiFluentButton>}
+                {status === "approved" && <div className="mt-auto space-y-2 pt-4">
+                  <p className="text-xs text-muted-foreground">Need to change this approved result? Create a new draft for the employee. The approved result remains on record until a new revision is approved.</p>
+                  {!confirmCorrection ? <KpiFluentButton type="button" className="text-primary" disabled={busy} onClick={() => { setError(""); setConfirmCorrection(true); }}>Create correction draft</KpiFluentButton> : <div role="group" aria-label="Confirm correction draft" className="rounded-lg border border-border bg-muted/40 p-3">
+                    <p className="text-sm font-medium">Create a correction draft for this KPI?</p>
+                    <p className="mt-1 text-xs text-muted-foreground">The employee can edit and submit the new revision. This will not change the approved result yet.</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button appearance="primary" disabled={busy} onClick={() => void createCorrectionDraft()}>{busy ? "Creating…" : "Confirm and create draft"}</Button>
+                      <Button appearance="secondary" disabled={busy} onClick={() => setConfirmCorrection(false)}>Cancel</Button>
+                    </div>
+                  </div>}
+                </div>}
+                {correctionRevision !== null && <p role="status" className="mt-3 text-sm text-foreground">Correction draft created (revision {correctionRevision}). The employee can now update and submit it.</p>}
               </>}
             </section>
           </div>
@@ -595,37 +607,20 @@ export function AchievementReviewDetail({ id, embedded = false, onCorrectionOpen
       <Dialog
         open={decisionDialog !== null}
         onOpenChange={(_, data) => {
-          if (!data.open && !busy) { setDecisionDialog(null); setCorrectionRevision(null); }
+          if (!data.open && !busy) setDecisionDialog(null);
         }}
       >
-        <DialogSurface className={`${detailStyles.correctionSurface} !w-[min(32rem,calc(100vw-2rem))]`}>
+        <DialogSurface className="!w-[min(32rem,calc(100vw-2rem))]">
           <DialogBody>
             <DialogTitle>
-              {decisionDialog === "correction"
-                ? correctionRevision !== null ? "Correction draft ready" : "Create correction draft?"
-                : decisionDialog === "review"
+              {decisionDialog === "review"
                 ? "Start review?"
                 : decisionDialog === "return"
                   ? "Return for correction"
                   : "Reject achievement"}
             </DialogTitle>
             <DialogContent>
-              {decisionDialog === "correction" ? (
-                <div className="space-y-3 text-sm">
-                  {correctionRevision !== null ? (
-                    <>
-                      <p>Revision {correctionRevision} is now a draft for the assigned employee to update and submit.</p>
-                      <p className="text-muted-foreground">The previously approved result remains on record until a new revision is approved.</p>
-                    </>
-                  ) : (
-                    <>
-                      <p>This creates a new draft revision of <strong>{record?.assignment.definitionVersion?.name ?? "this KPI"}</strong> for the assigned employee.</p>
-                      <p className="text-muted-foreground">The approved result stays on record. Creating the draft does not submit or approve a new result.</p>
-                    </>
-                  )}
-                  {decisionDialog === "correction" && error && <KpiFeedback intent="error">{error}</KpiFeedback>}
-                </div>
-              ) : decisionDialog === "review" ? (
+              {decisionDialog === "review" ? (
                 <p>This will mark the achievement as under review.</p>
               ) : (
                 <div className="grid gap-2">
@@ -644,26 +639,22 @@ export function AchievementReviewDetail({ id, embedded = false, onCorrectionOpen
               )}
             </DialogContent>
             <DialogActions>
-              {decisionDialog === "correction" && correctionRevision !== null ? (
-                <Button appearance="primary" onClick={() => { setDecisionDialog(null); setCorrectionRevision(null); }}>Done</Button>
-              ) : <>
+              <>
                 <Button appearance="secondary" disabled={busy} onClick={() => setDecisionDialog(null)}>Cancel</Button>
                 <Button
                   appearance="primary"
-                  disabled={busy || (decisionDialog !== "review" && decisionDialog !== "correction" && !comments.trim())}
+                  disabled={busy || (decisionDialog !== "review" && !comments.trim())}
                   onClick={() => void submitDecisionDialog()}
                 >
                   {busy
                     ? "Saving…"
-                    : decisionDialog === "correction"
-                      ? "Create draft"
-                      : decisionDialog === "review"
+                    : decisionDialog === "review"
                         ? "Start review"
                         : decisionDialog === "return"
                           ? "Return"
                           : "Reject"}
                 </Button>
-              </>}
+              </>
             </DialogActions>
           </DialogBody>
         </DialogSurface>
