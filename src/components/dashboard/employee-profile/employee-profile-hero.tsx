@@ -93,7 +93,7 @@ function Fact({
   hint?: string | null
 }) {
   return (
-    <div className="flex min-w-0 items-start gap-2.5 px-4 py-3">
+    <div className="flex min-w-0 items-start gap-2.5 px-4 py-3 sm:px-6">
       <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
         {icon}
       </span>
@@ -157,8 +157,8 @@ export function EmployeeProfileHero({
   }
 
   return (
-    <div className="border-b border-border bg-background">
-      <div className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-2 backdrop-blur sm:px-5">
+    <div className="border-b border-border">
+      <div className="sticky top-0 z-30 flex items-center justify-between gap-3 rounded-t-[var(--hrms-control-radius)] border-b border-border bg-card/95 px-4 py-2.5 backdrop-blur sm:px-6">
         <div className="flex min-w-0 items-center gap-2">
           <button
             type="button"
@@ -182,7 +182,7 @@ export function EmployeeProfileHero({
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+      <div className="flex flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div className="flex min-w-0 items-center gap-4">
           <div className="relative shrink-0">
             {photo && !photoFailed ? (

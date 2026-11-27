@@ -6,14 +6,7 @@ import { EyeIcon, EyeOffIcon } from "lucide-react"
 import {
   Button as FluentButton,
 } from "@fluentui/react-components"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+import { ProfileSidePanel } from "@/components/dashboard/employee-profile/profile-side-panel"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import {
@@ -361,18 +354,126 @@ export function EmployeeIdentitySheet({
   }, [open])
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="flex h-dvh min-h-0 w-full min-w-0 max-w-full flex-col gap-0 overflow-hidden rounded-none border-0 p-0 data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-dvh data-[side=right]:w-full data-[side=right]:max-w-full data-[side=right]:border-l data-[side=right]:sm:max-w-2xl"
-      >
-        <SheetHeader className="shrink-0 gap-1 border-b border-border px-4 py-4 pr-14 sm:pl-6 sm:pr-14">
-          <SheetTitle>Update Profile</SheetTitle>
-          <SheetDescription>
-            Update account details and keep branch, department, position, manager, grade, and cost center in sync.
-          </SheetDescription>
-        </SheetHeader>
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth px-4 py-5 [scrollbar-gutter:stable] sm:px-6">
+    <ProfileSidePanel
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Update profile"
+      description="Update account details and keep branch, department, position, manager, grade, and cost center in sync."
+      footer={
+        <>
+          <FluentButton
+            type="button"
+            disabled={identitySubmitting}
+            appearance="secondary"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </FluentButton>
+          <FluentButton
+            type="button"
+            disabled={identitySubmitting}
+            appearance="primary"
+            onClick={async () => {
+              const token = readStoredToken()
+              const userId = resolveCompanyUserId(employee)
+              const employeeId = readNumber(employee.id)
+              const trimmedFirstName = firstName.trim()
+              const trimmedLastName = lastName.trim()
+              const trimmedUsername = username.trim()
+              const trimmedEmail = email.trim()
+              const trimmedPassword = profilePassword.trim()
+
+              if (!token) {
+                setIdentityError("Authentication required. Please log in again.")
+                return
+              }
+              if (employeeId === null) {
+                setIdentityError("Unable to identify this employee record.")
+                return
+              }
+              if (!trimmedFirstName) {
+                setIdentityError("First name is required.")
+                return
+              }
+              if (!trimmedLastName) {
+                setIdentityError("Last name is required.")
+                return
+              }
+              if (userId !== null && !trimmedUsername) {
+                setIdentityError("Username is required.")
+                return
+              }
+              if (userId !== null && !trimmedEmail) {
+                setIdentityError("Email is required.")
+                return
+              }
+              if (userId !== null && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+                setIdentityError("Please enter a valid email address.")
+                return
+              }
+              if (trimmedPassword && trimmedPassword.length < 6) {
+                setIdentityError("Password must be at least 6 characters.")
+                return
+              }
+              if ((departmentId || positionId || branchId || managerId || gradeId || costCenterId) && !assignmentEffectiveDate.trim()) {
+                setIdentityError("Assignment effective date is required.")
+                return
+              }
+
+              setIdentitySubmitting(true)
+              setIdentityError(null)
+              try {
+                const payload: AdminRecord = {
+                  first_name: trimmedFirstName,
+                  last_name: trimmedLastName,
+                  user_no: trimmedUsername,
+                  email: trimmedEmail,
+                }
+                if (trimmedPassword) {
+                  payload.password = trimmedPassword
+                }
+                // Names/email sync between the user and its employee records
+                // server-side in one transaction, so a linked user is updated
+                // directly; unlinked employees are patched on their own.
+                if (userId !== null) {
+                  await updateUserById(userId, token, payload)
+                } else {
+                  await patchEmployeeById(employeeId, token, {
+                    first_name: trimmedFirstName,
+                    last_name: trimmedLastName,
+                  })
+                }
+                if (departmentId || positionId || branchId || managerId || gradeId || costCenterId) {
+                  await patchEmployeeAssignment(token, employeeId, {
+                  effective_date: assignmentEffectiveDate.trim(),
+                  branch_id: branchId ? Number(branchId) : null,
+                  departments: departmentId ? [
+                    {
+                      department_id: Number(departmentId),
+                      is_primary: true,
+                    },
+                  ] : [],
+                  primary_position_id: positionId ? Number(positionId) : null,
+                  reports_to: managerId ? Number(managerId) : null,
+                  grade_id: gradeId ? Number(gradeId) : null,
+                  cost_center_id: costCenterId ? Number(costCenterId) : null,
+                  reason: assignmentReason.trim() || undefined,
+                  })
+                }
+                onOpenChange(false)
+                await onSaved()
+              } catch (errorObject) {
+                setIdentityError(errorObject instanceof Error ? errorObject.message : "Failed to update user details.")
+              } finally {
+                setIdentitySubmitting(false)
+              }
+            }}
+          >
+            {identitySubmitting ? "Updating..." : "Update Profile"}
+          </FluentButton>
+        </>
+      }
+    >
           <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 [&>*]:min-w-0">
           <FormField label="First name" className="min-w-0">
             <Input
@@ -581,121 +682,7 @@ export function EmployeeIdentitySheet({
             />
           </FormField>
           </div>
-          {identityError ? <p role="alert" className="mt-3 text-sm text-rose-600">{identityError}</p> : null}
-        </div>
-        <SheetFooter className="mt-0 w-full shrink-0 flex-row justify-end gap-2 border-t border-border bg-background px-4 py-3 sm:px-6">
-          <FluentButton
-            type="button"
-            disabled={identitySubmitting}
-            appearance="secondary"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </FluentButton>
-          <FluentButton
-            type="button"
-            disabled={identitySubmitting}
-            appearance="primary"
-            onClick={async () => {
-              const token = readStoredToken()
-              const userId = resolveCompanyUserId(employee)
-              const employeeId = readNumber(employee.id)
-              const trimmedFirstName = firstName.trim()
-              const trimmedLastName = lastName.trim()
-              const trimmedUsername = username.trim()
-              const trimmedEmail = email.trim()
-              const trimmedPassword = profilePassword.trim()
-
-              if (!token) {
-                setIdentityError("Authentication required. Please log in again.")
-                return
-              }
-              if (employeeId === null) {
-                setIdentityError("Unable to identify this employee record.")
-                return
-              }
-              if (!trimmedFirstName) {
-                setIdentityError("First name is required.")
-                return
-              }
-              if (!trimmedLastName) {
-                setIdentityError("Last name is required.")
-                return
-              }
-              if (userId !== null && !trimmedUsername) {
-                setIdentityError("Username is required.")
-                return
-              }
-              if (userId !== null && !trimmedEmail) {
-                setIdentityError("Email is required.")
-                return
-              }
-              if (userId !== null && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-                setIdentityError("Please enter a valid email address.")
-                return
-              }
-              if (trimmedPassword && trimmedPassword.length < 6) {
-                setIdentityError("Password must be at least 6 characters.")
-                return
-              }
-              if ((departmentId || positionId || branchId || managerId || gradeId || costCenterId) && !assignmentEffectiveDate.trim()) {
-                setIdentityError("Assignment effective date is required.")
-                return
-              }
-
-              setIdentitySubmitting(true)
-              setIdentityError(null)
-              try {
-                const payload: AdminRecord = {
-                  first_name: trimmedFirstName,
-                  last_name: trimmedLastName,
-                  user_no: trimmedUsername,
-                  email: trimmedEmail,
-                }
-                if (trimmedPassword) {
-                  payload.password = trimmedPassword
-                }
-                // Names/email sync between the user and its employee records
-                // server-side in one transaction, so a linked user is updated
-                // directly; unlinked employees are patched on their own.
-                if (userId !== null) {
-                  await updateUserById(userId, token, payload)
-                } else {
-                  await patchEmployeeById(employeeId, token, {
-                    first_name: trimmedFirstName,
-                    last_name: trimmedLastName,
-                  })
-                }
-                if (departmentId || positionId || branchId || managerId || gradeId || costCenterId) {
-                  await patchEmployeeAssignment(token, employeeId, {
-                  effective_date: assignmentEffectiveDate.trim(),
-                  branch_id: branchId ? Number(branchId) : null,
-                  departments: departmentId ? [
-                    {
-                      department_id: Number(departmentId),
-                      is_primary: true,
-                    },
-                  ] : [],
-                  primary_position_id: positionId ? Number(positionId) : null,
-                  reports_to: managerId ? Number(managerId) : null,
-                  grade_id: gradeId ? Number(gradeId) : null,
-                  cost_center_id: costCenterId ? Number(costCenterId) : null,
-                  reason: assignmentReason.trim() || undefined,
-                  })
-                }
-                onOpenChange(false)
-                await onSaved()
-              } catch (errorObject) {
-                setIdentityError(errorObject instanceof Error ? errorObject.message : "Failed to update user details.")
-              } finally {
-                setIdentitySubmitting(false)
-              }
-            }}
-          >
-            {identitySubmitting ? "Updating..." : "Update Profile"}
-          </FluentButton>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+          {identityError ? <p role="alert" className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{identityError}</p> : null}
+    </ProfileSidePanel>
   )
 }

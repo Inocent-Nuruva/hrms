@@ -18,6 +18,7 @@ import {
   CheckmarkCircle16Regular,
   ChevronRight16Regular,
   DocumentText20Regular,
+  Grid20Regular,
   HatGraduation20Regular,
   LockClosed20Regular,
   Person20Regular,
@@ -65,7 +66,6 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { cn } from "@/lib/utils"
-import { pageBleedClass } from "@/components/dashboard/talent-visuals"
 import { EmployeeStatusDialog } from "@/components/dashboard/employee-status-dialog"
 import { EmployeeStatusHistorySection } from "@/components/dashboard/employee-status-history"
 import { EmploymentContractsView } from "@/components/dashboard/employment-contracts-view"
@@ -125,6 +125,7 @@ import {
   DepartmentAssignmentFormState,
 } from "@/components/dashboard/employee-profile/profile-shared"
 import { Section } from "@/components/dashboard/employee-profile/profile-record-section"
+import { PAGE_SHELL_WIDTH, PageShell } from "@/components/dashboard/page-shell"
 import { ProfileSidePanel } from "@/components/dashboard/employee-profile/profile-side-panel"
 import {
   ProfileAddButton,
@@ -522,10 +523,10 @@ function ProfileSectionsTabs({
   )
 
   return (
-    <div className="border-x border-b border-border bg-card">
+    <div className="min-w-0">
       {header}
-      <div className="sticky top-12 z-20 border-t border-border bg-card/95 backdrop-blur">
-        <div className="px-3 py-2 sm:hidden">
+      <div className="sticky top-12 z-20 border-b border-border bg-card/95 backdrop-blur">
+        <div className="px-4 py-3 sm:hidden">
           <FluentSelect
             id="employee-profile-group"
             ariaLabel="Profile section"
@@ -542,11 +543,11 @@ function ProfileSectionsTabs({
           />
         </div>
         <div
-          className="hidden items-center gap-1 overflow-x-auto px-3 [scrollbar-width:none] sm:flex"
+          className="hidden items-center gap-1 overflow-x-auto px-4 [scrollbar-width:none] sm:flex sm:px-6"
           role="tablist"
           aria-label="Employee profile sections"
         >
-          {[{ key: "overview" as const, label: "Overview", missing: 0 }, ...groupSummaries.map(({ group, missing }) => ({ key: group.key, label: group.label, missing: missing.length }))].map((tab) => {
+          {[{ key: "overview" as const, label: "Overview", missing: 0, icon: Grid20Regular as React.ComponentType<{ className?: string }> }, ...groupSummaries.map(({ group, missing }) => ({ key: group.key, label: group.label, missing: missing.length, icon: group.icon }))].map((tab) => {
             const isActive = tab.key === activeGroup
             return (
               <button
@@ -556,10 +557,11 @@ function ProfileSectionsTabs({
                 aria-selected={isActive}
                 onClick={() => selectGroup(tab.key)}
                 className={cn(
-                  "inline-flex h-11 shrink-0 items-center gap-1.5 border-b-2 px-3 text-sm font-medium whitespace-nowrap transition-colors",
-                  isActive ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                  "-mb-px inline-flex h-11 shrink-0 items-center gap-2 border-b-2 px-3 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-primary",
+                  isActive ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:border-border hover:text-foreground"
                 )}
               >
+                <tab.icon className="size-4" aria-hidden="true" />
                 {tab.label}
                 {tab.missing ? (
                   <span className="size-1.5 rounded-full bg-amber-500" aria-label={`${tab.missing} missing`} />
@@ -571,7 +573,7 @@ function ProfileSectionsTabs({
       </div>
 
       {currentSections.length > 1 ? (
-        <div className="flex gap-1.5 overflow-x-auto border-t border-border px-3 py-2 [scrollbar-width:none]" role="tablist" aria-label={`${currentGroup?.label} records`}>
+        <div className="flex gap-1.5 overflow-x-auto border-b border-border px-4 py-3 [scrollbar-width:none] sm:px-6" role="tablist" aria-label={`${currentGroup?.label} records`}>
           {currentSections.map((section) => {
             const isActive = section.title === active?.title
             const isMissing = EXPECTED_PROFILE_SECTIONS.has(section.title) && section.count === 0
@@ -609,7 +611,7 @@ function ProfileSectionsTabs({
         </div>
       ) : null}
 
-      <div className="relative overflow-hidden border-t border-border p-4 sm:p-5">
+      <div className="relative overflow-hidden px-4 py-5 sm:px-6 sm:py-6">
         <AnimatePresence mode="wait" custom={slideDirection} initial={false}>
           <motion.div
             key={active ? `${activeGroup}:${active.routeKey}` : activeGroup}
@@ -2986,7 +2988,7 @@ export function EmployeeProfilePage({
 
   if (loading) {
     return (
-      <div className={cn("animate-pulse border border-border bg-background", pageBleedClass)} aria-busy="true" aria-label="Loading employee profile">
+      <div className={cn("mx-auto mt-4 w-full animate-pulse rounded-[var(--hrms-control-radius)] border border-border bg-card sm:mt-6", PAGE_SHELL_WIDTH)} aria-busy="true" aria-label="Loading employee profile">
         <div className="h-12 border-b border-border" />
         <div className="flex items-center gap-4 px-5 py-5">
           <div className="size-16 rounded-full bg-muted" />
@@ -3006,7 +3008,7 @@ export function EmployeeProfilePage({
   if (error || !employee) {
     const isNotFound = error === "Employee not found." || !error
     return (
-      <div className={cn("border border-border bg-card px-4 py-12 sm:px-6", pageBleedClass)}>
+      <div className={cn("mx-auto mt-4 w-full rounded-[var(--hrms-control-radius)] border border-border bg-card px-4 py-12 sm:mt-6 sm:px-6", PAGE_SHELL_WIDTH)}>
         <div className="mx-auto flex max-w-md flex-col items-center gap-3 text-center">
           <span className="inline-flex size-12 items-center justify-center rounded-full bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300">
             <TriangleAlertIcon className="size-6" aria-hidden="true" />
@@ -3045,7 +3047,7 @@ export function EmployeeProfilePage({
   }
 
   return (
-    <div className={cn("pb-4", pageBleedClass)}>
+    <PageShell>
       <EmployeeProfileHero
         employee={employee}
         onUpdateProfile={canUpdateProfile ? () => setIdentityDialogOpen(true) : undefined}
@@ -3142,6 +3144,6 @@ export function EmployeeProfilePage({
         employee={employee}
         onSaved={fetchEmployee}
       />
-    </div>
+    </PageShell>
   )
 }
