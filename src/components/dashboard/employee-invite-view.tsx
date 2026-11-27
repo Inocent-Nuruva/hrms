@@ -369,8 +369,7 @@ function FieldShell({
   )
 }
 
-/** `embedded`: no outer spacing or card, for use inside another page (Recruitment). */
-export function EmployeeInviteView({ embedded = false }: { embedded?: boolean } = {}) {
+export function EmployeeInviteView() {
   const actor = useDashboardActor()
   const [firstName, setFirstName] = React.useState("")
   const [lastName, setLastName] = React.useState("")
@@ -1009,7 +1008,7 @@ export function EmployeeInviteView({ embedded = false }: { embedded?: boolean } 
       : "Send invitation"
 
   return (
-    <PageShell embedded={embedded}>
+    <PageShell>
       <PageShellHeader
         title="Invite employee"
         description="Send a new hire a secure link to complete their own registration."

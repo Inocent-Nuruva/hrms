@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { PageShell, PageShellBody, PageShellHeader } from "@/components/dashboard/page-shell";
 import { toast } from "@/components/ui/fluent-toast-store";
 import {
   downloadEmploymentLetter,
@@ -254,5 +255,20 @@ export function EmploymentLettersView() {
         </div>
       </div>
     </section>
+  );
+}
+
+/** Employees → Letters: the single home of the employment letter templates. */
+export function EmploymentLettersPage() {
+  return (
+    <PageShell>
+      <PageShellHeader
+        title="Employment letters"
+        description="Edit the offer and appointment letter templates used for new hires."
+      />
+      <PageShellBody>
+        <EmploymentLettersView />
+      </PageShellBody>
+    </PageShell>
   );
 }

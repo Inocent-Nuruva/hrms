@@ -6,35 +6,24 @@ import { PageHeader } from "@/components/ui/page-header"
 import { cn } from "@/lib/utils"
 
 /**
- * Shared page layout for HR workspaces (registration, invite, onboarding,
- * contracts, salary approvals, recruitment): breathing room below the
- * section menu and one card holding the header, optional tabs and content.
- *
- * `embedded` drops the outer spacing and card so a page can sit inside
- * another page's shell (e.g. Invite inside Recruitment) without nesting cards.
- */
-/**
- * The layout standard for HR workspace pages. One width, one spacing scale,
- * so every page in the section lines up exactly:
+ * The layout standard for HR workspace pages (invite, registration,
+ * onboarding, contracts, letters, salary approvals, recruitment and the
+ * employee profile). One width, one spacing scale, so every page lines up:
  * - card: max 80rem wide, centred, 2px-radius bordered card
  * - space below the section menu: 16px (phone) / 24px (tablet and up)
  * - space below the card: 24px (phone/tablet) / 40px (desktop)
  * - horizontal content padding: 16px (phone) / 24px (tablet and up)
+ * Each page has exactly one home; pages are linked, never embedded in another.
  */
 export const PAGE_SHELL_WIDTH = "max-w-7xl"
 
 export function PageShell({
   children,
-  embedded = false,
   className,
 }: {
   children: React.ReactNode
-  embedded?: boolean
   className?: string
 }) {
-  if (embedded) {
-    return <div className={cn("flex min-w-0 flex-col", className)}>{children}</div>
-  }
   return (
     <div className={cn("mx-auto w-full min-w-0 pt-4 pb-6 sm:pt-6 lg:pb-10", PAGE_SHELL_WIDTH)}>
       <section className={cn("flex min-w-0 flex-col rounded-[var(--hrms-control-radius)] border border-border bg-card", className)}>

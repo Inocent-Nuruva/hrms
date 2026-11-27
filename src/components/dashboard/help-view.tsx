@@ -43,7 +43,7 @@ const COMPANY_PAGES: HelpDestination[] = [
   { title: "Finance", url: "/dashboard/finance/overview", hint: "Products, applications, and accounts" },
   { title: "Movements", url: "/dashboard/movements/overview", hint: "Transfers and promotions" },
   { title: "Structure", url: "/dashboard/structure/cost-centers", hint: "Cost centers, grades, and numbering" },
-  { title: "Invite and register", url: "/dashboard/operations/recruitment", hint: "Invites and new hires" },
+  { title: "Invite and register", url: "/dashboard/employees/invite", hint: "Invites and new hires" },
   { title: "Payroll setup & operations", url: "/dashboard/operations/payroll", hint: "Runs, inputs, and configuration" },
   { title: "Reports", url: "/dashboard/operations/reports", hint: "Attendance downloads and analytics jobs" },
   { title: "Notifications", url: "/dashboard/operations/notifications", hint: "Company alerts" },

@@ -16,20 +16,17 @@ const TABS = [
 
 /**
  * Add employees: the shared page shell with Manual / Bulk import tabs.
- * `embedded` drops the outer card when shown inside another page (Recruitment).
  */
-export function EmployeeRegistrationView({ embedded = false }: { embedded?: boolean } = {}) {
+export function EmployeeRegistrationView() {
   const [activeTab, setActiveTab] = React.useState<RegistrationTab>("manual")
 
   return (
-    <PageShell embedded={embedded}>
-      {embedded ? null : (
+    <PageShell>
         <PageShellHeader
           withTabs
           title="Add employees"
           description="Register one employee or validate and import an Excel employee list."
         />
-      )}
       <PageShellTabs
         tabs={TABS}
         active={activeTab}

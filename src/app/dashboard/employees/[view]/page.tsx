@@ -5,6 +5,7 @@ import { EmployeeRegistrationView } from "@/components/dashboard/employee-regist
 import { EmployeeInviteView } from "@/components/dashboard/employee-invite-view"
 import { EmployeeContractsWorkspace } from "@/components/dashboard/employee-contracts-workspace"
 import { SalaryApprovalsView } from "@/components/dashboard/salary-approvals-view"
+import { EmploymentLettersPage } from "@/components/dashboard/employment-letters-view"
 import { OnboardingView } from "@/components/dashboard/onboarding-view"
 import { OffboardingView } from "@/components/dashboard/offboarding-view"
 import { HrProfileUpdateApprovalsView } from "@/components/dashboard/hr-profile-update-approvals-view"
@@ -16,6 +17,7 @@ const ALLOWED_VIEWS = new Set([
   "registration",
   "invite",
   "contracts",
+  "letters",
   "salary-approvals",
   "offboarding",
   "onboarding",
@@ -46,6 +48,10 @@ export default async function EmployeesViewPage({
 
   if (normalized === "invite") {
     return <EmployeeInviteView />
+  }
+
+  if (normalized === "letters") {
+    return <EmploymentLettersPage />
   }
 
   if (normalized === "contracts") {

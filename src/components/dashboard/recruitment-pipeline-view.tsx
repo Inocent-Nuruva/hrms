@@ -27,6 +27,7 @@ import {
   Dialog, DialogFooter, DialogHeader, DialogPopup, DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import { FormField } from "@/components/ui/form-field"
+import { PageShellBody, PageShellHeader } from "@/components/dashboard/page-shell"
 import { PhoneInput } from "@/components/ui/phone-input"
 
 type FormMode = "request" | "candidate" | "interview" | "score" | "check" | "offer" | "convert"
@@ -210,26 +211,23 @@ export function RecruitmentPipelineView() {
   // Phones and tablets show one pane at a time; desktop shows both.
   const showDetailPane = requestId !== null
 
-  return <div className="flex min-w-0 flex-col gap-5">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 items-center gap-3">
-        <span aria-hidden="true" className="inline-flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><BriefcaseBusiness className="size-5" /></span>
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold text-foreground">Hiring pipeline</h2>
-          <p className="text-sm text-muted-foreground">
-            {requests.length} request{requests.length === 1 ? "" : "s"}
-            {requests.length ? ` · ${requests.filter((row) => status(row) === "POSTED").length} open for applicants` : ""}
-          </p>
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
+  const postedCount = requests.filter((row) => status(row) === "POSTED").length
+
+  return <>
+    <PageShellHeader
+      title="Recruitment"
+      description={requests.length
+        ? `${requests.length} hiring request${requests.length === 1 ? "" : "s"} · ${postedCount} open for applicants`
+        : "Track hiring requests and candidates from application to offer and invitation."}
+      actions={<>
         <Button variant="outline" className="h-9 w-9 p-0" onClick={() => void refresh(token, requestId)} disabled={loading} title="Refresh" aria-label="Refresh">
           <RefreshCw className={cn("size-4", loading && "animate-spin")} />
         </Button>
-        <Button className="h-9 flex-1 px-4 sm:flex-none" onClick={() => open("request")}><Plus className="size-4" /> New request</Button>
-      </div>
-    </div>
-
+        <Button className="h-9 px-4" onClick={() => open("request")}><Plus className="size-4" /> New request</Button>
+      </>}
+    />
+    <PageShellBody>
+    <div className="flex min-w-0 flex-col gap-5">
     <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(260px,20rem)_minmax(0,1fr)]">
       {/* Requests list */}
       <section aria-label="Recruitment requests" className={cn("min-w-0 flex-col gap-3", showDetailPane ? "hidden lg:flex" : "flex")}>
@@ -447,7 +445,9 @@ export function RecruitmentPipelineView() {
         </form>
       </DialogPopup>
     </Dialog>
-  </div>
+    </div>
+    </PageShellBody>
+  </>
 }
 
 const STATUS_TONES: Record<string, string> = {

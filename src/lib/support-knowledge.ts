@@ -39,7 +39,7 @@ export const SUPPORT_PAGES: SupportPage[] = [
   { title: "Cost centers", url: "/dashboard/structure/cost-centers", hint: "Where spend is assigned", keywords: ["cost", "center", "structure"] },
   { title: "Grades", url: "/dashboard/structure/grades", hint: "Pay grades and ranks", keywords: ["grade", "structure"] },
   { title: "Employee numbering", url: "/dashboard/structure/numbering", hint: "Prefix and next employee number", keywords: ["numbering", "prefix", "employee number"] },
-  { title: "Invite and register", url: "/dashboard/operations/recruitment", hint: "Invites and new hires", keywords: ["invite", "register", "recruit", "hire"] },
+  { title: "Invite and register", url: "/dashboard/employees/invite", hint: "Invites and new hires", keywords: ["invite", "register", "recruit", "hire"] },
   { title: "Payroll setup & operations", url: "/dashboard/operations/payroll", hint: "Company payroll runs, inputs, and configuration (HR/finance)", keywords: ["payroll", "setup", "run", "salary processing"], audience: "company" },
   { title: "Reports", url: "/dashboard/operations/reports", hint: "Attendance downloads", keywords: ["report", "download", "export"], audience: "company" },
   { title: "Notifications", url: "/dashboard/operations/notifications", hint: "Company alerts", keywords: ["notification", "inbox"], audience: "company" },
