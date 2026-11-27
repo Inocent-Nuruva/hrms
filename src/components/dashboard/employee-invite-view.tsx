@@ -369,7 +369,8 @@ function FieldShell({
   )
 }
 
-export function EmployeeInviteView() {
+/** `embedded`: no outer spacing or card, for use inside another page (Recruitment). */
+export function EmployeeInviteView({ embedded = false }: { embedded?: boolean } = {}) {
   const actor = useDashboardActor()
   const [firstName, setFirstName] = React.useState("")
   const [lastName, setLastName] = React.useState("")
@@ -1008,8 +1009,8 @@ export function EmployeeInviteView() {
       : "Send invitation"
 
   return (
-    <div className="mx-auto w-full max-w-6xl pt-4 pb-6 sm:pt-6 lg:pb-10">
-     <div className="flex flex-col rounded-lg border border-border bg-card">
+    <div className={embedded ? "w-full" : "mx-auto w-full max-w-6xl pt-4 pb-6 sm:pt-6 lg:pb-10"}>
+     <div className={embedded ? "flex flex-col" : "flex flex-col rounded-lg border border-border bg-card"}>
       <PageHeader
         className="border-b border-border px-4 py-4 sm:px-6"
         title="Invite employee"

@@ -82,7 +82,7 @@ import { asRecord, isLikelyRefreshToken, readString } from "@/utils/token-utils"
 import { cn } from "@/lib/utils"
 import { buildEmployeeOnboardingInput } from "@/lib/onboarding-provisioning"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import { EMPLOYEE_REGISTRATION_PERMISSION, hasPermission } from "@/lib/dashboard-permissions"
+import { EMPLOYEE_REGISTRATION_PERMISSION, canPerformPermission, hasPermission } from "@/lib/dashboard-permissions"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const LEGACY_TOKEN_STORAGE_KEY = "ess_auth_token"
@@ -865,19 +865,10 @@ async function fetchRolesDirect(accessToken: string) {
     cache: "no-store",
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
   })
-  if (authedResponse.ok) {
-    return normalizeRolesPayload((await authedResponse.json()) as unknown)
-  }
-
-  // Graceful fallback for environments where roles may be exposed without auth.
-  const directResponse = await fetch(endpoint, {
-    method: "GET",
-    cache: "no-store",
-  })
-  if (!directResponse.ok) {
+  if (!authedResponse.ok) {
     throw new Error(`Request failed with status ${authedResponse.status}`)
   }
-  return normalizeRolesPayload((await directResponse.json()) as unknown)
+  return normalizeRolesPayload((await authedResponse.json()) as unknown)
 }
 
 function resolveAccessTokenFromStorage() {
@@ -2385,7 +2376,17 @@ export function EmployeeRegisterForm() {
     setPendingDelete(null)
   }
 
+  const actorReady = actor.ready
+  // Stable key so a new permissions array with the same entries does not reload.
+  const actorPermissionKey = actor.permissionLabels.join(" ")
   const loadRoles = React.useCallback(async () => {
+    // Permissions decide which lists are requested; wait for them so we never
+    // ask for (and log a 403 on) lists this account cannot read.
+    if (!actorReady) return
+    const permissionLabels = actorPermissionKey ? actorPermissionKey.split(" ") : []
+    const can = (permission: string) => canPerformPermission(permissionLabels, permission)
+    const skipped = <T,>(empty: T) => Promise.resolve(empty)
+    const emptyList = { rows: [] as AdminRecord[] }
     const accessToken = resolveAccessTokenFromStorage()
     if (!accessToken) {
       setRoles([])
@@ -2410,7 +2411,7 @@ export function EmployeeRegisterForm() {
         accessOrganizationsResult,
         devicesResult,
       ] = await Promise.allSettled([
-        fetchRolesDirect(accessToken),
+        can("roles:read") ? fetchRolesDirect(accessToken) : skipped([] as AdminRecord[]),
         listBranches(accessToken, { page: 1, limit: 100 }),
         listDepartments(accessToken, { page: 1, limit: 100 }),
         listPositions(accessToken, { page: 1, limit: 100 }),
@@ -2444,24 +2445,30 @@ export function EmployeeRegisterForm() {
           sortBy: "created_at",
           sortOrder: "DESC",
         }),
-        listAccessControlResources(accessToken, "groups", {
-          page: 1,
-          limit: 100,
-          sortBy: "created_at",
-          sortOrder: "DESC",
-        }),
-        listAccessControlResources(accessToken, "organizations", {
-          page: 1,
-          limit: 100,
-          sortBy: "created_at",
-          sortOrder: "DESC",
-        }),
-        listAttendanceDevices(accessToken, {
-          page: 1,
-          limit: 100,
-          sortBy: "created_at",
-          sortOrder: "DESC",
-        }),
+        can("access_groups:read")
+          ? listAccessControlResources(accessToken, "groups", {
+              page: 1,
+              limit: 100,
+              sortBy: "created_at",
+              sortOrder: "DESC",
+            })
+          : skipped(emptyList),
+        can("access_organizations:read")
+          ? listAccessControlResources(accessToken, "organizations", {
+              page: 1,
+              limit: 100,
+              sortBy: "created_at",
+              sortOrder: "DESC",
+            })
+          : skipped(emptyList),
+        can("attendance_devices:read")
+          ? listAttendanceDevices(accessToken, {
+              page: 1,
+              limit: 100,
+              sortBy: "created_at",
+              sortOrder: "DESC",
+            })
+          : skipped(emptyList),
       ])
       const roleRecords = roleRecordsResult.status === "fulfilled" ? roleRecordsResult.value : ([] as AdminRecord[])
       const resolvedBranches = branchResult.status === "fulfilled" ? branchResult.value.rows : []
@@ -2491,7 +2498,7 @@ export function EmployeeRegisterForm() {
       setAccessGroupRecords(resolvedAccessGroups)
       setAccessOrganizationRecords(resolvedAccessOrganizations)
       setAttendanceDeviceRecords(resolvedDevices)
-      if (roleOptions.length === 0) {
+      if (roleOptions.length === 0 && can("roles:read")) {
         setRolesError("Roles are unavailable for this account. You can still continue.")
       }
       const defaultRoleId = resolveDefaultRoleId(roleOptions)
@@ -2511,7 +2518,7 @@ export function EmployeeRegisterForm() {
     } finally {
       setRolesLoading(false)
     }
-  }, [])
+  }, [actorReady, actorPermissionKey])
 
   React.useEffect(() => {
     void loadRoles()

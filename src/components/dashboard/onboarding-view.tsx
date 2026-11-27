@@ -1,5 +1,7 @@
 "use client";
 
+import { ClipboardListIcon, MailIcon, WorkflowIcon } from "lucide-react";
+import { PageShell, PageShellHeader, PageShellTabs } from "@/components/dashboard/page-shell";
 import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import { DateInput } from "@/components/ui/date-input";
@@ -72,9 +74,7 @@ import {
   onboardingActivityLabel,
 } from "./onboarding-workspace-collaboration";
 import { OnboardingPayrollDrawer } from "./onboarding-payroll-drawer";
-import { pageBleedClass } from "@/components/dashboard/talent-visuals";
 
-import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import {
@@ -6500,74 +6500,40 @@ export function OnboardingView() {
     },
   ];
 
+  const onboardingTabs = [
+    ...(canViewPendingInvitations
+      ? [{ id: "invitations" as const, label: "Invitations", icon: MailIcon, count: invitations.length }]
+      : []),
+    ...(canViewOnboardingRequests ? [{ id: "requests" as const, label: "Requests", icon: ClipboardListIcon }] : []),
+    ...(canViewOnboardingWorkflows ? [{ id: "workflows" as const, label: "Workflows", icon: WorkflowIcon }] : []),
+  ];
+
   return (
-    <section
-      className={cn(
-        pageBleedClass,
-        "min-w-0 overflow-hidden border-y border-border bg-background shadow-sm sm:border-x",
-      )}
-    >
-      <div hidden={requestDetailsOpen} className="border-b border-border px-3 py-3">
-        <PageHeader
-          title="Onboarding"
-          description="Invite new hires, track their onboarding requests and manage workflows."
-          stats={[
-            ...(canViewPendingInvitations ? [{ label: "Invitations", value: invitations.length, tone: "info" as const }] : []),
-            ...(canViewOnboardingRequests ? [{ label: "Requests", value: filteredRequests.length }] : []),
-            ...(canViewOnboardingWorkflows ? [{ label: "Workflows", value: filteredWorkflows.length }] : []),
-          ]}
+    <PageShell wide>
+      <PageShellHeader
+        hidden={requestDetailsOpen}
+        withTabs={onboardingTabs.length > 1}
+        title="Onboarding"
+        description="Invite new hires, track their onboarding requests and manage workflows."
+        stats={[
+          ...(canViewPendingInvitations ? [{ label: "Invitations", value: invitations.length, tone: "info" as const }] : []),
+          ...(canViewOnboardingRequests ? [{ label: "Requests", value: filteredRequests.length }] : []),
+          ...(canViewOnboardingWorkflows ? [{ label: "Workflows", value: filteredWorkflows.length }] : []),
+        ]}
+      />
+      {onboardingTabs.length > 1 ? (
+        <PageShellTabs
+          hidden={requestDetailsOpen}
+          tabs={onboardingTabs}
+          active={activeTab}
+          onChange={setActiveTab}
+          ariaLabel="Onboarding sections"
+          idPrefix="onboarding"
         />
-      </div>
-      <div hidden={requestDetailsOpen} className="px-3 pt-3">
-        <div role="tablist" aria-label="Onboarding sections" className="inline-flex max-w-full flex-wrap gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5">
-          {canViewPendingInvitations ? (
-            <button
-              type="button"
-              onClick={() => setActiveTab("invitations")}
-              className={cn(
-                "shrink-0 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
-                activeTab === "invitations"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Invitations
-              {invitations.length > 0 ? ` (${invitations.length})` : ""}
-            </button>
-          ) : null}
-          {canViewOnboardingRequests ? (
-            <button
-              type="button"
-              onClick={() => setActiveTab("requests")}
-              className={cn(
-                "shrink-0 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
-                activeTab === "requests"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Requests
-            </button>
-          ) : null}
-          {canViewOnboardingWorkflows ? (
-            <button
-              type="button"
-              onClick={() => setActiveTab("workflows")}
-              className={cn(
-                "shrink-0 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
-                activeTab === "workflows"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Workflows
-            </button>
-          ) : null}
-        </div>
-      </div>
+      ) : null}
 
       {error ? (
-        <div className="border-b border-destructive/20 bg-destructive/[0.06] px-3 py-2 text-xs text-destructive">
+        <div role="alert" className="mx-4 mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive sm:mx-6">
           {error}
         </div>
       ) : null}
@@ -11994,6 +11960,6 @@ export function OnboardingView() {
         onClose={() => setDocumentToEdit(null)}
         onSubmit={(payload) => void saveDocumentEdit(payload)}
       />
-    </section>
+    </PageShell>
   );
 }

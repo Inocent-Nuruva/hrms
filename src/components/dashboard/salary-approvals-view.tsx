@@ -1,5 +1,6 @@
 "use client"
 
+import { PageShell } from "@/components/dashboard/page-shell"
 import { PageHeader } from "@/components/ui/page-header"
 import * as React from "react"
 import {
@@ -221,8 +222,8 @@ export function SalaryApprovalsView() {
   const pendingCount = rows.filter((row) => text(row, "status") === "PENDING_APPROVAL").length
 
   return (
-    <section className="w-full min-w-0">
-      <header className="border-b px-4 py-4">
+    <PageShell>
+      <header className="border-b border-border px-4 py-4 sm:px-6">
         <PageHeader
           title={<span className="inline-flex items-center gap-2"><MoneyHand20Regular />Salary approvals</span>}
           description="Review starting salaries, assigned approvers, and completed decisions."
@@ -240,8 +241,8 @@ export function SalaryApprovalsView() {
       {loading ? (
         <div className="flex min-h-56 items-center justify-center"><FluentLoadingIndicator /></div>
       ) : rows.length ? (
-        <div className="p-3 sm:p-4">
-          <div className="overflow-hidden rounded-xl border border-border bg-background">
+        <div className="px-4 py-5 sm:px-6 sm:py-6">
+          <div className="overflow-hidden rounded-lg border border-border bg-background">
             <div aria-hidden="true" className="hidden grid-cols-[minmax(200px,1.4fr)_minmax(120px,1fr)_minmax(180px,1.4fr)_minmax(130px,0.8fr)_auto] gap-4 border-b border-border bg-muted/50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground lg:grid">
               <span>Employee</span><span>Salary</span><span>Submitted / approver</span><span>Status</span><span className="w-[200px] text-right">Actions</span>
             </div>
@@ -377,6 +378,6 @@ export function SalaryApprovalsView() {
           </DialogBody>
         </DialogSurface>
       </Dialog>
-    </section>
+    </PageShell>
   )
 }
