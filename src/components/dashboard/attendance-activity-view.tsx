@@ -1,6 +1,7 @@
 "use client"
 
 import { AttendanceTodayPanel } from "@/components/dashboard/dashboard-attendance-actions"
+import { AttendanceCleanupSettingsPanel } from "@/components/dashboard/attendance-cleanup-settings"
 import type { AttendanceDailySummaryStatusCounts } from "@/lib/admin-api"
 import {
   ARRIVAL_STATUS,
@@ -5948,6 +5949,8 @@ export function AttendanceActivityView({ section }: { section: string }) {
         ) : null}
 
         {activeSection === "unmatched-logs" ? (
+          <>
+          {actor.roleNames?.some((role) => role.toUpperCase() === "COMPANY_ADMIN") && actor.permissionLabels.includes("companies:update") && <AttendanceCleanupSettingsPanel token={readStoredToken()} />}
           <TableBlock
             rows={rows}
             section={activeSection}
@@ -5962,10 +5965,12 @@ export function AttendanceActivityView({ section }: { section: string }) {
               void openRecordDetails(row)
             }}
           />
+          </>
         ) : null}
 
         {activeSection === "recalculation-jobs" ? (
           <div>
+            {actor.roleNames?.some((role) => role.toUpperCase() === "COMPANY_ADMIN") && actor.permissionLabels.includes("companies:update") && <AttendanceCleanupSettingsPanel token={readStoredToken()} />}
             <TableBlock
               rows={opsRows}
               section={activeSection}

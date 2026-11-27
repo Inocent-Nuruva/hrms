@@ -6044,6 +6044,22 @@ export async function runPendingAttendanceProcessingJobs(token: string) {
   });
 }
 
+export type AttendanceCleanupSettings = { recalculationJobs: boolean; unmatchedLogs: boolean; expiredSignInRequests: boolean; notificationQueue: boolean; importQueue: boolean; queueRetentionDays: number };
+
+export type AttendanceCleanupOverview = { preview: Array<{ type: string; count: number; bytes: string }>; storage: Array<{ type: string; count: number; bytes: string }>; history: Array<{ type: string; scheduledDate: string; status: string; deletedCount: number; errorMessage: string | null; executedAt: string }> };
+
+export function getAttendanceCleanupOverview(token: string) {
+  return adminRequest<AttendanceCleanupOverview>("/api/attendance/processing/cleanup-preview", { token, cacheTtlMs: 0 });
+}
+
+export function getAttendanceCleanupSettings(token: string) {
+  return adminRequest<AttendanceCleanupSettings>("/api/attendance/processing/cleanup-settings", { token });
+}
+
+export function updateAttendanceCleanupSettings(token: string, settings: AttendanceCleanupSettings) {
+  return adminRequest<AttendanceCleanupSettings>("/api/attendance/processing/cleanup-settings", { method: "PUT", token, body: settings });
+}
+
 /**
  * POST /api/attendance/daily-summaries/refresh
  * RefreshAttendanceDailySummariesDto — rebuild summaries and/or reprocess from raw logs.
