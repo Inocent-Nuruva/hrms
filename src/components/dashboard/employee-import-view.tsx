@@ -31,15 +31,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -51,6 +43,7 @@ import {
 import { BorderBeam } from "@/components/ui/border-beam";
 import { FluentSelect } from "@/components/ui/fluent-select";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
+import { FormField } from "@/components/ui/form-field";
 import { useFluentToastState } from "@/components/ui/use-fluent-toast-state";
 
 const IMPORT_MODES: Array<{
@@ -229,7 +222,7 @@ function ImportWizardStepper({
 
   return (
     <ol
-      className="grid grid-cols-3 border-b border-border bg-muted/[0.12]"
+      className="grid grid-cols-3 gap-2 sm:gap-3"
       aria-label="Bulk import steps"
     >
       {IMPORT_WIZARD_STEPS.map((step, index) => {
@@ -243,25 +236,18 @@ function ImportWizardStepper({
         const active = step.id === currentStep;
 
         return (
-          <li key={step.id} className="relative min-w-0">
-            {index > 0 ? (
-              <span
-                aria-hidden
-                className={cn(
-                  "absolute left-0 top-1/2 h-px w-3 -translate-x-1/2",
-                  complete || active ? "bg-primary/60" : "bg-border",
-                )}
-              />
-            ) : null}
+          <li key={step.id} className="min-w-0">
             <button
               type="button"
               className={cn(
-                "flex w-full min-w-0 items-center gap-2 px-2.5 py-2 text-left transition-colors sm:px-3",
+                "flex h-full w-full min-w-0 flex-col items-center gap-1.5 rounded-lg border px-2 py-3 text-center transition-colors sm:flex-row sm:items-center sm:gap-3 sm:px-4 sm:text-left",
                 active
-                  ? "bg-primary/[0.06]"
-                  : unlocked
-                    ? "hover:bg-muted/50"
-                    : "cursor-not-allowed opacity-45",
+                  ? "border-primary bg-primary/[0.06]"
+                  : complete
+                    ? "border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 dark:border-emerald-900/60 dark:bg-emerald-950/20"
+                    : unlocked
+                      ? "border-border bg-background hover:bg-muted/40"
+                      : "cursor-not-allowed border-border bg-background opacity-50",
               )}
               disabled={!unlocked}
               aria-current={active ? "step" : undefined}
@@ -269,30 +255,26 @@ function ImportWizardStepper({
             >
               <span
                 className={cn(
-                  "flex size-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold",
+                  "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                   complete
-                    ? "border-emerald-500 bg-emerald-500 text-white"
+                    ? "bg-emerald-500 text-white"
                     : active
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background text-muted-foreground",
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground",
                 )}
               >
-                {complete ? (
-                  <CheckCircle2Icon className="size-3.5" />
-                ) : (
-                  index + 1
-                )}
+                {complete ? <CheckCircle2Icon className="size-4" /> : index + 1}
               </span>
               <span className="min-w-0">
                 <span
                   className={cn(
-                    "block truncate text-[11px] font-semibold",
-                    active ? "text-foreground" : "text-muted-foreground",
+                    "block truncate text-xs font-semibold sm:text-sm",
+                    active ? "text-primary" : "text-foreground",
                   )}
                 >
                   {step.label}
                 </span>
-                <span className="hidden truncate text-[10px] text-muted-foreground sm:block">
+                <span className="hidden truncate text-xs text-muted-foreground md:block">
                   {step.description}
                 </span>
               </span>
@@ -301,6 +283,41 @@ function ImportWizardStepper({
         );
       })}
     </ol>
+  );
+}
+
+/** Numbered step heading inside the bulk import card. */
+function ImportStepHeading({
+  step,
+  title,
+  description,
+}: {
+  step: number;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <span
+        aria-hidden="true"
+        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-sm font-semibold text-primary"
+      >
+        {step}
+      </span>
+      <div className="min-w-0">
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+/** Step actions: a normal row on desktop, pinned to the bottom on phones and tablets. */
+function ImportStepActions({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="sticky bottom-0 z-20 -mx-4 -mb-5 flex items-center justify-between gap-2 border-t border-border bg-card/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-card/85 sm:-mx-6 sm:-mb-6 sm:px-6 lg:static lg:mx-0 lg:mb-0 lg:bg-transparent lg:px-0 lg:pb-0 lg:pt-5 lg:backdrop-blur-none">
+      {children}
+    </div>
   );
 }
 
@@ -2764,171 +2781,152 @@ export function EmployeeImportView() {
   }, []);
 
   return (
-    <div className="flex min-w-0 flex-col gap-4">
-      <Card className="min-w-0 gap-0 rounded-none border-border py-0 shadow-none">
-        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 border-b border-border/70 px-3 py-2.5">
-          <div className="min-w-0 space-y-1">
-            <CardTitle className="text-sm font-semibold tracking-tight">
-              Bulk import
-            </CardTitle>
-            <CardDescription className="text-[11px] leading-relaxed">
-              Upload one Excel file to add or update many employees at once.
-            </CardDescription>
+    <div className="flex min-w-0 flex-col gap-6">
+      <div className="flex min-w-0 flex-col">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <span
+              aria-hidden="true"
+              className="inline-flex size-10 shrink-0 items-center justify-center rounded-md bg-[#1D6F42]/10 text-[#1D6F42] dark:bg-emerald-500/10 dark:text-emerald-400"
+            >
+              <FileSpreadsheetIcon className="size-5" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-foreground">Bulk import</h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Upload one Excel file to add or update many employees at once.
+              </p>
+            </div>
           </div>
           <Button
             type="button"
-            size="sm"
             variant="outline"
-            className="h-8 shrink-0"
+            className="h-9 w-full shrink-0 sm:w-auto"
             onClick={handleTemplateDownload}
             disabled={downloadingTemplate || !token}
           >
             {downloadingTemplate ? (
-              <FluentLoadingIndicator className="size-3.5 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
             ) : (
-              <DownloadIcon className="size-3.5" />
+              <DownloadIcon className="size-4" />
             )}
-            Template
+            Download template
           </Button>
-        </CardHeader>
+        </div>
 
-        <CardContent className="space-y-4 px-3 py-3">
-          <input
-            ref={fileInputRef}
-            id="employee-import-file"
-            type="file"
-            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            className="hidden"
-            onChange={handleFileSelection}
-          />
+        <input
+          ref={fileInputRef}
+          id="employee-import-file"
+          type="file"
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          className="hidden"
+          onChange={handleFileSelection}
+        />
 
+        <div className="mt-5">
           <ImportWizardStepper
             currentStep={wizardStep}
             selectedFile={selectedFile}
             reviewReady={hasPreview || hasBatch}
             onStepChange={setWizardStep}
           />
+        </div>
 
-          {/* File picker */}
+        <div className="mt-6 flex flex-col gap-5 border-t border-border pt-6">
+          {/* Step 1: file picker */}
           {wizardStep === "upload" ? (
-            <div className="space-y-3">
-              <div
-                className={cn(
-                  "rounded-md px-3 py-3 transition-colors",
-                  selectedFile
-                    ? "bg-muted/40 ring-1 ring-border/60"
-                    : "bg-muted/25 ring-1 ring-dashed ring-border/70",
-                )}
-              >
-                {selectedFile ? (
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-[#1D6F42]/10 text-[#1D6F42] dark:bg-emerald-500/10 dark:text-emerald-400">
-                        <FileSpreadsheetIcon className="size-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium tracking-tight">
-                          {selectedFile.name}
-                        </p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {(selectedFile.size / 1024).toFixed(1)} KB · ready to
-                          validate
-                        </p>
-                      </div>
+            <>
+              <ImportStepHeading
+                step={1}
+                title="Upload the employee file"
+                description="Use the template so the columns match. Excel (.xlsx) only."
+              />
+              {selectedFile ? (
+                <div className="flex flex-col gap-3 rounded-lg border border-border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[#1D6F42]/10 text-[#1D6F42] dark:bg-emerald-500/10 dark:text-emerald-400">
+                      <FileSpreadsheetIcon className="size-5" />
                     </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-8"
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        Change
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 text-muted-foreground"
-                        onClick={clearSelectedFile}
-                        aria-label="Clear selected file"
-                      >
-                        <XIcon className="size-3.5" />
-                        Clear
-                      </Button>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">{selectedFile.name}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {(selectedFile.size / 1024).toFixed(1)} KB · ready to validate
+                      </p>
                     </div>
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-3 py-1 text-center sm:flex-row sm:py-0 sm:text-left">
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border/60">
-                      <UploadIcon className="size-5" />
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      <p className="text-sm font-medium tracking-tight">
-                        Choose an Excel file
-                      </p>
-                      <p className="text-xs leading-relaxed text-muted-foreground">
-                        Download the template first so columns match. Accepts
-                        .xlsx only.
-                      </p>
-                    </div>
+                  <div className="flex shrink-0 items-center gap-2">
                     <Button
                       type="button"
-                      size="sm"
-                      className="h-8 shrink-0"
+                      variant="outline"
+                      className="h-9 flex-1 sm:flex-none"
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      <UploadIcon className="size-3.5" />
-                      Select file
+                      Change file
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-9 text-muted-foreground"
+                      onClick={clearSelectedFile}
+                      aria-label="Clear selected file"
+                    >
+                      <XIcon className="size-4" />
+                      Clear
                     </Button>
                   </div>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-3">
-                <p className="text-xs text-muted-foreground">
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-input bg-background px-4 py-10 text-center transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-primary"
+                >
+                  <span className="inline-flex size-11 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <UploadIcon className="size-5" aria-hidden="true" />
+                  </span>
+                  <span className="text-sm font-medium text-foreground">
+                    Choose an Excel file <span className="text-primary">to upload</span>
+                  </span>
+                  <span className="max-w-sm text-xs text-muted-foreground">
+                    Download the template first so the columns match. Accepts .xlsx only.
+                  </span>
+                </button>
+              )}
+              <ImportStepActions>
+                <p className="hidden min-w-0 text-xs text-muted-foreground sm:block">
                   {selectedFile
-                    ? "Workbook selected. Continue to choose how it should be processed."
+                    ? "File selected. Continue to choose how it is processed."
                     : "Select the completed employee template to continue."}
                 </p>
                 <Button
                   type="button"
-                  size="sm"
-                  className="h-8"
+                  className="h-9 flex-1 px-4 sm:ml-auto sm:flex-none"
                   disabled={!selectedFile}
                   onClick={() => setWizardStep("configure")}
                 >
                   Continue
-                  <ArrowRightIcon className="size-3.5" />
+                  <ArrowRightIcon className="size-4" />
                 </Button>
-              </div>
-            </div>
+              </ImportStepActions>
+            </>
           ) : null}
 
-          {/* Options */}
+          {/* Step 2: options */}
           {wizardStep === "configure" ? (
-            <div className="space-y-4">
-              <div className="grid gap-4 lg:grid-cols-3">
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="employee-import-mode"
-                    className="text-[13px] font-medium"
-                  >
-                    Import mode
-                  </Label>
+            <>
+              <ImportStepHeading
+                step={2}
+                title="Choose how to import"
+                description="Decide what happens to existing employees and to rows with errors."
+              />
+              <div className="grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+                <FormField label="Import mode" htmlFor="employee-import-mode" hint={selectedMode?.hint}>
                   <Select
                     value={importMode}
-                    onValueChange={(value) =>
-                      setImportMode(value as EmployeeImportMode)
-                    }
+                    onValueChange={(value) => setImportMode(value as EmployeeImportMode)}
                   >
-                    <SelectTrigger
-                      id="employee-import-mode"
-                      className="h-9 w-full"
-                    >
-                      <SelectValue placeholder="Choose mode">
-                        {selectedMode?.label}
-                      </SelectValue>
+                    <SelectTrigger id="employee-import-mode" className="w-full">
+                      <SelectValue placeholder="Choose mode">{selectedMode?.label}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {IMPORT_MODES.map((mode) => (
@@ -2938,31 +2936,15 @@ export function EmployeeImportView() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    {selectedMode?.hint}
-                  </p>
-                </div>
+                </FormField>
 
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="employee-import-execution-mode"
-                    className="text-[13px] font-medium"
-                  >
-                    Processing
-                  </Label>
+                <FormField label="Processing" htmlFor="employee-import-execution-mode" hint={selectedExecutionMode?.hint}>
                   <Select
                     value={executionMode}
-                    onValueChange={(value) =>
-                      setExecutionMode(value as EmployeeImportExecutionMode)
-                    }
+                    onValueChange={(value) => setExecutionMode(value as EmployeeImportExecutionMode)}
                   >
-                    <SelectTrigger
-                      id="employee-import-execution-mode"
-                      className="h-9 w-full"
-                    >
-                      <SelectValue placeholder="Choose processing mode">
-                        {selectedExecutionMode?.label}
-                      </SelectValue>
+                    <SelectTrigger id="employee-import-execution-mode" className="w-full">
+                      <SelectValue placeholder="Choose processing mode">{selectedExecutionMode?.label}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {IMPORT_EXECUTION_MODES.map((mode) => (
@@ -2972,135 +2954,116 @@ export function EmployeeImportView() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    {selectedExecutionMode?.hint}
-                  </p>
-                </div>
+                </FormField>
 
-                <div className="space-y-2">
-                  <Label
+                <FormField
+                  label="Skip bad rows"
+                  htmlFor="employee-import-skip-bad-rows"
+                  hint="Keep valid people even when a few rows fail validation."
+                  className="sm:col-span-2 lg:col-span-1"
+                >
+                  <label
                     htmlFor="employee-import-skip-bad-rows"
-                    className="text-[13px] font-medium"
+                    className="flex min-h-[var(--hrms-control-height)] cursor-pointer items-center gap-3 rounded-[var(--hrms-control-radius)] border border-border bg-background px-3"
                   >
-                    Skip bad rows
-                  </Label>
-                  <div className="flex h-9 items-center gap-3">
                     <Switch
                       id="employee-import-skip-bad-rows"
                       checked={processValidRowsOnly}
-                      onCheckedChange={(checked) =>
-                        setProcessValidRowsOnly(checked)
-                      }
+                      onCheckedChange={(checked) => setProcessValidRowsOnly(checked)}
                       aria-label="Skip bad rows"
                     />
-                    <span className="text-xs text-muted-foreground">
-                      {processValidRowsOnly
-                        ? "On — import valid rows only"
-                        : "Off — fail if any row is invalid"}
+                    <span className="text-sm text-foreground">
+                      {processValidRowsOnly ? "Import valid rows only" : "Stop if any row is invalid"}
                     </span>
-                  </div>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    Keep valid people even when a few rows fail validation
-                  </p>
-                </div>
+                  </label>
+                </FormField>
               </div>
 
-              {/* Actions */}
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-3">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8"
-                  onClick={() => setWizardStep("upload")}
-                >
+              <ImportStepActions>
+                <Button type="button" variant="outline" className="h-9 px-3" onClick={() => setWizardStep("upload")}>
                   Back
                 </Button>
                 <Button
                   type="button"
-                  size="sm"
-                  className="h-8"
+                  className="h-9 flex-1 px-4 sm:flex-none"
                   onClick={handlePreview}
                   disabled={previewing || !token || !selectedFile}
                 >
                   {previewing ? (
-                    <FluentLoadingIndicator className="size-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="size-4 animate-spin" />
                   ) : (
-                    <FileSearchIcon className="size-3.5" />
+                    <FileSearchIcon className="size-4" />
                   )}
-                  Validate & review
+                  Validate and review
                 </Button>
-              </div>
-            </div>
+              </ImportStepActions>
+            </>
           ) : null}
 
+          {/* Step 3: review */}
           {wizardStep === "review" ? (
-            <div className="space-y-3">
-              <div className="grid gap-3 border border-border bg-muted/[0.12] p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <>
+              <ImportStepHeading
+                step={3}
+                title={hasBatch ? "Import result" : "Review and import"}
+                description={
+                  hasBatch
+                    ? "See what was created, updated or skipped."
+                    : "Check the validated rows, then confirm the import."
+                }
+              />
+              <div className="flex flex-col gap-4 rounded-lg border border-border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
-                    <FileSpreadsheetIcon className="size-4.5" />
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
+                    <FileSpreadsheetIcon className="size-5" />
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-foreground">
                       {selectedFile?.name ?? "Employee import"}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       {selectedMode?.label} · {selectedExecutionMode?.label} ·{" "}
-                      {processValidRowsOnly
-                        ? "Skip invalid rows"
-                        : "Stop on invalid rows"}
+                      {processValidRowsOnly ? "Skip invalid rows" : "Stop on invalid rows"}
                     </p>
                   </div>
                 </div>
                 {latestBatch?.overview || previewDetails?.overview ? (
                   <OverviewStatChips
-                    overview={
-                      (latestBatch?.overview ?? previewDetails?.overview)!
-                    }
-                    selectedCount={
-                      hasPreview ? selectedPreviewCount : undefined
-                    }
+                    overview={(latestBatch?.overview ?? previewDetails?.overview)!}
+                    selectedCount={hasPreview ? selectedPreviewCount : undefined}
                     variant={hasBatch ? "result" : "preview"}
                   />
                 ) : null}
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-3">
+              <ImportStepActions>
                 <Button
                   type="button"
-                  size="sm"
                   variant="outline"
-                  className="h-8"
+                  className="h-9 px-3"
                   onClick={() => setWizardStep("configure")}
                 >
-                  Back to options
+                  <span className="hidden sm:inline">Back to options</span>
+                  <span className="sm:hidden">Back</span>
                 </Button>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   <Button
                     type="button"
-                    size="sm"
                     variant="outline"
-                    className="h-8"
+                    className="hidden h-9 px-3 sm:inline-flex"
                     onClick={clearSelectedFile}
                   >
                     Start another
                   </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-8"
-                    onClick={() => setFlowDialogOpen(true)}
-                  >
-                    <FileSearchIcon className="size-3.5" />
+                  <Button type="button" className="h-9 px-4" onClick={() => setFlowDialogOpen(true)}>
+                    <FileSearchIcon className="size-4" />
                     {hasBatch ? "Open result" : "Open review"}
                   </Button>
                 </div>
-              </div>
-            </div>
+              </ImportStepActions>
+            </>
           ) : null}
-
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Modal flow: Preview dialog → Result dialog (compact, scannable) */}
       {showFlowDialog ? (
@@ -3123,9 +3086,10 @@ export function EmployeeImportView() {
             aria-busy={importInProgress || undefined}
             className={cn(
               "relative z-10 flex w-full flex-col gap-1.5 lg:flex-row lg:items-stretch lg:gap-0",
+              // Phones/tablets: the two panels stack, so the dialog scrolls.
               hasPreview && hasBatch
-                ? "max-h-[min(94vh,40rem)] max-w-6xl lg:overflow-hidden"
-                : "max-h-[min(94vh,36rem)] max-w-3xl overflow-hidden",
+                ? "max-h-[calc(100dvh-1rem)] max-w-6xl overflow-y-auto overscroll-contain lg:max-h-[min(94vh,40rem)] lg:overflow-hidden"
+                : "max-h-[calc(100dvh-1rem)] max-w-3xl overflow-hidden sm:max-h-[min(94vh,36rem)]",
             )}
           >
             {hasPreview ? (
@@ -3177,7 +3141,7 @@ export function EmployeeImportView() {
                             type="button"
                             size="sm"
                             variant="ghost"
-                            className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+                            className="size-9 shrink-0 p-0 text-muted-foreground hover:text-foreground sm:size-7"
                             onClick={closeFlowDialog}
                             disabled={importInProgress}
                             aria-label="Close"
@@ -3518,7 +3482,7 @@ export function EmployeeImportView() {
                             type="button"
                             size="sm"
                             variant="ghost"
-                            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                            className="size-9 p-0 text-muted-foreground hover:text-foreground sm:size-7"
                             onClick={closeFlowDialog}
                             disabled={importInProgress}
                             aria-label="Close"

@@ -484,6 +484,30 @@ const REGISTER_STEP_LABELS: Record<RegisterStep, string> = {
 }
 
 type RegisterStep = (typeof REGISTER_STEP_ORDER)[number]
+
+const REGISTER_STEP_TITLES: Record<RegisterStep, string> = {
+  details: "Employee details",
+  contacts: "Contacts",
+  addresses: "Addresses",
+  relatives: "Relatives and emergency contacts",
+  identifications: "Identification documents",
+  bankAccounts: "Bank and mobile money",
+  academic: "Academic qualifications",
+  professional: "Professional qualifications",
+  experience: "Work experience",
+}
+
+const REGISTER_STEP_DESCRIPTIONS: Record<RegisterStep, string> = {
+  details: "Name, personal details, placement and onboarding.",
+  contacts: "Phone and email. The first contact with both becomes the login.",
+  addresses: "Home and postal addresses.",
+  relatives: "Next of kin and who to call in an emergency.",
+  identifications: "National ID, TIN, passport and other documents.",
+  bankAccounts: "Where salary is paid. HR verifies it before payroll uses it.",
+  academic: "Schools, degrees and certificates.",
+  professional: "Professional programmes and certifications.",
+  experience: "Previous employers and roles.",
+}
 type DeleteEntityKind =
   "contact" | "address" | "relative" | "identification" | "bankAccount" | "academic" | "professional" | "experience"
 
@@ -3356,9 +3380,9 @@ export function EmployeeRegisterForm() {
   }
 
   return (
-    <div className="space-y-2">
+    <div className="flex min-w-0 flex-col">
       {savedRegisterDraft ? (
-        <Card className="border-primary/30 bg-primary/5">
+        <Card className="mx-4 mt-4 border-primary/30 bg-primary/5 sm:mx-6">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Continue where you left off?</CardTitle>
           </CardHeader>
@@ -3381,11 +3405,11 @@ export function EmployeeRegisterForm() {
         </Card>
       ) : null}
       {submitError ? (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <div role="alert" className="mx-4 mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive sm:mx-6">
           {submitError}
         </div>
       ) : null}
-      <div className="animate-card-entrance overflow-visible rounded-xl bg-card text-card-foreground ring-1 ring-foreground/10">
+      <div className="min-w-0">
         <Tabs
           value={currentStep}
           onValueChange={(value) => {
@@ -3400,26 +3424,32 @@ export function EmployeeRegisterForm() {
             }
           }}
         >
-          <div className="space-y-1.5 border-b border-border px-3 pt-3 pb-0 sm:px-4">
+          <div className="border-b border-border px-4 pt-4 sm:px-6 sm:pt-5">
             {!isInviteMode ? (
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[11px] font-medium text-muted-foreground">
-                  Step {Math.max(currentVisibleStepIndex + 1, 1)} of {visibleRegisterSteps.length}
-                  <span className="mx-1.5 text-muted-foreground/50">·</span>
-                  <span className="text-foreground">{REGISTER_STEP_LABELS[currentStep] ?? "Details"}</span>
-                </p>
-                <p
-                  key={stepProgress}
-                  className="text-sm font-semibold tabular-nums tracking-tight text-[var(--primary)] animate-fade-up"
-                  aria-label={`Registration progress ${animatedStepProgress} percent`}
-                >
-                  {animatedStepProgress}%
-                </p>
+              <div className="mb-3 flex flex-col gap-2">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Step {Math.max(currentVisibleStepIndex + 1, 1)} of {visibleRegisterSteps.length}
+                  </p>
+                  <p
+                    key={stepProgress}
+                    className="text-sm font-semibold tabular-nums tracking-tight text-[var(--primary)] animate-fade-up"
+                    aria-label={`Registration progress ${animatedStepProgress} percent`}
+                  >
+                    {animatedStepProgress}%
+                  </p>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                  <div
+                    className="h-full rounded-full bg-[var(--primary)] transition-[width] duration-300"
+                    style={{ width: `${animatedStepProgress}%` }}
+                  />
+                </div>
               </div>
             ) : null}
 
-            <div className="glass-scrollbar -mx-3 overflow-x-auto px-3 sm:-mx-4 sm:px-4">
-              <TabsList className="inline-flex h-auto min-w-full items-center gap-0.5 rounded-none border-0 border-b border-border/80 bg-transparent p-0">
+            <div className="glass-scrollbar -mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
+              <TabsList className="inline-flex h-auto min-w-full items-center gap-1 rounded-none border-0 bg-transparent p-0">
                 {visibleRegisterSteps.map((step, index) => {
                   const isActive = currentStep === step
                   const isVisited = currentVisibleStepIndex >= index
@@ -3431,7 +3461,7 @@ export function EmployeeRegisterForm() {
                       key={step}
                       value={step}
                       className={cn(
-                        "h-auto shrink-0 rounded-none border-0 border-b-2 bg-transparent px-2 py-1.5 text-xs font-medium whitespace-nowrap shadow-none transition-colors",
+                        "h-auto shrink-0 rounded-none border-0 border-b-2 bg-transparent px-3 py-2.5 text-sm font-medium whitespace-nowrap shadow-none transition-colors",
                         "data-active:bg-transparent data-active:shadow-none",
                         isActive && hasData
                           ? "border-[var(--primary)] text-[var(--primary)]"
@@ -3446,7 +3476,7 @@ export function EmployeeRegisterForm() {
                     >
                       <span
                         className={cn(
-                          "mr-1.5 inline-flex size-4 items-center justify-center rounded-full text-[10px] font-semibold leading-none",
+                          "mr-2 inline-flex size-5 items-center justify-center rounded-full text-[11px] font-semibold leading-none",
                           isActive && hasData
                             ? "bg-[var(--primary)] !text-white"
                             : isActive && !hasData
@@ -3468,10 +3498,21 @@ export function EmployeeRegisterForm() {
             </div>
           </div>
 
-          <div className="space-y-3 px-3 py-3 sm:px-4">
+          <div className="flex flex-col gap-5 px-4 py-5 sm:px-6 sm:py-6">
+            {!isInviteMode ? (
+              <div className="flex items-start gap-3">
+                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-sm font-semibold text-primary" aria-hidden="true">
+                  {Math.max(currentVisibleStepIndex + 1, 1)}
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold text-foreground">{REGISTER_STEP_TITLES[currentStep]}</h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{REGISTER_STEP_DESCRIPTIONS[currentStep]}</p>
+                </div>
+              </div>
+            ) : null}
             <TabsContents className="[&_[data-slot=input]]:h-9 [&_[data-slot=input]]:px-3 [&_[data-slot=select-trigger]]:h-9 [&_[data-slot=select-trigger]]:px-3 [&_[data-slot=select-content]]:p-1 [&_[data-slot=select-item]]:px-2.5 [&_[data-slot=select-item]]:py-1.5">
               <TabsContent value="details" className={getStepTransitionClass("details")}>
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-x-5 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
                   <Field
                     label="Employee Number (Optional)"
                     htmlFor="employeeNo"
@@ -3945,8 +3986,8 @@ export function EmployeeRegisterForm() {
 
                           <div className="grid gap-2">
                             <Label>Start onboarding automatically</Label>
-                            <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
-                              <div className="flex items-center gap-2">
+                            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2.5">
+                              <div className="min-w-0 flex items-center gap-2">
                                 <p className="text-sm font-medium text-foreground">Auto-start onboarding request</p>
                                 <InfoTooltip
                                   label="Auto-start onboarding help"
@@ -3956,14 +3997,15 @@ export function EmployeeRegisterForm() {
                               <Switch
                                 checked={onboarding.autoStart}
                                 onCheckedChange={(checked) => updateOnboardingField("autoStart", checked)}
+                              className="shrink-0"
                               />
                             </div>
                           </div>
 
                           <div className="grid gap-2">
                             <Label>Submit immediately</Label>
-                            <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
-                              <div className="flex items-center gap-2">
+                            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2.5">
+                              <div className="min-w-0 flex items-center gap-2">
                                 <p className="text-sm font-medium text-foreground">Submit onboarding after creation</p>
                                 <InfoTooltip
                                   label="Submit immediately help"
@@ -3973,6 +4015,7 @@ export function EmployeeRegisterForm() {
                               <Switch
                                 checked={onboarding.submit}
                                 onCheckedChange={(checked) => updateOnboardingField("submit", checked)}
+                              className="shrink-0"
                               />
                             </div>
                           </div>
@@ -4141,8 +4184,8 @@ export function EmployeeRegisterForm() {
                                 </SelectContent>
                               </Select>
                             </Field>
-                            <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-                              <div className="space-y-0.5">
+                            <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
+                              <div className="min-w-0 space-y-0.5">
                                 <p className="text-sm font-medium text-foreground">Primary shift</p>
                                 <p className="text-xs text-muted-foreground">
                                   Mark this assignment as the primary one for the employee
@@ -4151,6 +4194,7 @@ export function EmployeeRegisterForm() {
                               <Switch
                                 checked={onboarding.shiftAssignment.isPrimary}
                                 onCheckedChange={(checked) => updateShiftAssignmentField("isPrimary", checked)}
+                              className="shrink-0"
                               />
                             </div>
                           </div>
@@ -4439,7 +4483,7 @@ export function EmployeeRegisterForm() {
               </TabsContent>
 
               <TabsContent value="contacts" className={getStepTransitionClass("contacts")}>
-                <div className="grid gap-3">
+                <div className="grid gap-4">
                   <div className="flex items-center justify-between gap-2">
                     <Label>
                       Contacts
@@ -4479,7 +4523,7 @@ export function EmployeeRegisterForm() {
                       </Button>
                     </div>
                   ) : (
-                    <div className="grid gap-3">
+                    <div className="grid gap-4">
                       {contacts.map((contact, index) => (
                         <div key={`contact-${index}`} className="rounded-md border border-border/80 bg-card p-3">
                           <div className="flex items-start justify-between gap-3">
@@ -4539,7 +4583,7 @@ export function EmployeeRegisterForm() {
               </TabsContent>
 
               <TabsContent value="addresses" className={getStepTransitionClass("addresses")}>
-                <div className="grid gap-3">
+                <div className="grid gap-4">
                   <div className="flex items-center justify-between gap-2">
                     <Label>Addresses</Label>
                     {addresses.length > 0 ? (
@@ -4611,7 +4655,7 @@ export function EmployeeRegisterForm() {
               </TabsContent>
 
               <TabsContent value="relatives" className={getStepTransitionClass("relatives")}>
-                <div className="grid gap-3">
+                <div className="grid gap-4">
                   <div className="flex items-center justify-between gap-2">
                     <Label>Relatives</Label>
                     {relatives.length > 0 ? (
@@ -4685,7 +4729,7 @@ export function EmployeeRegisterForm() {
               </TabsContent>
 
               <TabsContent value="identifications" className={getStepTransitionClass("identifications")}>
-                <div className="grid gap-3">
+                <div className="grid gap-4">
                   <div className="flex items-center justify-between gap-2">
                     <Label>Identifications</Label>
                     {identifications.length > 0 ? (
@@ -4754,7 +4798,7 @@ export function EmployeeRegisterForm() {
               </TabsContent>
 
               <TabsContent value="bankAccounts" className={getStepTransitionClass("bankAccounts")}>
-                <div className="grid gap-3">
+                <div className="grid gap-4">
                   <div className="flex items-center justify-between gap-2">
                     <Label>Bank Accounts</Label>
                     {bankAccounts.length > 0 ? (
@@ -4828,7 +4872,7 @@ export function EmployeeRegisterForm() {
               </TabsContent>
 
               <TabsContent value="academic" className={getStepTransitionClass("academic")}>
-                <div className="grid gap-3">
+                <div className="grid gap-4">
                   <div className="flex items-center justify-between gap-2">
                     <Label>Academic Qualifications</Label>
                     <Button type="button" size="sm" variant="outline" onClick={addAcademic}>
@@ -4873,7 +4917,7 @@ export function EmployeeRegisterForm() {
               </TabsContent>
 
               <TabsContent value="professional" className={getStepTransitionClass("professional")}>
-                <div className="grid gap-3">
+                <div className="grid gap-4">
                   <div className="flex items-center justify-between gap-2">
                     <Label>Professional Qualifications</Label>
                     <Button type="button" size="sm" variant="outline" onClick={addProfessional}>
@@ -4913,7 +4957,7 @@ export function EmployeeRegisterForm() {
               </TabsContent>
 
               <TabsContent value="experience" className={getStepTransitionClass("experience")}>
-                <div className="grid gap-3">
+                <div className="grid gap-4">
                   <div className="flex items-center justify-between gap-2">
                     <Label>Experience Details</Label>
                     <Button type="button" size="sm" variant="outline" onClick={addExperience}>
@@ -4957,30 +5001,29 @@ export function EmployeeRegisterForm() {
               </TabsContent>
             </TabsContents>
 
-            <div className="flex flex-wrap items-center justify-between gap-1.5 border-t border-border/60 pt-2.5">
-              <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={clearForm}>
+            <div className="sticky bottom-0 z-20 -mx-4 -mb-5 flex items-center justify-between gap-2 border-t border-border bg-card/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-card/85 sm:-mx-6 sm:-mb-6 sm:px-6 lg:static lg:mx-0 lg:mb-0 lg:bg-transparent lg:px-0 lg:pb-0 lg:pt-5 lg:backdrop-blur-none">
+              <Button variant="outline" className="h-9 shrink-0 px-3" onClick={clearForm}>
                 Clear
               </Button>
-              <div className="flex items-center gap-1.5">
+              <div className="flex min-w-0 items-center gap-2">
                 {previousVisibleStep ? (
                   <Button
                     variant="outline"
-                    size="sm"
-                    className="h-8 px-2.5 text-xs"
+                    className="h-9 px-3"
                     onClick={() => {
                       setTabDirection("backward")
                       setCurrentStep(previousVisibleStep)
                     }}
                   >
-                    <ChevronLeftIcon className="size-3.5" />
-                    Previous
+                    <ChevronLeftIcon className="size-4" />
+                    <span className="hidden sm:inline">Previous</span>
+                    <span className="sm:hidden">Back</span>
                   </Button>
                 ) : null}
 
                 {nextVisibleStep ? (
                   <Button
-                    size="sm"
-                    className="h-8 px-2.5 text-xs"
+                    className="h-9 px-4"
                     onClick={() => {
                       if (!canAdvance(currentStep, nextVisibleStep)) return
                       setTabDirection("forward")
@@ -4988,12 +5031,11 @@ export function EmployeeRegisterForm() {
                     }}
                   >
                     Next
-                    <ChevronRightIcon className="size-3.5" />
+                    <ChevronRightIcon className="size-4" />
                   </Button>
                 ) : (
                   <Button
-                    size="sm"
-                    className="h-8 px-2.5 text-xs"
+                    className="h-9 px-4"
                     onClick={() => void submitRegistration()}
                     disabled={isSubmitting}
                   >
@@ -5084,7 +5126,7 @@ export function EmployeeRegisterForm() {
                 : "Update the selected address."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-x-5 gap-y-5 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="draft-address-type">Address Type</Label>
               <Select
@@ -5184,7 +5226,7 @@ export function EmployeeRegisterForm() {
                 : "Update the selected relative."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-x-5 gap-y-5 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="draft-relative-name">Full Name</Label>
               <Input
@@ -5285,7 +5327,7 @@ export function EmployeeRegisterForm() {
                 : "Update the selected identification record."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="draft-identification-type">Identification Type</Label>
               <Select
@@ -5363,7 +5405,7 @@ export function EmployeeRegisterForm() {
                 : "Update the selected bank account details."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-x-5 gap-y-5 sm:grid-cols-2">
             <div className="md:col-span-2 xl:col-span-3">
               <Label className="flex items-center gap-x-3 text-sm font-medium">
                 <Switch
@@ -5467,7 +5509,7 @@ export function EmployeeRegisterForm() {
               {editingAcademicIndex === null ? "Add Academic Qualification" : "Edit Academic Qualification"}
             </DialogTitle>
           </DialogHeader>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label>Country</Label>
               <CountrySelect
@@ -5545,7 +5587,7 @@ export function EmployeeRegisterForm() {
           <DialogHeader>
             <DialogTitle>{editingProfessionalIndex === null ? "Add Professional Qualification" : "Edit"}</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label>Country</Label>
               <CountrySelect
@@ -5616,7 +5658,7 @@ export function EmployeeRegisterForm() {
           <DialogHeader>
             <DialogTitle>{editingExperienceIndex === null ? "Add Experience" : "Edit Experience"}</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-3">
+          <div className="grid gap-4">
             <div>
               <Label>Company</Label>
               <Input
@@ -5638,7 +5680,7 @@ export function EmployeeRegisterForm() {
                 onChange={(e) => updateDraftExperience("responsibilities", e.target.value)}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <Label>Start</Label>
                 <DateInput
@@ -5686,7 +5728,7 @@ export function EmployeeRegisterForm() {
                 : "Update the selected contact."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3">
+          <div className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="draft-contact-type">Contact Type</Label>
               <Select

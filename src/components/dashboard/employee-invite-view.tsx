@@ -1008,7 +1008,7 @@ export function EmployeeInviteView() {
       : "Send invitation"
 
   return (
-    <div className="mx-auto w-full max-w-6xl pt-4 pb-28 sm:pt-6 lg:pb-10">
+    <div className="mx-auto w-full max-w-6xl pt-4 pb-6 sm:pt-6 lg:pb-10">
      <div className="flex flex-col rounded-lg border border-border bg-card">
       <PageHeader
         className="border-b border-border px-4 py-4 sm:px-6"
@@ -1334,7 +1334,7 @@ export function EmployeeInviteView() {
         </div>
 
         {/* Summary + send: a sticky side panel on large screens, a card on tablets and phones. */}
-        <aside className="min-w-0 rounded-b-lg border-t border-border bg-muted/20 lg:rounded-bl-none lg:border-l lg:border-t-0">
+        <aside className="min-w-0 border-t border-border bg-muted/20 lg:rounded-br-lg lg:border-l lg:border-t-0">
          <div className="flex flex-col divide-y divide-border lg:sticky lg:top-20">
           <section className="p-4 sm:p-6">
             <div className="flex items-center gap-3">
@@ -1421,8 +1421,8 @@ export function EmployeeInviteView() {
         </aside>
 
         {/* Phones and tablets: actions stay reachable at the bottom of the screen. */}
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden">
-          <div className="mx-auto flex max-w-6xl items-center gap-2 pb-[env(safe-area-inset-bottom)]">
+        <div className="sticky bottom-0 z-30 col-span-full rounded-b-lg border-t border-border bg-card/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/85 lg:hidden">
+          <div className="flex items-center gap-2 pb-[env(safe-area-inset-bottom)]">
             <Button
               type="button"
               appearance="outline"
