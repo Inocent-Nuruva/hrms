@@ -40,6 +40,8 @@ for asset in assets/alliance-logo.png favicon.ico; do
   [[ -s "$CONTENT_DIR/public/$asset" ]] || { echo "Missing release public/$asset" >&2; exit 1; }
 done
 [[ "$(tr -d '[:space:]' < "$CONTENT_DIR/REVISION")" == "$RELEASE_ID" ]] || { echo 'Artifact revision mismatch.' >&2; exit 1; }
+# Check native dependencies on the target host before switching the release.
+(cd "$CONTENT_DIR" && node -e "require('sharp'); require('next/package.json')")
 if [[ -n "$STAGING_DIR" ]]; then mv "$STAGING_DIR" "$RELEASE_DIR"; STAGING_DIR=''; fi
 install -m 0640 "$RELEASE_DIR/deploy/hrms-frontend/ecosystem.config.js" "$SHARED_DIR/ecosystem.config.js"
 chmod 0750 "$RELEASE_DIR"/deploy/hrms-frontend/*.sh

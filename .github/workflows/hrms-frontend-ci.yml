@@ -19,6 +19,8 @@ on:
       - "package.json"
       - "package-lock.json"
       - "next.config.ts"
+      - "scripts/ci-release-*.mjs"
+      - "scripts/check-release-routes*.mjs"
       - "tsconfig.json"
       - "vitest.config.ts"
       - "android/src/lib/mobile-notification-routing.ts"
@@ -43,7 +45,7 @@ permissions:
 jobs:
   validate-and-package:
     name: Validate and package HRMS frontend
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -83,6 +85,7 @@ jobs:
             echo "UAT must not use the Production domain hrms.alliance.co.tz (got '${current}'). Use /api." >&2
             exit 1
           fi
+          if [[ "$port" == 9999 ]]; then echo "APP_ENV=uat" >> "$GITHUB_ENV"; else echo "APP_ENV=production" >> "$GITHUB_ENV"; fi
           echo "NEXT_PUBLIC_API_BASE_URL=${current}" >> "$GITHUB_ENV"
           echo "Using API origin ${current} (UAT=9999, production=8888)"
       - name: Set up Node.js
@@ -141,6 +144,65 @@ jobs:
             echo "Configured NEXT_PUBLIC_API_BASE_URL was not embedded in the build."
             exit 1
           }
+          node scripts/check-release-routes.mjs .next/routes-manifest.json
+          node -e "require('./.next/standalone/node_modules/sharp'); require('./.next/standalone/node_modules/next/package.json')"
+
+      - name: Test release compatibility checks
+        run: node --test scripts/ci-release-manifest.check.mjs scripts/check-release-routes.check.mjs
+      - name: Package validated release
+        if: >-
+          (github.event_name == 'push' && github.ref == 'refs/heads/uat') ||
+          (github.event_name == 'workflow_dispatch' &&
+           ((github.ref == 'refs/heads/uat' && inputs.environment == 'uat') ||
+            (github.ref == 'refs/heads/master' && inputs.environment == 'production')))
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          release="$RUNNER_TEMP/hrms-frontend-release"
+          archive="$RUNNER_TEMP/hrms-frontend-release.tar.gz"
+          rm -rf "$release"; rm -f "$archive" "$archive.sha256"
+          mkdir -p "$release/deploy/hrms-frontend" "$release/.next"
+          cp -a .next/standalone/. "$release/"
+          # Copy contents: standalone output may already contain these directories.
+          # Copying the directory itself would create public/public or static/static.
+          mkdir -p "$release/.next/static" "$release/public"
+          cp -a .next/static/. "$release/.next/static/"
+          cp -a public/. "$release/public/"
+          cp -a deploy/hrms-frontend/. "$release/deploy/hrms-frontend/"
+          [[ -f "$release/.next/BUILD_ID" && -d "$release/.next/static/chunks" && -f "$release/public/icon.png" ]]
+          for file in \
+            deploy/hrms-frontend/deploy.sh \
+            deploy/hrms-frontend/stage-release.sh \
+            deploy/hrms-frontend/rollback.sh \
+            deploy/hrms-frontend/server-setup.sh \
+            deploy/hrms-frontend/production-edge.sh \
+            deploy/hrms-frontend/ecosystem.config.js \
+            deploy/hrms-frontend/check-assets.mjs \
+            deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf; do
+            [[ -f "$release/$file" ]] || { echo "Release is missing $file" >&2; exit 1; }
+          done
+          cmp public/assets/alliance-logo.png "$release/public/assets/alliance-logo.png"
+          cmp public/favicon.ico "$release/public/favicon.ico"
+          chmod 750 "$release"/deploy/hrms-frontend/*.sh
+          node scripts/ci-release-manifest.mjs create "$release/BUILD_MANIFEST.json"
+          printf '%s\n' "$GITHUB_SHA" > "$release/REVISION"
+          printf '%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > "$release/BUILT_AT"
+          tar -C "$release" -czf "$archive" .
+          (cd "$RUNNER_TEMP"; sha256sum hrms-frontend-release.tar.gz > hrms-frontend-release.tar.gz.sha256; sha256sum --check hrms-frontend-release.tar.gz.sha256)
+      - name: Upload validated release
+        if: >-
+          (github.event_name == 'push' && github.ref == 'refs/heads/uat') ||
+          (github.event_name == 'workflow_dispatch' &&
+           ((github.ref == 'refs/heads/uat' && inputs.environment == 'uat') ||
+            (github.ref == 'refs/heads/master' && inputs.environment == 'production')))
+        uses: actions/upload-artifact@v4
+        with:
+          name: hrms-frontend-release-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/hrms-frontend-release.tar.gz
+            ${{ runner.temp }}/hrms-frontend-release.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 3
 
   onboarding-ui:
     name: Onboarding desktop and mobile regression
@@ -258,52 +320,19 @@ jobs:
           fi
           echo "NEXT_PUBLIC_API_BASE_URL=${current}" >> "$GITHUB_ENV"
           echo "Using API origin ${current} (UAT=9999, production=8888)"
-      - name: Validate build runtime
+      - name: Download validated release
+        uses: actions/download-artifact@v4
+        with:
+          name: hrms-frontend-release-${{ github.sha }}
+          path: ${{ runner.temp }}
+      - name: Verify artifact runtime and build configuration
         shell: bash
         run: |
           set -Eeuo pipefail
-          (( $(node -p "process.versions.node.split('.')[0]") >= 22 ))
-          npm --version
-      - name: Exclude desktop and e2e-only tooling
-        run: npm pkg delete 'devDependencies.@playwright/test' devDependencies.electron devDependencies.electron-builder --package-lock=false
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-      - name: Build frontend
-        run: npm run build
-      - name: Build release artifact locally
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          release="$RUNNER_TEMP/hrms-frontend-release"
-          archive="$RUNNER_TEMP/hrms-frontend-release.tar.gz"
-          rm -rf "$release"; rm -f "$archive" "$archive.sha256"
-          mkdir -p "$release/deploy/hrms-frontend" "$release/.next"
-          cp -a .next/standalone/. "$release/"
-          # Copy contents: standalone output may already contain these directories.
-          # Copying the directory itself would create public/public or static/static.
-          mkdir -p "$release/.next/static" "$release/public"
-          cp -a .next/static/. "$release/.next/static/"
-          cp -a public/. "$release/public/"
-          cp -a deploy/hrms-frontend/. "$release/deploy/hrms-frontend/"
-          [[ -f "$release/.next/BUILD_ID" && -d "$release/.next/static/chunks" && -f "$release/public/icon.png" ]]
-          for file in \
-            deploy/hrms-frontend/deploy.sh \
-            deploy/hrms-frontend/stage-release.sh \
-            deploy/hrms-frontend/rollback.sh \
-            deploy/hrms-frontend/server-setup.sh \
-            deploy/hrms-frontend/production-edge.sh \
-            deploy/hrms-frontend/ecosystem.config.js \
-            deploy/hrms-frontend/check-assets.mjs \
-            deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf; do
-            [[ -f "$release/$file" ]] || { echo "Release is missing $file" >&2; exit 1; }
-          done
-          cmp public/assets/alliance-logo.png "$release/public/assets/alliance-logo.png"
-          cmp public/favicon.ico "$release/public/favicon.ico"
-          chmod 750 "$release"/deploy/hrms-frontend/*.sh
-          printf '%s\n' "$GITHUB_SHA" > "$release/REVISION"
-          printf '%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > "$release/BUILT_AT"
-          tar -C "$release" -czf "$archive" .
-          (cd "$RUNNER_TEMP"; sha256sum hrms-frontend-release.tar.gz > hrms-frontend-release.tar.gz.sha256; sha256sum --check hrms-frontend-release.tar.gz.sha256)
+          cd "$RUNNER_TEMP"
+          sha256sum --check hrms-frontend-release.tar.gz.sha256
+          tar -xOzf hrms-frontend-release.tar.gz ./BUILD_MANIFEST.json > hrms-frontend-build-manifest.json
+          node "$GITHUB_WORKSPACE/scripts/ci-release-manifest.mjs" verify hrms-frontend-build-manifest.json
       - name: Validate configuration and artifact
         id: deployment-policy
         shell: bash
