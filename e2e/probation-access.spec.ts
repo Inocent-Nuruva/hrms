@@ -110,32 +110,10 @@ for (const [name,width,height] of [["desktop",1366,900],["mobile",390,844]] as c
     await expect(page.getByText("Work meets the standard",{exact:true})).toBeVisible()
     await page.goto("/dashboard/probation/policies")
     await page.getByRole("tab",{name:"Letter templates",exact:true}).click()
-    await page.getByLabel("Letterhead").fill("People team")
-    await page.getByLabel("Letter body").fill("Your appointment is confirmed.")
-    await page.getByLabel("Signatory name").fill("HR reviewer")
-    await page.getByLabel("Signatory title").fill("People manager")
-    if (name === "desktop") { await page.getByLabel("Letterhead").scrollIntoViewIfNeeded(); await page.screenshot({ animations:"disabled",path:"handbook-images/probation-letter-template.png" }) }
-    await page.getByRole("button",{name:"Save template"}).click()
-    await expect(page.getByRole("status").filter({hasText:"Template saved."})).toBeVisible()
-    expect(saved["/api/probation/letter-templates"]).toMatchObject({letter_type:"CONFIRMATION",letterhead:"People team",signatory_name:"HR reviewer"})
-    await page.getByRole("combobox", { name: "Letter type" }).click()
-    await page.getByRole("option", { name: "Extension", exact: true }).click()
-    await expect(page.getByLabel("Letterhead")).toHaveValue("")
-    for (const type of ["EXTENSION","NOT_CONFIRMED"]) {
-      await page.getByRole("combobox", { name: "Letter type" }).click()
-      await page.getByRole("option", { name: type === "CONFIRMATION" ? "Confirmation" : type === "EXTENSION" ? "Extension" : "Non-confirmation", exact: true }).click()
-      await page.getByLabel("Letterhead").fill("People team")
-      await page.getByLabel("Letter body").fill("Decision " + type)
-      await page.getByLabel("Signatory name").fill("HR reviewer")
-      await page.getByLabel("Signatory title").fill("People manager")
-      await page.getByRole("button",{name:"Save template"}).click()
-      await expect(page.getByRole("status").filter({hasText:"Template saved."})).toBeVisible()
-      expect(saved["/api/probation/letter-templates"].letter_type).toBe(type)
-    }
-    await page.reload()
-    await page.getByRole("combobox", { name: "Letter type" }).click()
-    await page.getByRole("option", { name: "Confirmation", exact: true }).click()
-    await expect(page.getByLabel("Letterhead")).toHaveValue("People team")
+    const templatesLink = page.getByRole("link", { name: "Open letter templates" })
+    await expect(templatesLink).toBeVisible()
+    await expect(templatesLink).toHaveAttribute("href", "/dashboard/employees/letters?tab=templates&type=CONFIRMATION")
+    if (name === "desktop") { await templatesLink.scrollIntoViewIfNeeded(); await page.screenshot({ animations:"disabled",path:"handbook-images/probation-letter-template.png" }) }
   })
 }
 
