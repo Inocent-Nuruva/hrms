@@ -4,6 +4,8 @@ import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
 import * as React from "react";
 import {
@@ -377,10 +379,6 @@ const PAY_FREQUENCIES = [
   "WEEKLY",
 ] as const;
 
-const inputClass =
-  "h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background";
-const textareaClass =
-  "min-h-24 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background";
 const actionButtonClass =
   "inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted";
 const primaryButtonClass =
@@ -6198,8 +6196,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Parent run ID">
-            <input
-              className={inputClass}
+            <Input
               value={runForm.parentRunId}
               onChange={(event) =>
                 setRunForm((current) => ({
@@ -6211,8 +6208,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Offboarding request ID">
-            <input
-              className={inputClass}
+            <Input
               value={runForm.offboardingRequestId}
               onChange={(event) =>
                 setRunForm((current) => ({
@@ -6253,8 +6249,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Employee ID">
-            <input
-              className={inputClass}
+            <Input
               value={inputForm.employeeId}
               onChange={(event) =>
                 setInputForm((current) => ({
@@ -6266,8 +6261,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Component code">
-            <input
-              className={inputClass}
+            <Input
               value={inputForm.componentCode}
               onChange={(event) =>
                 setInputForm((current) => ({
@@ -6288,8 +6282,7 @@ export function PayrollOperationsView() {
             </datalist>
           </Field>
           <Field label="Amount">
-            <input
-              className={inputClass}
+            <Input
               value={inputForm.amount}
               onChange={(event) =>
                 setInputForm((current) => ({
@@ -6301,8 +6294,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Quantity">
-            <input
-              className={inputClass}
+            <Input
               value={inputForm.quantity}
               onChange={(event) =>
                 setInputForm((current) => ({
@@ -6314,8 +6306,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Rate">
-            <input
-              className={inputClass}
+            <Input
               value={inputForm.rate}
               onChange={(event) =>
                 setInputForm((current) => ({
@@ -6327,8 +6318,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Currency">
-            <input
-              className={inputClass}
+            <Input
               value={inputForm.currency}
               onChange={(event) =>
                 setInputForm((current) => ({
@@ -6356,8 +6346,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Source module">
-            <input
-              className={inputClass}
+            <Input
               value={inputForm.sourceModule}
               onChange={(event) =>
                 setInputForm((current) => ({
@@ -6369,8 +6358,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Source reference">
-            <input
-              className={inputClass}
+            <Input
               value={inputForm.sourceReference}
               onChange={(event) =>
                 setInputForm((current) => ({
@@ -6382,8 +6370,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Late adjustment reason">
-            <input
-              className={inputClass}
+            <Input
               value={inputForm.lateAdjustmentReason}
               onChange={(event) =>
                 setInputForm((current) => ({
@@ -6443,8 +6430,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Employee ID">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.employeeId}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6456,8 +6442,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Component code">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.componentCode}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6469,8 +6454,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Source reference">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.sourceReference}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6482,8 +6466,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Scheme code">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.schemeCode}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6495,8 +6478,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Source amount">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.sourceAmount}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6508,8 +6490,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Calculated amount">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.calculatedAmount}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6521,8 +6502,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Quantity">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.quantity}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6534,8 +6514,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Rate">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.rate}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6547,8 +6526,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Currency">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.currency}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6588,8 +6566,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Provider">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.providerKey}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6620,8 +6597,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Default component">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.componentCode}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6634,8 +6610,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Currency">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.currency}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6682,7 +6657,7 @@ export function PayrollOperationsView() {
           <div className="md:col-span-2">
             <Field label="CSV or TSV rows">
               <Textarea
-                className={cn(textareaClass, "min-h-40 font-mono text-xs")}
+                className="min-h-40 font-mono text-xs"
                 value={advancedForm.importText}
                 onChange={(event) =>
                   setAdvancedForm((current) => ({
@@ -6833,8 +6808,7 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Code">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.code}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6845,8 +6819,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Name">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.name}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6900,8 +6873,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Branch ID">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.branchId}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6913,8 +6885,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Department ID">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.departmentId}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6926,8 +6897,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Employee category">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.employeeCategory}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6939,8 +6909,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Employment type">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.employmentType}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6952,8 +6921,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Currency">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.currency}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6971,8 +6939,7 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Code">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.code}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6983,8 +6950,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Name">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.name}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6995,8 +6961,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Payroll component">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.componentCode}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7008,8 +6973,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Regular multiplier">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.regularMultiplier}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7020,8 +6984,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Weekend multiplier">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.weekendMultiplier}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7032,8 +6995,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Holiday multiplier">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.holidayMultiplier}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7044,8 +7006,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Minimum minutes">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.minimumMinutes}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7057,8 +7018,6 @@ export function PayrollOperationsView() {
           </Field>
           <Field label="Effective from">
             <DateInput
-              className={inputClass}
-
               value={advancedForm.effectiveFrom}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7070,8 +7029,6 @@ export function PayrollOperationsView() {
           </Field>
           <Field label="Effective to">
             <DateInput
-              className={inputClass}
-
               value={advancedForm.effectiveTo}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7089,8 +7046,7 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Code">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.code}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7101,8 +7057,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Name">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.name}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7132,8 +7087,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Payroll component">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.componentCode}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7166,8 +7120,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Default amount">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.defaultAmount}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7179,8 +7132,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Default rate">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.defaultRate}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7193,8 +7145,6 @@ export function PayrollOperationsView() {
           </Field>
           <Field label="Effective from">
             <DateInput
-              className={inputClass}
-
               value={advancedForm.effectiveFrom}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7206,8 +7156,6 @@ export function PayrollOperationsView() {
           </Field>
           <Field label="Effective to">
             <DateInput
-              className={inputClass}
-
               value={advancedForm.effectiveTo}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7226,8 +7174,7 @@ export function PayrollOperationsView() {
         <div className="space-y-5">
           <FormSection title="Employee">
             <Field label="Employee ID">
-              <input
-                className={inputClass}
+              <Input
                 value={profileForm.employeeId}
                 onChange={(event) =>
                   setProfileForm((current) => ({
@@ -7238,8 +7185,7 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Payroll number">
-              <input
-                className={inputClass}
+              <Input
                 value={profileForm.payrollNumber}
                 onChange={(event) =>
                   setProfileForm((current) => ({
@@ -7251,8 +7197,6 @@ export function PayrollOperationsView() {
             </Field>
             <Field label="Effective from">
               <DateInput
-                className={inputClass}
-
                 value={profileForm.effectiveFrom}
                 onChange={(event) =>
                   setProfileForm((current) => ({
@@ -7264,8 +7208,6 @@ export function PayrollOperationsView() {
             </Field>
             <Field label="Effective to">
               <DateInput
-                className={inputClass}
-
                 value={profileForm.effectiveTo}
                 onChange={(event) =>
                   setProfileForm((current) => ({
@@ -7299,8 +7241,7 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Primary bank account ID">
-              <input
-                className={inputClass}
+              <Input
                 value={profileForm.primaryBankAccountId}
                 onChange={(event) =>
                   setProfileForm((current) => ({
@@ -7311,8 +7252,7 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Currency">
-              <input
-                className={inputClass}
+              <Input
                 value={profileForm.currency}
                 onChange={(event) =>
                   setProfileForm((current) => ({
@@ -7342,8 +7282,7 @@ export function PayrollOperationsView() {
           </FormSection>
           <FormSection title="Tax and statutory">
             <Field label="TIN">
-              <input
-                className={inputClass}
+              <Input
                 value={profileForm.taxpayerIdentificationNumber}
                 onChange={(event) =>
                   setProfileForm((current) => ({
@@ -7354,8 +7293,7 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Social security scheme">
-              <input
-                className={inputClass}
+              <Input
                 value={profileForm.socialSecuritySchemeCode}
                 onChange={(event) =>
                   setProfileForm((current) => ({
@@ -7366,8 +7304,7 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Social security number">
-              <input
-                className={inputClass}
+              <Input
                 value={profileForm.socialSecurityNumber}
                 onChange={(event) =>
                   setProfileForm((current) => ({
@@ -7378,8 +7315,7 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Health scheme">
-              <input
-                className={inputClass}
+              <Input
                 value={profileForm.healthInsuranceSchemeCode}
                 onChange={(event) =>
                   setProfileForm((current) => ({
@@ -7390,8 +7326,7 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Health number">
-              <input
-                className={inputClass}
+              <Input
                 value={profileForm.healthInsuranceNumber}
                 onChange={(event) =>
                   setProfileForm((current) => ({
@@ -7402,8 +7337,7 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Tax residency code">
-              <input
-                className={inputClass}
+              <Input
                 value={profileForm.taxResidencyCode}
                 onChange={(event) =>
                   setProfileForm((current) => ({
@@ -7414,8 +7348,7 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Tax category">
-              <input
-                className={inputClass}
+              <Input
                 value={profileForm.employmentTaxCategory}
                 onChange={(event) =>
                   setProfileForm((current) => ({
@@ -7463,7 +7396,6 @@ export function PayrollOperationsView() {
             </Field>
             <Field label="Hold reason" className="md:col-span-2">
               <Textarea
-                className={textareaClass}
                 value={profileForm.payrollHoldReason}
                 onChange={(event) =>
                   setProfileForm((current) => ({
@@ -7504,8 +7436,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Year">
-            <input
-              className={inputClass}
+            <Input
               value={periodForm.year}
               onChange={(event) =>
                 setPeriodForm((current) => ({
@@ -7516,8 +7447,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Month">
-            <input
-              className={inputClass}
+            <Input
               value={periodForm.month}
               onChange={(event) =>
                 setPeriodForm((current) => ({
@@ -7535,8 +7465,7 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Code">
-            <input
-              className={inputClass}
+            <Input
               value={componentForm.code}
               onChange={(event) =>
                 setComponentForm((current) => ({
@@ -7547,8 +7476,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Name">
-            <input
-              className={inputClass}
+            <Input
               value={componentForm.name}
               onChange={(event) =>
                 setComponentForm((current) => ({
@@ -7627,8 +7555,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Taxable percentage">
-            <input
-              className={inputClass}
+            <Input
               value={componentForm.taxablePercentage}
               onChange={(event) =>
                 setComponentForm((current) => ({
@@ -7639,8 +7566,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Calculation order">
-            <input
-              className={inputClass}
+            <Input
               value={componentForm.calculationOrder}
               onChange={(event) =>
                 setComponentForm((current) => ({
@@ -7688,8 +7614,7 @@ export function PayrollOperationsView() {
         <div className="grid gap-3 md:grid-cols-2">
           {!editingCalendar ? (
             <Field label="Code">
-              <input
-                className={inputClass}
+              <Input
                 value={calendarForm.code}
                 onChange={(event) =>
                   setCalendarForm((current) => ({
@@ -7701,8 +7626,7 @@ export function PayrollOperationsView() {
             </Field>
           ) : null}
           <Field label="Name">
-            <input
-              className={inputClass}
+            <Input
               value={calendarForm.name}
               onChange={(event) =>
                 setCalendarForm((current) => ({
@@ -7713,8 +7637,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Cut-off day">
-            <input
-              className={inputClass}
+            <Input
               value={calendarForm.cutoffDay}
               onChange={(event) =>
                 setCalendarForm((current) => ({
@@ -7725,8 +7648,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Payment day">
-            <input
-              className={inputClass}
+            <Input
               value={calendarForm.paymentDay}
               onChange={(event) =>
                 setCalendarForm((current) => ({
@@ -7737,8 +7659,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Timezone">
-            <input
-              className={inputClass}
+            <Input
               value={calendarForm.timezone}
               onChange={(event) =>
                 setCalendarForm((current) => ({
@@ -7749,8 +7670,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Currency">
-            <input
-              className={inputClass}
+            <Input
               value={calendarForm.currency}
               onChange={(event) =>
                 setCalendarForm((current) => ({
@@ -7780,7 +7700,6 @@ export function PayrollOperationsView() {
           {editingCalendar ? (
             <Field label="Reason for change" className="md:col-span-2">
               <Textarea
-                className={textareaClass}
                 value={calendarForm.reason}
                 onChange={(event) =>
                   setCalendarForm((current) => ({
@@ -7815,8 +7734,7 @@ export function PayrollOperationsView() {
           ) : null}
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="Code">
-              <input
-                className={inputClass}
+              <Input
                 disabled={Boolean(editingStructure)}
                 value={structureForm.code}
                 onChange={(event) =>
@@ -7828,8 +7746,7 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Name">
-              <input
-                className={inputClass}
+              <Input
                 value={structureForm.name}
                 onChange={(event) =>
                   setStructureForm((current) => ({
@@ -7840,8 +7757,7 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Currency">
-              <input
-                className={inputClass}
+              <Input
                 disabled={linesLocked}
                 value={structureForm.currency}
                 onChange={(event) =>
@@ -7854,8 +7770,6 @@ export function PayrollOperationsView() {
             </Field>
             <Field label="Effective from">
               <DateInput
-                className={inputClass}
-
                 disabled={linesLocked}
                 value={structureForm.effectiveFrom}
                 onChange={(event) =>
@@ -7868,8 +7782,6 @@ export function PayrollOperationsView() {
             </Field>
             <Field label="Effective to">
               <DateInput
-                className={inputClass}
-
                 value={structureForm.effectiveTo}
                 onChange={(event) =>
                   setStructureForm((current) => ({
@@ -7881,7 +7793,6 @@ export function PayrollOperationsView() {
             </Field>
             <Field label="Description" className="md:col-span-2">
               <Textarea
-                className={textareaClass}
                 value={structureForm.description}
                 onChange={(event) =>
                   setStructureForm((current) => ({
@@ -7950,8 +7861,7 @@ export function PayrollOperationsView() {
                   />
                 </Field>
                 <Field label="Default amount">
-                  <input
-                    className={inputClass}
+                  <Input
                     value={line.defaultAmount}
                     onChange={(event) =>
                       setStructureForm((current) => ({
@@ -7967,8 +7877,7 @@ export function PayrollOperationsView() {
                   />
                 </Field>
                 <Field label="Default rate">
-                  <input
-                    className={inputClass}
+                  <Input
                     value={line.defaultRate}
                     onChange={(event) =>
                       setStructureForm((current) => ({
@@ -7984,8 +7893,7 @@ export function PayrollOperationsView() {
                   />
                 </Field>
                 <Field label="Order">
-                  <input
-                    className={inputClass}
+                  <Input
                     value={line.calculationOrder}
                     onChange={(event) =>
                       setStructureForm((current) => ({
@@ -8032,8 +7940,7 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Code">
-            <input
-              className={inputClass}
+            <Input
               value={schemeForm.code}
               onChange={(event) =>
                 setSchemeForm((current) => ({
@@ -8044,8 +7951,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Name">
-            <input
-              className={inputClass}
+            <Input
               value={schemeForm.name}
               onChange={(event) =>
                 setSchemeForm((current) => ({
@@ -8073,8 +7979,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Jurisdiction">
-            <input
-              className={inputClass}
+            <Input
               value={schemeForm.jurisdiction}
               onChange={(event) =>
                 setSchemeForm((current) => ({
@@ -8092,8 +7997,7 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Code">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.code}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8104,8 +8008,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Name">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.name}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8155,8 +8058,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Branch ID">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.branchId}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8168,8 +8070,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Department ID">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.departmentId}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8181,8 +8082,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Employee category">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.employeeCategory}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8194,8 +8094,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Employment type">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.employmentType}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8207,8 +8106,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Currency">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.currency}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8248,8 +8146,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Employee ID">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.employeeId}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8261,8 +8158,6 @@ export function PayrollOperationsView() {
           </Field>
           <Field label="Effective from">
             <DateInput
-              className={inputClass}
-
               value={advancedForm.effectiveFrom}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8274,8 +8169,6 @@ export function PayrollOperationsView() {
           </Field>
           <Field label="Effective to">
             <DateInput
-              className={inputClass}
-
               value={advancedForm.effectiveTo}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8293,8 +8186,7 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Code">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.code}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8305,8 +8197,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Name">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.name}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8317,8 +8208,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Component code">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.componentCode}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8330,8 +8220,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Regular multiplier">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.regularMultiplier}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8342,8 +8231,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Weekend multiplier">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.weekendMultiplier}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8354,8 +8242,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Holiday multiplier">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.holidayMultiplier}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8366,8 +8253,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Minimum minutes">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.minimumMinutes}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8379,8 +8265,6 @@ export function PayrollOperationsView() {
           </Field>
           <Field label="Effective from">
             <DateInput
-              className={inputClass}
-
               value={advancedForm.effectiveFrom}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8392,8 +8276,6 @@ export function PayrollOperationsView() {
           </Field>
           <Field label="Effective to">
             <DateInput
-              className={inputClass}
-
               value={advancedForm.effectiveTo}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8411,8 +8293,7 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Code">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.code}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8423,8 +8304,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Name">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.name}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8454,8 +8334,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Component code">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.componentCode}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8489,8 +8368,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Default amount">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.defaultAmount}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8502,8 +8380,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Default rate">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.defaultRate}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8516,8 +8393,6 @@ export function PayrollOperationsView() {
           </Field>
           <Field label="Effective from">
             <DateInput
-              className={inputClass}
-
               value={advancedForm.effectiveFrom}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8529,8 +8404,6 @@ export function PayrollOperationsView() {
           </Field>
           <Field label="Effective to">
             <DateInput
-              className={inputClass}
-
               value={advancedForm.effectiveTo}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8548,8 +8421,7 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Code">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.code}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8560,8 +8432,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Name">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.name}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8572,8 +8443,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Leave type code">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.leaveTypeCode}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8585,8 +8455,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Paid percentage">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.paidPercentage}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8597,8 +8466,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Paid days cap">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.paidDaysCap}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8610,8 +8478,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Half pay after days">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.halfPayAfterDays}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8623,8 +8490,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Unpaid after days">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.unpaidAfterDays}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8636,8 +8502,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Carry forward cap">
-            <input
-              className={inputClass}
+            <Input
               value={advancedForm.carryForwardCapDays}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8650,8 +8515,6 @@ export function PayrollOperationsView() {
           </Field>
           <Field label="Effective from">
             <DateInput
-              className={inputClass}
-
               value={advancedForm.effectiveFrom}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8663,8 +8526,6 @@ export function PayrollOperationsView() {
           </Field>
           <Field label="Effective to">
             <DateInput
-              className={inputClass}
-
               value={advancedForm.effectiveTo}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -8681,8 +8542,7 @@ export function PayrollOperationsView() {
     return (
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="Component code">
-          <input
-            className={inputClass}
+          <Input
             value={mappingForm.componentCode}
             onChange={(event) =>
               setMappingForm((current) => ({
@@ -8702,8 +8562,7 @@ export function PayrollOperationsView() {
           </datalist>
         </Field>
         <Field label="Debit account code">
-          <input
-            className={inputClass}
+          <Input
             value={mappingForm.debitAccountCode}
             onChange={(event) =>
               setMappingForm((current) => ({
@@ -8714,8 +8573,7 @@ export function PayrollOperationsView() {
           />
         </Field>
         <Field label="Credit account code">
-          <input
-            className={inputClass}
+          <Input
             value={mappingForm.creditAccountCode}
             onChange={(event) =>
               setMappingForm((current) => ({
@@ -8727,7 +8585,6 @@ export function PayrollOperationsView() {
         </Field>
         <Field label="Debit by project">
           <Textarea
-            className={textareaClass}
             value={mappingForm.projectDebitMap}
             onChange={(event) =>
               setMappingForm((current) => ({
@@ -8740,7 +8597,6 @@ export function PayrollOperationsView() {
         </Field>
         <Field label="Credit by project">
           <Textarea
-            className={textareaClass}
             value={mappingForm.projectCreditMap}
             onChange={(event) =>
               setMappingForm((current) => ({
@@ -8753,7 +8609,6 @@ export function PayrollOperationsView() {
         </Field>
         <Field label="Debit by cost center">
           <Textarea
-            className={textareaClass}
             value={mappingForm.costCenterDebitMap}
             onChange={(event) =>
               setMappingForm((current) => ({
@@ -8766,7 +8621,6 @@ export function PayrollOperationsView() {
         </Field>
         <Field label="Credit by cost center">
           <Textarea
-            className={textareaClass}
             value={mappingForm.costCenterCreditMap}
             onChange={(event) =>
               setMappingForm((current) => ({
@@ -8779,7 +8633,6 @@ export function PayrollOperationsView() {
         </Field>
         <Field label="Debit by department">
           <Textarea
-            className={textareaClass}
             value={mappingForm.departmentDebitMap}
             onChange={(event) =>
               setMappingForm((current) => ({
@@ -8792,7 +8645,6 @@ export function PayrollOperationsView() {
         </Field>
         <Field label="Credit by department">
           <Textarea
-            className={textareaClass}
             value={mappingForm.departmentCreditMap}
             onChange={(event) =>
               setMappingForm((current) => ({
@@ -8805,7 +8657,6 @@ export function PayrollOperationsView() {
         </Field>
         <Field label="Debit by branch">
           <Textarea
-            className={textareaClass}
             value={mappingForm.branchDebitMap}
             onChange={(event) =>
               setMappingForm((current) => ({
@@ -8818,7 +8669,6 @@ export function PayrollOperationsView() {
         </Field>
         <Field label="Credit by branch">
           <Textarea
-            className={textareaClass}
             value={mappingForm.branchCreditMap}
             onChange={(event) =>
               setMappingForm((current) => ({
@@ -8831,7 +8681,6 @@ export function PayrollOperationsView() {
         </Field>
         <Field label="Debit by category">
           <Textarea
-            className={textareaClass}
             value={mappingForm.categoryDebitMap}
             onChange={(event) =>
               setMappingForm((current) => ({
@@ -8844,7 +8693,6 @@ export function PayrollOperationsView() {
         </Field>
         <Field label="Credit by category">
           <Textarea
-            className={textareaClass}
             value={mappingForm.categoryCreditMap}
             onChange={(event) =>
               setMappingForm((current) => ({
@@ -8857,7 +8705,6 @@ export function PayrollOperationsView() {
         </Field>
         <Field label="Debit by payroll group">
           <Textarea
-            className={textareaClass}
             value={mappingForm.groupDebitMap}
             onChange={(event) =>
               setMappingForm((current) => ({
@@ -8870,7 +8717,6 @@ export function PayrollOperationsView() {
         </Field>
         <Field label="Credit by payroll group">
           <Textarea
-            className={textareaClass}
             value={mappingForm.groupCreditMap}
             onChange={(event) =>
               setMappingForm((current) => ({
@@ -8883,7 +8729,6 @@ export function PayrollOperationsView() {
         </Field>
         <Field label="Dimensions JSON" className="md:col-span-2">
           <Textarea
-            className={textareaClass}
             value={mappingForm.dimensionsJson}
             onChange={(event) =>
               setMappingForm((current) => ({
@@ -9902,8 +9747,7 @@ export function PayrollOperationsView() {
                 />
               </Field>
               <Field label="Year (optional)">
-                <input
-                  className={inputClass}
+                <Input
                   value={advancedForm.reportYear}
                   onChange={(event) =>
                     setAdvancedForm((current) => ({
@@ -9914,8 +9758,7 @@ export function PayrollOperationsView() {
                 />
               </Field>
               <Field label="Filter results (optional)">
-                <input
-                  className={inputClass}
+                <Input
                   value={reportSearch}
                   onChange={(event) => setReportSearch(event.target.value)}
                   maxLength={100}
@@ -10065,8 +9908,7 @@ export function PayrollOperationsView() {
                           className="grid gap-2 rounded-md border border-border bg-background p-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_0.8fr_0.8fr_auto] xl:items-end"
                         >
                           <Field label={`Employee number · row ${index + 1}`}>
-                            <input
-                              className={inputClass}
+                            <Input
                               value={row.employeeNo}
                               placeholder="e.g. EMP-0101"
                               onChange={(event) =>
@@ -10084,8 +9926,7 @@ export function PayrollOperationsView() {
                             />
                           </Field>
                           <Field label="Masked bank account">
-                            <input
-                              className={inputClass}
+                            <Input
                               value={row.accountMasked}
                               placeholder="Optional · ****1234"
                               onChange={(event) =>
@@ -10103,8 +9944,7 @@ export function PayrollOperationsView() {
                             />
                           </Field>
                           <Field label="Bank reference">
-                            <input
-                              className={inputClass}
+                            <Input
                               value={row.reference}
                               placeholder="Optional · e.g. PAY-1001"
                               onChange={(event) =>
@@ -10122,8 +9962,7 @@ export function PayrollOperationsView() {
                             />
                           </Field>
                           <Field label="Amount paid">
-                            <input
-                              className={inputClass}
+                            <Input
                               type="number"
                               min="0"
                               step="0.01"
@@ -10279,8 +10118,7 @@ export function PayrollOperationsView() {
                   </summary>
                   <div className="mt-3 grid gap-3 md:grid-cols-3">
                     <Field label="Bank batch ID">
-                      <input
-                        className={inputClass}
+                      <Input
                         value={advancedForm.bankBatchId}
                         onChange={(event) =>
                           setAdvancedForm((current) => ({
@@ -10292,8 +10130,7 @@ export function PayrollOperationsView() {
                       />
                     </Field>
                     <Field label="Payment reference">
-                      <input
-                        className={inputClass}
+                      <Input
                         value={advancedForm.paymentReference}
                         onChange={(event) =>
                           setAdvancedForm((current) => ({
@@ -10306,7 +10143,6 @@ export function PayrollOperationsView() {
                     </Field>
                     <Field label="Payment date">
                       <DateInput
-                        className={inputClass}
                         value={advancedForm.paymentDate}
                         onChange={(event) =>
                           setAdvancedForm((current) => ({
@@ -10365,8 +10201,7 @@ export function PayrollOperationsView() {
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Journal batch ID">
-                  <input
-                    className={inputClass}
+                  <Input
                     value={advancedForm.journalBatchId}
                     onChange={(event) =>
                       setAdvancedForm((current) => ({
@@ -10377,8 +10212,7 @@ export function PayrollOperationsView() {
                   />
                 </Field>
                 <Field label="Ledger run ID (optional)">
-                  <input
-                    className={inputClass}
+                  <Input
                     value={advancedForm.journalRunId}
                     onChange={(event) =>
                       setAdvancedForm((current) => ({
@@ -10390,8 +10224,7 @@ export function PayrollOperationsView() {
                   />
                 </Field>
                 <Field label="Optional ERP provider">
-                  <input
-                    className={inputClass}
+                  <Input
                     value={advancedForm.providerKey}
                     onChange={(event) =>
                       setAdvancedForm((current) => ({
@@ -10403,8 +10236,7 @@ export function PayrollOperationsView() {
                   />
                 </Field>
                 <Field label="External reference">
-                  <input
-                    className={inputClass}
+                  <Input
                     value={advancedForm.externalReference}
                     onChange={(event) =>
                       setAdvancedForm((current) => ({
@@ -11106,16 +10938,15 @@ export function PayrollOperationsView() {
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
               <label className="flex cursor-pointer gap-3 rounded-lg border border-border p-4">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={readBoolean(securityPolicy, [
                     "allow_verified_login",
                   ])}
                   disabled={!canMutatePayroll || securityPolicySaving}
-                  onChange={(event) =>
+                  onCheckedChange={(checked) =>
                     setSecurityPolicy((current) => ({
                       ...current,
-                      allow_verified_login: event.target.checked,
+                      allow_verified_login: checked,
                     }))
                   }
                 />
@@ -11130,16 +10961,15 @@ export function PayrollOperationsView() {
                 </span>
               </label>
               <label className="flex cursor-pointer gap-3 rounded-lg border border-border p-4">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={readBoolean(securityPolicy, [
                     "allow_fresh_authenticator",
                   ])}
                   disabled={!canMutatePayroll || securityPolicySaving}
-                  onChange={(event) =>
+                  onCheckedChange={(checked) =>
                     setSecurityPolicy((current) => ({
                       ...current,
-                      allow_fresh_authenticator: event.target.checked,
+                      allow_fresh_authenticator: checked,
                     }))
                   }
                 />
@@ -11157,7 +10987,6 @@ export function PayrollOperationsView() {
           )}
           <Field label="Reason for policy change">
             <Textarea
-              className={textareaClass}
               value={securityPolicyReason}
               disabled={!canMutatePayroll || securityPolicySaving}
               onChange={(event) => setSecurityPolicyReason(event.target.value)}
@@ -11487,8 +11316,7 @@ export function PayrollOperationsView() {
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-3 overflow-hidden">
-            <input
-              className={inputClass}
+            <Input
               value={issueSearch}
               onChange={(event) => setIssueSearch(event.target.value)}
               placeholder="Search these issues"
@@ -11581,7 +11409,6 @@ export function PayrollOperationsView() {
           </DialogHeader>
           <Field label="Effective from">
             <DateInput
-              className={inputClass}
               value={versionEffectiveFrom}
               onChange={(event) => setVersionEffectiveFrom(event.target.value)}
             />
@@ -11728,8 +11555,7 @@ export function PayrollOperationsView() {
             </DialogDescription>
           </DialogHeader>
           <Field label="Fresh six-digit authenticator code (optional for verified login)">
-            <input
-              className={inputClass}
+            <Input
               inputMode="numeric"
               autoComplete="one-time-code"
               maxLength={6}
@@ -11796,7 +11622,6 @@ export function PayrollOperationsView() {
           <div className="grid gap-3">
             <Field label="Cut-off date">
               <DateInput
-                className={inputClass}
                 value={periodDatesForm.cutoffDate}
                 onChange={(event) =>
                   setPeriodDatesForm((current) => ({
@@ -11808,7 +11633,6 @@ export function PayrollOperationsView() {
             </Field>
             <Field label="Payment date">
               <DateInput
-                className={inputClass}
                 value={periodDatesForm.paymentDate}
                 onChange={(event) =>
                   setPeriodDatesForm((current) => ({
@@ -11820,7 +11644,6 @@ export function PayrollOperationsView() {
             </Field>
             <Field label="Reason for change">
               <Textarea
-                className={textareaClass}
                 value={periodDatesForm.reason}
                 onChange={(event) =>
                   setPeriodDatesForm((current) => ({
@@ -11911,8 +11734,7 @@ export function PayrollOperationsView() {
                 />
               </Field>
               <Field label="Version number">
-                <input
-                  className={inputClass}
+                <Input
                   value={ruleForm.versionNumber}
                   onChange={(event) =>
                     setRuleForm((current) => ({
@@ -11941,8 +11763,6 @@ export function PayrollOperationsView() {
               </Field>
               <Field label="Effective from">
                 <DateInput
-                  className={inputClass}
-
                   value={ruleForm.effectiveFrom}
                   onChange={(event) =>
                     setRuleForm((current) => ({
@@ -11954,8 +11774,6 @@ export function PayrollOperationsView() {
               </Field>
               <Field label="Effective to">
                 <DateInput
-                  className={inputClass}
-
                   value={ruleForm.effectiveTo}
                   onChange={(event) =>
                     setRuleForm((current) => ({
@@ -11966,8 +11784,7 @@ export function PayrollOperationsView() {
                 />
               </Field>
               <Field label="Official source / evidence reference">
-                <input
-                  className={inputClass}
+                <Input
                   value={ruleForm.sourceReference}
                   onChange={(event) =>
                     setRuleForm((current) => ({
@@ -11979,8 +11796,7 @@ export function PayrollOperationsView() {
                 />
               </Field>
               <Field label="Employee rate">
-                <input
-                  className={inputClass}
+                <Input
                   value={ruleForm.employeeRate}
                   onChange={(event) =>
                     setRuleForm((current) => ({
@@ -11991,8 +11807,7 @@ export function PayrollOperationsView() {
                 />
               </Field>
               <Field label="Employer rate">
-                <input
-                  className={inputClass}
+                <Input
                   value={ruleForm.employerRate}
                   onChange={(event) =>
                     setRuleForm((current) => ({
@@ -12022,8 +11837,7 @@ export function PayrollOperationsView() {
                 </Field>
               ) : null}
               <Field label="Maximum basis">
-                <input
-                  className={inputClass}
+                <Input
                   value={ruleForm.maximumBasis}
                   onChange={(event) =>
                     setRuleForm((current) => ({
@@ -12051,8 +11865,7 @@ export function PayrollOperationsView() {
                 />
               </Field>
               <Field label="Band lower limit">
-                <input
-                  className={inputClass}
+                <Input
                   value={ruleForm.lowerLimit}
                   onChange={(event) =>
                     setRuleForm((current) => ({
@@ -12063,8 +11876,7 @@ export function PayrollOperationsView() {
                 />
               </Field>
               <Field label="Band upper limit">
-                <input
-                  className={inputClass}
+                <Input
                   value={ruleForm.upperLimit}
                   onChange={(event) =>
                     setRuleForm((current) => ({
@@ -12075,8 +11887,7 @@ export function PayrollOperationsView() {
                 />
               </Field>
               <Field label="Base tax">
-                <input
-                  className={inputClass}
+                <Input
                   value={ruleForm.baseTax}
                   onChange={(event) =>
                     setRuleForm((current) => ({
@@ -12087,8 +11898,7 @@ export function PayrollOperationsView() {
                 />
               </Field>
               <Field label="Rate percent">
-                <input
-                  className={inputClass}
+                <Input
                   value={ruleForm.ratePercent}
                   onChange={(event) =>
                     setRuleForm((current) => ({
@@ -12099,8 +11909,7 @@ export function PayrollOperationsView() {
                 />
               </Field>
               <Field label="Band sort order">
-                <input
-                  className={inputClass}
+                <Input
                   value={ruleForm.sortOrder}
                   onChange={(event) =>
                     setRuleForm((current) => ({
@@ -12165,8 +11974,7 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Calculation hash">
-              <input
-                className={inputClass}
+              <Input
                 value={approveForm.calculationHash}
                 onChange={(event) =>
                   setApproveForm((current) => ({
@@ -12178,7 +11986,6 @@ export function PayrollOperationsView() {
             </Field>
             <Field label="Comments">
               <Textarea
-                className={textareaClass}
                 value={approveForm.comments}
                 onChange={(event) =>
                   setApproveForm((current) => ({
@@ -12246,8 +12053,7 @@ export function PayrollOperationsView() {
             {lifecycleAction?.kind === "paid" ? (
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Bank payment reference">
-                  <input
-                    className={inputClass}
+                  <Input
                     value={lifecyclePaymentReference}
                     onChange={(event) =>
                       setLifecyclePaymentReference(event.target.value)
@@ -12255,9 +12061,7 @@ export function PayrollOperationsView() {
                   />
                 </Field>
                 <Field label="Value date">
-                  <input
-                    type="date"
-                    className={inputClass}
+                  <DateInput
                     value={lifecyclePaymentDate}
                     onChange={(event) =>
                       setLifecyclePaymentDate(event.target.value)
@@ -12274,19 +12078,17 @@ export function PayrollOperationsView() {
               }
             >
               <Textarea
-                className={textareaClass}
                 value={lifecycleReason}
                 onChange={(event) => setLifecycleReason(event.target.value)}
               />
             </Field>
             {lifecycleAction?.kind === "reverse" ? (
               <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
+                <Checkbox
                   className="mt-1"
                   checked={lifecycleBankWithdrawn}
-                  onChange={(event) =>
-                    setLifecycleBankWithdrawn(event.target.checked)
+                  onCheckedChange={(checked) =>
+                    setLifecycleBankWithdrawn(checked)
                   }
                 />
                 <span>

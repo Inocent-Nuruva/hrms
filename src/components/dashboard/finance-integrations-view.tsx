@@ -7,6 +7,8 @@ import { RefreshCwIcon, UploadIcon } from "lucide-react";
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
+import { FileDropzone } from "@/components/ui/file-dropzone";
+import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/fluent-toast-store";
 import { FluentSelect } from "@/components/ui/fluent-select";
 import {
@@ -15,13 +17,11 @@ import {
   TalentDoodleSprites,
   actionButtonClass,
   asRecord,
-  inputClass,
   prettify,
   primaryButtonClass,
   readString,
   rowId,
   secondaryButtonClass,
-  textareaClass,
 } from "@/components/dashboard/talent-visuals";
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
 import {
@@ -308,10 +308,10 @@ export function FinanceIntegrationsView() {
               <Field label="Authentication">{select("erp_auth_type", ["none", "bearer", "api-key", "basic"])}</Field>
             </div>
             <Field label="Endpoint URL">
-              <input className={inputClass} value={form.erp_endpoint_url ?? ""} onChange={(event) => setForm((current) => ({ ...current, erp_endpoint_url: event.target.value }))} />
+              <Input value={form.erp_endpoint_url ?? ""} onChange={(event) => setForm((current) => ({ ...current, erp_endpoint_url: event.target.value }))} />
             </Field>
             <Field label={`Credentials ${settings?.erp_credentials_set ? "(set)" : "(not set)"}`}>
-              <input className={inputClass} type="password" autoComplete="off" placeholder='{"token": "..."}' value={erpSecret} onChange={(event) => setErpSecret(event.target.value)} />
+              <Input type="password" autoComplete="off" placeholder='{"token": "..."}' value={erpSecret} onChange={(event) => setErpSecret(event.target.value)} />
             </Field>
           </div>
           <div className="grid gap-3 rounded-lg border border-border p-3">
@@ -323,13 +323,13 @@ export function FinanceIntegrationsView() {
               <Field label="Authentication">{select("bank_auth_type", ["none", "bearer", "api-key", "basic"])}</Field>
             </div>
             <Field label="Endpoint URL">
-              <input className={inputClass} value={form.bank_endpoint_url ?? ""} onChange={(event) => setForm((current) => ({ ...current, bank_endpoint_url: event.target.value }))} />
+              <Input value={form.bank_endpoint_url ?? ""} onChange={(event) => setForm((current) => ({ ...current, bank_endpoint_url: event.target.value }))} />
             </Field>
             <Field label="Company debit account">
-              <input className={inputClass} value={form.debit_account_number ?? ""} onChange={(event) => setForm((current) => ({ ...current, debit_account_number: event.target.value }))} />
+              <Input value={form.debit_account_number ?? ""} onChange={(event) => setForm((current) => ({ ...current, debit_account_number: event.target.value }))} />
             </Field>
             <Field label={`Credentials ${settings?.bank_credentials_set ? "(set)" : "(not set)"}`}>
-              <input className={inputClass} type="password" autoComplete="off" placeholder='{"token": "..."}' value={bankSecret} onChange={(event) => setBankSecret(event.target.value)} />
+              <Input type="password" autoComplete="off" placeholder='{"token": "..."}' value={bankSecret} onChange={(event) => setBankSecret(event.target.value)} />
             </Field>
           </div>
         </div>
@@ -338,18 +338,18 @@ export function FinanceIntegrationsView() {
             <h3 className="text-sm font-semibold">General-ledger accounts</h3>
             {Object.entries(GL_LABELS).map(([role, label]) => (
               <Field key={role} label={label}>
-                <input className={inputClass} value={gl[role] ?? ""} onChange={(event) => setGl((current) => ({ ...current, [role]: event.target.value }))} />
+                <Input value={gl[role] ?? ""} onChange={(event) => setGl((current) => ({ ...current, [role]: event.target.value }))} />
               </Field>
             ))}
           </div>
           <Field label="Bank transfer file layout (JSON: format CSV/XLSX, delimiter, include_header, columns[{header, field}])">
-            <Textarea className={`${textareaClass} min-h-80 font-mono text-xs`} value={templateJson} onChange={(event) => setTemplateJson(event.target.value)} />
+            <Textarea className="min-h-80 font-mono text-xs" value={templateJson} onChange={(event) => setTemplateJson(event.target.value)} />
             <span className="text-xs text-muted-foreground">
               Fields: {Array.isArray(available.bank_file_fields) ? available.bank_file_fields.map(String).join(", ") : ""}, literal
             </span>
           </Field>
           <Field label="Bank statement columns (JSON: reference, amount, status lists)">
-            <Textarea className={`${textareaClass} min-h-80 font-mono text-xs`} value={mappingJson} onChange={(event) => setMappingJson(event.target.value)} />
+            <Textarea className="min-h-80 font-mono text-xs" value={mappingJson} onChange={(event) => setMappingJson(event.target.value)} />
           </Field>
         </div>
       </Card>
@@ -359,8 +359,8 @@ export function FinanceIntegrationsView() {
         description="Balanced journal lines for loan postings. Each export marks the postings as sent, so the next export only has new ones."
         actions={
           <>
-            <DateInput className={`${inputClass} w-40`} value={journalRange.date_from ?? ""} onChange={(event) => setJournalRange((current) => ({ ...current, date_from: event.target.value }))} />
-            <DateInput className={`${inputClass} w-40`} value={journalRange.date_to ?? ""} onChange={(event) => setJournalRange((current) => ({ ...current, date_to: event.target.value }))} />
+            <DateInput className="w-40" value={journalRange.date_from ?? ""} onChange={(event) => setJournalRange((current) => ({ ...current, date_from: event.target.value }))} />
+            <DateInput className="w-40" value={journalRange.date_to ?? ""} onChange={(event) => setJournalRange((current) => ({ ...current, date_to: event.target.value }))} />
             <button type="button" className={actionButtonClass} onClick={async () => setJournalPreview(asRecord(await run("journal-preview", () => previewEmployeeFinanceJournal(token(), journalRange), "")))}>
               Preview
             </button>
@@ -492,10 +492,10 @@ export function FinanceIntegrationsView() {
       >
         <div className="grid gap-3 sm:grid-cols-[1fr_180px_auto_auto] sm:items-end">
           <Field label="Completed template (.xlsx or .csv)">
-            <input type="file" accept=".xlsx,.csv" className={inputClass} onChange={(event) => setMigrationFile(event.target.files?.[0] ?? null)} />
+            <FileDropzone accept=".xlsx,.csv" file={migrationFile} onFileChange={setMigrationFile} />
           </Field>
           <Field label="Cut-over date">
-            <DateInput className={inputClass} value={cutover} onChange={(event) => setCutover(event.target.value)} />
+            <DateInput value={cutover} onChange={(event) => setCutover(event.target.value)} />
           </Field>
           <button type="button" className={secondaryButtonClass} disabled={!migrationFile || Boolean(busy)} onClick={async () => {
             if (!migrationFile) return;

@@ -1,5 +1,7 @@
 ﻿"use client";
 import * as React from "react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { contractWorkspaceMessages as m } from "./contract-workspace-messages";
 import type { ContractField, ContractFieldMetadata } from "@/lib/contracts-api";
 
@@ -84,20 +86,19 @@ export function ContractOverrideInput({
           ))}
         </select>
       ) : item.inputKind === "longtext" ? (
-        <textarea
+        <Textarea
+          formatting={false}
           aria-label={m.label(item.key)}
           aria-invalid={!!errorId}
           aria-describedby={errorId}
-          className={className}
           value={value}
           onChange={(event) => onValue(event.target.value)}
         />
       ) : (
-        <input
+        <Input
           aria-label={m.label(item.key)}
           aria-invalid={!!errorId}
           aria-describedby={errorId}
-          className={className}
           type={item.inputKind === "number" ? "number" : "text"}
           value={value}
           onChange={(event) => onValue(event.target.value)}
@@ -108,8 +109,7 @@ export function ContractOverrideInput({
       </span>
       <label className="grid gap-1">
         {m.reason}
-        <input
-          className={className}
+        <Input
           value={reason}
           aria-invalid={!!value.trim() && reason.trim().length < 3}
           aria-describedby={

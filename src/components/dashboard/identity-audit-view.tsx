@@ -13,6 +13,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { DateInput } from "@/components/ui/date-input"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { Input } from "@/components/ui/input"
 import {
   Table,
@@ -189,36 +191,31 @@ export function IdentityAuditView() {
           value={draftSearch}
           onChange={(event) => setDraftSearch(event.target.value)}
         />
-        <select
-          className="border-input h-9 rounded-md border bg-transparent px-2 text-sm"
+        <FluentSelect
+          ariaLabel="Field"
+          className="w-44"
           value={filters.field ?? ""}
-          onChange={(event) =>
-            updateFilter({ field: (event.target.value || undefined) as IdentityAuditField | undefined })
+          onChange={(value) =>
+            updateFilter({ field: (value || undefined) as IdentityAuditField | undefined })
           }
-        >
-          <option value="">All fields</option>
-          {Object.entries(FIELD_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <select
-          className="border-input h-9 rounded-md border bg-transparent px-2 text-sm"
+          options={[
+            { value: "", label: "All fields" },
+            ...Object.entries(FIELD_LABELS).map(([value, label]) => ({ value, label })),
+          ]}
+        />
+        <FluentSelect
+          ariaLabel="Source"
+          className="w-44"
           value={filters.source ?? ""}
-          onChange={(event) =>
-            updateFilter({ source: (event.target.value || undefined) as IdentityAuditSource | undefined })
+          onChange={(value) =>
+            updateFilter({ source: (value || undefined) as IdentityAuditSource | undefined })
           }
-        >
-          <option value="">All sources</option>
-          {Object.entries(SOURCE_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <Input
-          type="date"
+          options={[
+            { value: "", label: "All sources" },
+            ...Object.entries(SOURCE_LABELS).map(([value, label]) => ({ value, label })),
+          ]}
+        />
+        <DateInput
           className="w-40"
           aria-label="From date"
           value={filters.from?.slice(0, 10) ?? ""}
@@ -226,8 +223,7 @@ export function IdentityAuditView() {
             updateFilter({ from: event.target.value ? `${event.target.value}T00:00:00` : undefined })
           }
         />
-        <Input
-          type="date"
+        <DateInput
           className="w-40"
           aria-label="To date"
           value={filters.to?.slice(0, 10) ?? ""}

@@ -5,7 +5,8 @@ import { useDashboardHeroBackground } from "@/hooks/use-dashboard-hero-backgroun
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import { Button as FluentButton, Badge as FluentBadge, PresenceBadge, Dropdown as FluentDropdown, Option as FluentOption, Switch as FluentSwitch } from "@fluentui/react-components"
+import { BankSelect } from "@/components/common/bank-select"
+import { Button as FluentButton, Badge as FluentBadge, PresenceBadge, Switch as FluentSwitch } from "@fluentui/react-components"
 import { PaintBrush20Regular, Clock20Regular, CalendarClock20Regular, Wallet20Regular, PersonInfo20Regular, Dismiss16Regular, CalendarAdd20Regular, AppsList20Regular, ChevronRight16Regular, Receipt32Regular, Mail20Regular, Call20Regular, Briefcase20Regular, CalendarCheckmark20Regular, PersonAvailable20Regular, PersonProhibited20Regular } from "@fluentui/react-icons"
 import { WelcomeCardBackground, type WelcomeBackground } from "./welcome-card-background"
 import { DateInput } from "@/components/ui/date-input"
@@ -56,7 +57,6 @@ import {
   patchEmployeeStatus,
   listMyOnboardingRequests,
   submitMyOnboardingDetails,
-  listCompanyBanks,
   type AdminRecord,
   type EmployeeProfileSection,
 } from "@/lib/admin-api"
@@ -3178,18 +3178,11 @@ export function EmployeeHomeDashboard() {
   const [certificateProofMethod, setCertificateProofMethod] = React.useState<"file" | "link">("file")
   const [formError, setFormError] = React.useState<string | null>(null)
   const [isSaving, setIsSaving] = React.useState(false)
-  const [manualOnboardingBank, setManualOnboardingBank] = React.useState(false)
-  const [companyBankDirectory, setCompanyBankDirectory] = React.useState<AdminRecord[]>([])
   const [publicCountryStates, setPublicCountryStates] = React.useState<PublicCountryStateRecord[]>([])
   const [publicLocationLoading, setPublicLocationLoading] = React.useState(false)
   const [publicLocationError, setPublicLocationError] = React.useState<string | null>(null)
   const [publicCityOptions, setPublicCityOptions] = React.useState<string[]>([])
   const [publicCitiesLoading, setPublicCitiesLoading] = React.useState(false)
-
-  React.useEffect(() => {
-    if (!accessToken) return
-    void listCompanyBanks(accessToken).then(setCompanyBankDirectory).catch(() => setCompanyBankDirectory([]))
-  }, [accessToken])
 
   React.useEffect(() => {
     const adminIdentity = isAdminIdentity()
@@ -3567,10 +3560,6 @@ export function EmployeeHomeDashboard() {
     : []
   const isRepeatableSection = fillingItemKey ? REPEATABLE_PROFILE_KEYS.has(fillingItemKey) : false
   const repeatableColumns = fillingItemKey ? REPEATABLE_PROFILE_COLUMNS[fillingItemKey] ?? [] : []
-  const onboardingBankNames = companyBankDirectory
-    .map((bank) => typeof bank.name === "string" ? bank.name.trim() : "")
-    .filter(Boolean)
-
   const missingRequiredFields = currentFormSchema.length > 0
     ? currentFormSchema
         .filter((f) => f.required)
@@ -3601,7 +3590,6 @@ export function EmployeeHomeDashboard() {
     // reset any in-progress form state
     setFillingItemKey(null)
     setIsAddingRepeatableItem(false)
-    setManualOnboardingBank(false)
     setFormValues({})
     setDocumentUploadFile(null)
     setCertificateProofMethod("file")
@@ -3609,7 +3597,6 @@ export function EmployeeHomeDashboard() {
   }
 
   const startFilling = (key: string) => {
-    setManualOnboardingBank(false)
     if (unavailableOptionalItems.includes(key)) {
       const nextUnavailable = unavailableOptionalItems.filter((item) => item !== key)
       setUnavailableOptionalItems(nextUnavailable)
@@ -3687,7 +3674,6 @@ export function EmployeeHomeDashboard() {
   const cancelFilling = () => {
     setFillingItemKey(null)
     setIsAddingRepeatableItem(false)
-    setManualOnboardingBank(false)
     setFormValues({})
     setDocumentUploadFile(null)
     setCertificateProofMethod("file")
@@ -4148,43 +4134,11 @@ export function EmployeeHomeDashboard() {
                               {field.label}{field.required ? " *" : ""}
                             </Label>
                             {fillingItemKey === "bank_accounts" && field.name === "bank_name" ? (
-                              manualOnboardingBank ? (
-                                <div className="mt-1 flex min-w-0 gap-2">
-                                  <Input
-                                    autoFocus
-                                    value={val}
-                                    placeholder="Enter bank name"
-                                    onChange={(event) => updateFormValue(field.name, event.target.value)}
-                                    className="h-8 min-w-0 flex-1 text-sm"
-                                  />
-                                  <Button type="button" variant="outline" size="sm" onClick={() => {
-                                    setManualOnboardingBank(false)
-                                    updateFormValue("bank_name", "")
-                                  }}>Choose list</Button>
-                                </div>
-                              ) : (
-                                <FluentDropdown
-                                  size="small"
-                                  className="mt-0.5 !w-full !min-w-0"
-                                  button={{ className: "!w-full !min-w-0" }}
-                                  placeholder="Select a Tanzanian bank"
-                                  value={val}
-                                  selectedOptions={val ? [val] : []}
-                                  onOptionSelect={(_, data) => {
-                                    if (data.optionValue === "__other__") {
-                                      setManualOnboardingBank(true)
-                                      updateFormValue("bank_name", "")
-                                      return
-                                    }
-                                    updateFormValue("bank_name", data.optionValue ?? "")
-                                  }}
-                                >
-                                  <FluentOption value="__other__" text="Other bank">Other bank — enter manually</FluentOption>
-                                  {onboardingBankNames.map((bank) => (
-                                    <FluentOption key={bank} value={bank} text={bank}>{bank}</FluentOption>
-                                  ))}
-                                </FluentDropdown>
-                              )
+                              <BankSelect
+                                className="mt-1"
+                                value={val}
+                                onChange={(name) => updateFormValue("bank_name", name)}
+                              />
                             ) : isAddressLookupField ? (
                               <>
                                 <input

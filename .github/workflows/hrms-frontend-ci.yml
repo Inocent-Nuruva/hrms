@@ -22,6 +22,7 @@ on:
       - "scripts/ci-release-*.mjs"
       - "scripts/check-release-routes*.mjs"
       - "scripts/browser-shards.cjs"
+      - "scripts/ci-concurrency-policy.check.cjs"
       - "tsconfig.json"
       - "vitest.config.ts"
       - "android/src/lib/mobile-notification-routing.ts"
@@ -53,7 +54,7 @@ jobs:
     environment:
       name: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && 'hrms-frontend-production' || 'hrms-frontend-uat' }}
     concurrency:
-      group: hrms-frontend-ci-${{ github.ref }}-${{ inputs.environment || 'push' }}
+      group: hrms-frontend-ci-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
       cancel-in-progress: true
     env:
       CI: true
@@ -124,6 +125,8 @@ jobs:
         shell: bash
         run: |
           node -e "const s=require('./package.json').scripts; for(const n of ['build','lint','test']) if(!s?.[n]) throw new Error('Missing script: '+n)"
+      - name: Verify CI concurrency and retention policy
+        run: node --test scripts/ci-concurrency-policy.check.cjs
       - name: Lint
         run: npm run lint
       - name: Typecheck
@@ -213,6 +216,9 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2]
+    concurrency:
+      group: hrms-frontend-browser-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}-${{ matrix.shard }}
+      cancel-in-progress: true
     env:
       CI: true
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8888
@@ -263,6 +269,9 @@ jobs:
     needs: [browser-shard]
     if: github.event_name == 'pull_request' && needs.browser-shard.result == 'success'
     runs-on: ubuntu-latest
+    concurrency:
+      group: hrms-frontend-illustrations-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -332,6 +341,7 @@ jobs:
     concurrency:
       group: hrms-frontend-${{ github.event_name == 'push' && 'uat' || inputs.environment }}-deploy
       cancel-in-progress: false
+      queue: max
     outputs:
       require_ssl: ${{ steps.deployment-policy.outputs.require_ssl }}
     env:

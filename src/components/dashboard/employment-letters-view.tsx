@@ -11,6 +11,9 @@ import {
 } from "@/lib/admin-api";
 import { readStoredSessionTokens } from "@/lib/session-client";
 import { Textarea } from "@/components/ui/textarea";
+import { FormField } from "@/components/ui/form-field";
+import { Input } from "@/components/ui/input";
+import { FluentSelect } from "@/components/ui/fluent-select";
 
 type LetterKind = "OFFER" | "APPOINTMENT";
 type TemplateForm = {
@@ -153,56 +156,54 @@ export function EmploymentLettersView() {
             Available fields: {FIELDS}
           </p>
         </div>
-        <label className="grid gap-1 text-sm">
-          Letter type
-          <select
-            className="h-10 rounded-md border border-border bg-background px-3"
+        <FormField label="Letter type" htmlFor="letter-kind">
+          <FluentSelect
+            id="letter-kind"
+            ariaLabel="Letter type"
             value={kind}
-            onChange={(event) => setKind(event.target.value as LetterKind)}
-          >
-            <option value="OFFER">Offer</option>
-            <option value="APPOINTMENT">Appointment</option>
-          </select>
-        </label>
-        <label className="grid gap-1 text-sm">
-          Title
-          <input
-            className="h-10 rounded-md border border-border bg-background px-3"
+            onChange={(value) => setKind(value as LetterKind)}
+            options={[
+              { value: "OFFER", label: "Offer" },
+              { value: "APPOINTMENT", label: "Appointment" },
+            ]}
+          />
+        </FormField>
+        <FormField label="Title" htmlFor="letter-title">
+          <Input
+            id="letter-title"
             value={form.title}
             onChange={(event) =>
               setForm({ ...form, title: event.target.value })
             }
           />
-        </label>
-        <label className="grid gap-1 text-sm">
-          Letter body
+        </FormField>
+        <FormField label="Letter body" htmlFor="letter-body">
           <Textarea
+            id="letter-body"
             className="min-h-44"
             value={form.body}
             onChange={(event) => setForm({ ...form, body: event.target.value })}
           />
-        </label>
+        </FormField>
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="grid gap-1 text-sm">
-            Signatory name
-            <input
-              className="h-10 rounded-md border border-border bg-background px-3"
+          <FormField label="Signatory name" htmlFor="letter-signatory-name">
+            <Input
+              id="letter-signatory-name"
               value={form.signatory_name}
               onChange={(event) =>
                 setForm({ ...form, signatory_name: event.target.value })
               }
             />
-          </label>
-          <label className="grid gap-1 text-sm">
-            Signatory title
-            <input
-              className="h-10 rounded-md border border-border bg-background px-3"
+          </FormField>
+          <FormField label="Signatory title" htmlFor="letter-signatory-title">
+            <Input
+              id="letter-signatory-title"
               value={form.signatory_title}
               onChange={(event) =>
                 setForm({ ...form, signatory_title: event.target.value })
               }
             />
-          </label>
+          </FormField>
         </div>
         <button
           type="button"
@@ -221,15 +222,17 @@ export function EmploymentLettersView() {
             use an employee ID.
           </p>
         </div>
-        <label className="grid gap-1 text-sm">
-          {kind === "OFFER" ? "Recruitment candidate ID" : "Employee ID"}
-          <input
+        <FormField
+          label={kind === "OFFER" ? "Recruitment candidate ID" : "Employee ID"}
+          htmlFor="letter-record-id"
+        >
+          <Input
+            id="letter-record-id"
             inputMode="numeric"
-            className="h-10 rounded-md border border-border bg-background px-3"
             value={recordId}
             onChange={(event) => setRecordId(event.target.value)}
           />
-        </label>
+        </FormField>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"

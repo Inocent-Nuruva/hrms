@@ -94,6 +94,7 @@ import { toast } from "@/components/ui/fluent-toast-store";
 import { pageBleedClass } from "@/components/dashboard/talent-visuals";
 import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
+import { FormField } from "@/components/ui/form-field";
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken";
 const EMPLOYEE_STATUS_REFRESH_KEY = "hrms.employees.status.updatedAt";
@@ -1733,20 +1734,24 @@ export function EmployeesListView({
             </AlertDialogDescription>
           </AlertDialogHeader>
 
-          <label className="grid gap-1.5 text-sm">
-            <span>
-              Type <strong>{PERMANENT_DELETE_CONFIRMATION}</strong> to confirm
-            </span>
-            <input
+          <FormField
+            htmlFor="permanent-delete-confirmation"
+            label={
+              <>
+                Type <strong>{PERMANENT_DELETE_CONFIRMATION}</strong> to confirm
+              </>
+            }
+          >
+            <Input
+              id="permanent-delete-confirmation"
               value={permanentDeleteConfirmation}
               onChange={(event) =>
                 setPermanentDeleteConfirmation(event.target.value)
               }
               disabled={permanentDeleteBusy}
               autoComplete="off"
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
             />
-          </label>
+          </FormField>
 
           {permanentDeleteError ? (
             <p

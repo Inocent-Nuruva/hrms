@@ -3,15 +3,16 @@
 import { DateInput } from "@/components/ui/date-input"
 import { DateTimeInput } from "@/components/ui/date-time-input"
 import * as React from "react"
+import { BankSelect } from "@/components/common/bank-select"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "@/components/ui/fluent-toast-store"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { env } from "@/lib/env"
-import ReactFlagsSelect from "react-flags-select"
-import { countries as countryCodes } from "country-flag-icons"
+import { isValidPhone, PhoneInput, toE164 } from "@/components/ui/phone-input"
+import { CountrySelect } from "@/components/ui/country-select"
+import { FormField } from "@/components/ui/form-field"
 
-import { CountryFlag } from "@/components/country-flag"
 import {
   BadgeCheckIcon,
   ChevronLeftIcon,
@@ -500,17 +501,8 @@ const COUNTRY_DIAL_BY_ISO: Record<CountryIso, string> = {
   US: "+1",
 }
 
-const COUNTRY_LABELS: Record<CountryIso, { primary: string; secondary: string }> = {
-  TZ: { primary: "Tanzania", secondary: "+255" },
-  KE: { primary: "Kenya", secondary: "+254" },
-  UG: { primary: "Uganda", secondary: "+256" },
-  RW: { primary: "Rwanda", secondary: "+250" },
-  BI: { primary: "Burundi", secondary: "+257" },
-  ZM: { primary: "Zambia", secondary: "+260" },
-  ZA: { primary: "South Africa", secondary: "+27" },
-  GB: { primary: "United Kingdom", secondary: "+44" },
-  US: { primary: "United States", secondary: "+1" },
-}
+/** Countries offered by the phone pickers (each has a dial code above). */
+const PHONE_COUNTRY_ISOS = Object.keys(COUNTRY_DIAL_BY_ISO)
 
 function joinPhoneWithCountryCode(countryCode: string, phoneNumber: string) {
   const phone = phoneNumber.trim()
@@ -1118,26 +1110,6 @@ type StoredRegisterDraft = {
   savedAt?: string
 }
 
-function countryNameFromIso(isoCode: string) {
-  try {
-    const regionNames = new Intl.DisplayNames(["en"], { type: "region" })
-    return regionNames.of(isoCode.toUpperCase()) ?? isoCode.toUpperCase()
-  } catch {
-    return isoCode.toUpperCase()
-  }
-}
-
-const NATIONALITY_OPTIONS = (countryCodes as string[])
-  .map((code) => ({
-    code,
-    name: countryNameFromIso(code),
-  }))
-  .sort((left, right) => left.name.localeCompare(right.name))
-
-function NationalityFlag({ code }: { code: string }) {
-  return <CountryFlag code={code} className="h-3.5 w-5" />
-}
-
 function AnimatedField({
   delayMs,
   children,
@@ -1179,31 +1151,16 @@ function Field({
 }) {
   return (
     <AnimatedField delayMs={delayMs} className={className}>
-      <div
-        className={cn(
-          "flex h-full flex-col gap-1",
-          error &&
-            "[&_[data-slot=input]]:border-destructive [&_[data-slot=select-trigger]]:border-destructive [&_input]:border-destructive"
-        )}
+      <FormField
+        label={label}
+        htmlFor={htmlFor}
+        required={required}
+        error={error}
+        hint={hint || (reserveHintSpace ? <span aria-hidden="true">&nbsp;</span> : undefined)}
+        className="h-full"
       >
-        <Label htmlFor={htmlFor} className="text-xs font-medium text-foreground">
-          {label}
-          {required ? (
-            <span className="ml-0.5 text-destructive" aria-hidden="true">
-              *
-            </span>
-          ) : null}
-          {required ? <span className="sr-only"> (required)</span> : null}
-        </Label>
         {children}
-        {error ? (
-          <p id={`${htmlFor}-error`} role="alert" className="text-[11px] leading-snug text-destructive">
-            {error}
-          </p>
-        ) : hint || reserveHintSpace ? (
-          <div className="min-h-3.5 text-[11px] leading-snug text-muted-foreground">{hint}</div>
-        ) : null}
-      </div>
+      </FormField>
     </AnimatedField>
   )
 }
@@ -2741,6 +2698,7 @@ export function EmployeeRegisterForm() {
       else if (!email || !phone) errors.contacts = "Contacts must include an email address and a phone number."
       else if (!/^\+(255|256)/.test(phone.replace(/\s+/g, "")))
         errors.contacts = "The primary phone number must be Tanzanian (+255) or Ugandan (+256)."
+      else if (!isValidPhone(phone)) errors.contacts = "The primary phone number is not a valid phone number."
     }
     return errors
   }
@@ -3791,24 +3749,6 @@ export function EmployeeRegisterForm() {
                         </Select>
                       </Field>
 
-                      <Field label="Phone Country" htmlFor="invite-country" delayMs={260}>
-                        <Select
-                          value={inviteContact.countryIso}
-                          onValueChange={(value) => updateInviteContact("countryIso", value as CountryIso)}
-                        >
-                          <SelectTrigger id="invite-country" className="w-full">
-                            <SelectValue placeholder="Select country" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.entries(COUNTRY_LABELS).map(([isoCode, label]) => (
-                              <SelectItem key={isoCode} value={isoCode}>
-                                {label.primary} ({label.secondary})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </Field>
-
                       <Field
                         label="Phone Number"
                         htmlFor="invite-phone"
@@ -3818,11 +3758,16 @@ export function EmployeeRegisterForm() {
                         hint={invitePhoneError || "Required for send invite."}
                         reserveHintSpace
                       >
-                        <Input
+                        <PhoneInput
                           id="invite-phone"
-                          inputMode="numeric"
-                          value={inviteContact.phoneNumber}
-                          onChange={(event) => updateInvitePhone(event.target.value)}
+                          value={toE164(inviteContact.countryIso, inviteContact.phoneNumber)}
+                          countries={PHONE_COUNTRY_ISOS}
+                          defaultCountry={inviteContact.countryIso}
+                          invalid={Boolean(fieldErrors.invitePhone || invitePhoneError)}
+                          onChange={(_value, details) => {
+                            updateInviteContact("countryIso", details.iso)
+                            updateInvitePhone(details.national)
+                          }}
                           placeholder="Enter phone number"
                         />
                       </Field>
@@ -3887,36 +3832,14 @@ export function EmployeeRegisterForm() {
                       </Field>
 
                       <Field label="Nationality" htmlFor="nationality" delayMs={360}>
-                        <Select
+                        <CountrySelect
+                          id="nationality"
+                          valueType="iso"
                           value={form.nationality || ""}
-                          onValueChange={(value) => updateField("nationality", value ?? "")}
-                        >
-                          <SelectTrigger id="nationality" className="w-full">
-                            <SelectValue placeholder="Select nationality">
-                              {form.nationality ? (
-                                <span className="flex min-w-0 items-center gap-2">
-                                  <NationalityFlag code={form.nationality} />
-                                  <span className="truncate">{countryNameFromIso(form.nationality)}</span>
-                                </span>
-                              ) : undefined}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent className="max-h-64" align="start">
-                            {NATIONALITY_OPTIONS.map((option) => (
-                              <SelectItem
-                                key={option.code}
-                                value={option.code}
-                                data-search-text={`${option.name} ${option.code}`}
-                                className="py-1.5"
-                              >
-                                <span className="flex min-w-0 items-center gap-2">
-                                  <NationalityFlag code={option.code} />
-                                  <span className="truncate">{option.name}</span>
-                                </span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          onChange={(value) => updateField("nationality", value ?? "")}
+                          placeholder="Select nationality"
+                          className="w-full"
+                        />
                       </Field>
 
                       <AnimatedField delayMs={440}>
@@ -5182,10 +5105,10 @@ export function EmployeeRegisterForm() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="draft-address-country">Country</Label>
-              <Input
+              <CountrySelect
                 id="draft-address-country"
                 value={draftAddress.country}
-                onChange={(event) => updateDraftAddress("country", event.target.value)}
+                onChange={(value) => updateDraftAddress("country", value)}
                 placeholder="Country"
               />
             </div>
@@ -5289,50 +5212,15 @@ export function EmployeeRegisterForm() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="draft-relative-phone">Phone</Label>
-              <div className="grid gap-2 sm:grid-cols-[220px_minmax(0,1fr)]">
-                <Select
-                  value={
-                    draftRelative.phone.startsWith("+")
-                      ? (Object.keys(COUNTRY_DIAL_BY_ISO).find((iso) =>
-                          draftRelative.phone.startsWith(COUNTRY_DIAL_BY_ISO[iso as keyof typeof COUNTRY_DIAL_BY_ISO])
-                        ) ?? "TZ")
-                      : "TZ"
-                  }
-                  onValueChange={(isoCode) => {
-                    const safeIsoCode = isoCode ?? "TZ"
-                    const dial = getDialCodeForCountry(safeIsoCode)
-                    const stripped = draftRelative.phone.replace(/^\+\d+/, "").replace(/\D/g, "")
-                    updateDraftRelative("phone", `${dial}${stripped}`)
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Country code" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.keys(COUNTRY_DIAL_BY_ISO) as CountryIso[]).map((iso) => (
-                      <SelectItem key={iso} value={iso}>
-                        {COUNTRY_LABELS[iso].primary} ({COUNTRY_LABELS[iso].secondary})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  id="draft-relative-phone"
-                  value={draftRelative.phone.replace(/^\+\d+/, "")}
-                  onChange={(event) => {
-                    const digits = event.target.value.replace(/\D/g, "")
-                    const iso =
-                      (Object.keys(COUNTRY_DIAL_BY_ISO).find((code) =>
-                        draftRelative.phone.startsWith(COUNTRY_DIAL_BY_ISO[code as keyof typeof COUNTRY_DIAL_BY_ISO])
-                      ) as CountryIso | undefined) ?? "TZ"
-                    updateDraftRelative("phone", `${getDialCodeForCountry(iso)}${digits}`)
-                  }}
-                  placeholder="Phone number"
-                />
-              </div>
-            </div>
+            <FormField label="Phone" htmlFor="draft-relative-phone">
+              <PhoneInput
+                id="draft-relative-phone"
+                value={draftRelative.phone}
+                countries={PHONE_COUNTRY_ISOS}
+                onChange={(value) => updateDraftRelative("phone", value)}
+                placeholder="Phone number"
+              />
+            </FormField>
             <div className="grid gap-2 md:col-span-2 xl:col-span-3">
               <Label htmlFor="draft-relative-email">Email</Label>
               <Input
@@ -5432,10 +5320,10 @@ export function EmployeeRegisterForm() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="draft-identification-country">Issued Country</Label>
-              <Input
+              <CountrySelect
                 id="draft-identification-country"
                 value={draftIdentification.issuedCountry}
-                onChange={(event) => updateDraftIdentification("issuedCountry", event.target.value)}
+                onChange={(value) => updateDraftIdentification("issuedCountry", value)}
                 placeholder="Issued country"
               />
             </div>
@@ -5508,11 +5396,10 @@ export function EmployeeRegisterForm() {
                   </SelectContent>
                 </Select>
               ) : (
-                <Input
+                <BankSelect
                   id="draft-bank-name"
                   value={draftBankAccount.bankName}
-                  onChange={(event) => updateDraftBankAccount("bankName", event.target.value)}
-                  placeholder="Bank name"
+                  onChange={(name) => updateDraftBankAccount("bankName", name)}
                 />
               )}
             </div>
@@ -5583,9 +5470,10 @@ export function EmployeeRegisterForm() {
           <div className="grid gap-3 md:grid-cols-2">
             <div>
               <Label>Country</Label>
-              <Input
+              <CountrySelect
+                aria-label="Country"
                 value={draftAcademic.countryOfResidence}
-                onChange={(e) => updateDraftAcademic("countryOfResidence", e.target.value)}
+                onChange={(value) => updateDraftAcademic("countryOfResidence", value)}
               />
             </div>
             <div>
@@ -5660,9 +5548,10 @@ export function EmployeeRegisterForm() {
           <div className="grid gap-3 md:grid-cols-2">
             <div>
               <Label>Country</Label>
-              <Input
+              <CountrySelect
+                aria-label="Country"
                 value={draftProfessional.countryOfResidence}
-                onChange={(e) => updateDraftProfessional("countryOfResidence", e.target.value)}
+                onChange={(value) => updateDraftProfessional("countryOfResidence", value)}
               />
             </div>
             <div className="md:col-span-2">
@@ -5816,51 +5705,28 @@ export function EmployeeRegisterForm() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="draft-contact-phone">
-                Phone Number
-                {draftContactNeedsLogin ? (<><span className="ml-0.5 text-destructive" aria-hidden="true">*</span><span className="sr-only"> (required)</span></>) : null}
-              </Label>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(9rem,11rem)_minmax(0,1fr)]">
-                <ReactFlagsSelect
-                  id="draft-contact-country"
-                  rfsKey="draft-contact-country"
-                  selected={draftContact.countryIso}
-                  onSelect={(value) => updateDraftContact("countryIso", value)}
-                  customLabels={COUNTRY_LABELS}
-                  searchable
-                  searchPlaceholder="Search country"
-                  fullWidth
-                  showSelectedLabel={false}
-                  showOptionLabel
-                  showSecondarySelectedLabel
-                  showSecondaryOptionLabel
-                  selectButtonClassName={cn(
-                    // Match the shared form control size (app/form-controls.css).
-                    "!h-[var(--hrms-control-height)] !w-full !min-w-0 !rounded-[var(--hrms-control-radius)] !border !px-[var(--hrms-control-px)] !py-0 !text-[length:var(--hrms-control-font)] !shadow-none",
-                    draftContactPhoneError ? "!border-destructive" : "!border-input"
-                  )}
-                  className="w-full min-w-0"
-                />
-                <Input
-                  id="draft-contact-phone"
-                  value={draftContact.phoneNumber}
-                  className={cn(
-                    draftContactPhoneError
-                      ? "border-destructive text-destructive focus-visible:border-destructive focus-visible:ring-destructive/30"
-                      : undefined
-                  )}
-                  onChange={(event) => {
-                    updateDraftContactPhone(event.target.value)
-                    if (draftContactEmailError) {
-                      setDraftContactEmailError("")
-                    }
-                  }}
-                  placeholder="712345678"
-                />
-              </div>
-              {draftContactPhoneError ? <p className="text-xs text-destructive">{draftContactPhoneError}</p> : null}
-            </div>
+            <FormField
+              label="Phone number"
+              htmlFor="draft-contact-phone"
+              required={draftContactNeedsLogin}
+              error={draftContactPhoneError || null}
+            >
+              <PhoneInput
+                id="draft-contact-phone"
+                value={toE164(draftContact.countryIso, draftContact.phoneNumber)}
+                countries={PHONE_COUNTRY_ISOS}
+                defaultCountry={draftContact.countryIso}
+                invalid={Boolean(draftContactPhoneError)}
+                onChange={(_value, details) => {
+                  updateDraftContact("countryIso", details.iso)
+                  updateDraftContactPhone(details.national)
+                  if (draftContactEmailError) {
+                    setDraftContactEmailError("")
+                  }
+                }}
+                placeholder="712345678"
+              />
+            </FormField>
             <div className="grid gap-2">
               <Label htmlFor="draft-contact-email">
                 Email

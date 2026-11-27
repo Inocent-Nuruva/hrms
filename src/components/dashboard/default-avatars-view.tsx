@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -458,11 +459,9 @@ export function DefaultAvatarsView() {
               />
             </div>
             <label className="flex h-9 items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={includeInactive}
-                onChange={(e) => setIncludeInactive(e.target.checked)}
-                className="size-4 rounded border-input"
+                onCheckedChange={(checked) => setIncludeInactive(checked)}
               />
               Include inactive
             </label>
@@ -703,11 +702,9 @@ export function DefaultAvatarsView() {
                 />
               </div>
               <label className="mt-6 flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={form.is_default}
-                  onChange={(e) => setForm((p) => ({ ...p, is_default: e.target.checked }))}
-                  className="size-4 rounded border-input"
+                  onCheckedChange={(checked) => setForm((p) => ({ ...p, is_default: checked }))}
                 />
                 <span>
                   Mark as default

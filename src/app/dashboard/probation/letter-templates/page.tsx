@@ -7,6 +7,8 @@ import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { FluentSelect } from "@/components/ui/fluent-select"
+import { FormField } from "@/components/ui/form-field"
 import { Textarea } from "@/components/ui/textarea"
 
 const types = { CONFIRMATION: "Confirmation", EXTENSION: "Extension", NOT_CONFIRMED: "Non-confirmation" }
@@ -65,19 +67,24 @@ export default function ProbationLetterTemplates() {
     <h1 className="text-2xl font-semibold">Letter templates</h1>
     <form onSubmit={submit} className="grid gap-4">
       <fieldset disabled={busy || !loaded} className="grid gap-4">
-        <label className="grid gap-1">Letter type
-          <select className="rounded border p-2" value={kind} onChange={event => {
-            setKind(event.target.value)
-            setDraft(null)
-            setMessage("")
-          }}>
-            {Object.entries(types).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-          </select>
-        </label>
-        <label className="grid gap-1">Letterhead<Input required maxLength={1000} value={form.letterhead} onChange={e => setDraft({ ...form, letterhead:e.target.value })}/></label>
-        <label className="grid gap-1">Letter body<Textarea aria-label="Letter body" formatting={false} required rows={8} maxLength={10000} value={form.body} onChange={e => setDraft({ ...form, body:e.target.value })}/></label>
-        <label className="grid gap-1">Signatory name<Input required maxLength={160} value={form.signatory_name} onChange={e => setDraft({ ...form, signatory_name:e.target.value })}/></label>
-        <label className="grid gap-1">Signatory title<Input required maxLength={160} value={form.signatory_title} onChange={e => setDraft({ ...form, signatory_title:e.target.value })}/></label>
+        <FormField label="Letter type" htmlFor="letter-template-kind">
+          <FluentSelect
+            id="letter-template-kind"
+            ariaLabel="Letter type"
+            disabled={busy || !loaded}
+            value={kind}
+            onChange={value => {
+              setKind(value)
+              setDraft(null)
+              setMessage("")
+            }}
+            options={Object.entries(types).map(([key, label]) => ({ value: key, label }))}
+          />
+        </FormField>
+        <FormField label="Letterhead" htmlFor="letter-template-letterhead" required><Input id="letter-template-letterhead" required maxLength={1000} value={form.letterhead} onChange={e => setDraft({ ...form, letterhead:e.target.value })}/></FormField>
+        <FormField label="Letter body" htmlFor="letter-template-body" required><Textarea id="letter-template-body" aria-label="Letter body" formatting={false} required rows={8} maxLength={10000} value={form.body} onChange={e => setDraft({ ...form, body:e.target.value })}/></FormField>
+        <FormField label="Signatory name" htmlFor="letter-template-signatory-name" required><Input id="letter-template-signatory-name" required maxLength={160} value={form.signatory_name} onChange={e => setDraft({ ...form, signatory_name:e.target.value })}/></FormField>
+        <FormField label="Signatory title" htmlFor="letter-template-signatory-title" required><Input id="letter-template-signatory-title" required maxLength={160} value={form.signatory_title} onChange={e => setDraft({ ...form, signatory_title:e.target.value })}/></FormField>
         <Button className="justify-self-start" type="submit">{busy ? "Saving…" : "Save template"}</Button>
       </fieldset>
     </form>

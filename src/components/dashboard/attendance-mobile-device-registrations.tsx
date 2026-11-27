@@ -1,5 +1,6 @@
 "use client"
 
+import { Input } from "@/components/ui/input"
 import * as React from "react"
 import { ArrowClockwise20Regular, DeviceEq20Regular, TrayItemAdd20Regular } from "@fluentui/react-icons"
 import {
@@ -128,13 +129,13 @@ export function AttendanceMobileDeviceRegistrations({
             </div>
             {isActive && canRelease ? (
               <div className="flex flex-wrap gap-2">
-                <input
+                <Input
                   value={reasonById[id] ?? ""}
                   onChange={(event) => setReasonById((previous) => ({ ...previous, [id]: event.target.value }))}
                   maxLength={500}
                   aria-label={`Reason to release device ${id}`}
                   placeholder="Required release reason"
-                  className="h-8 min-w-64 flex-1 rounded-md border border-input bg-background px-2 text-xs"
+                  className="min-w-64 flex-1"
                 />
                 <button type="button" onClick={() => void release(id)} disabled={releasingId === id} className="rounded-md border border-red-300 px-3 py-1 text-xs font-semibold text-red-700 disabled:opacity-50 dark:border-red-900 dark:text-red-300">
                   {releasingId === id ? "Releasing…" : "Release device"}

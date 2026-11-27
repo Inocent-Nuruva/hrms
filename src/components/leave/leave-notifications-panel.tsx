@@ -4,6 +4,8 @@ import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow
 import * as React from "react"
 
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
   createNotificationRule,
@@ -144,12 +146,10 @@ export function LeaveNotificationsPanel() {
                       </div>
                     </div>
                     <label className="inline-flex items-center gap-2 text-xs">
-                      <input
-                        type="checkbox"
-                        className="size-4"
+                      <Checkbox
                         checked={enabled}
                         disabled={!canEdit || busyKey === event.key}
-                        onChange={(e) => void toggle(event.key, e.target.checked)}
+                        onCheckedChange={(checked) => void toggle(event.key, checked)}
                         aria-label={`Send "${event.label}" notifications`}
                       />
                       {enabled ? "On" : "Off"}
@@ -167,18 +167,21 @@ export function LeaveNotificationsPanel() {
           <div className="flex items-center justify-between gap-2">
             <h4 className="text-xs font-semibold">Recent leave notification deliveries</h4>
             <span className="inline-flex items-center gap-2">
-              <select
-                className="h-8 rounded-md border border-border bg-background px-2 text-xs"
+              <FluentSelect
+                className="w-40"
+                size="small"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                aria-label="Filter deliveries by status"
-              >
-                <option value="">All statuses</option>
-                <option value="DELIVERED">Delivered</option>
-                <option value="PENDING">Pending</option>
-                <option value="FAILED">Failed</option>
-                <option value="SKIPPED">Skipped</option>
-              </select>
+                onChange={setStatusFilter}
+                ariaLabel="Filter deliveries by status"
+                placeholder="All statuses"
+                options={[
+                  { value: "", label: "All statuses" },
+                  { value: "DELIVERED", label: "Delivered" },
+                  { value: "PENDING", label: "Pending" },
+                  { value: "FAILED", label: "Failed" },
+                  { value: "SKIPPED", label: "Skipped" },
+                ]}
+              />
               <Button size="sm" variant="outline" onClick={() => void load()}>
                 Refresh
               </Button>

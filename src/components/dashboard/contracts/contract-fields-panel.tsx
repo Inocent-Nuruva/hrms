@@ -4,6 +4,10 @@ import * as React from "react"
 
 import { CONTRACT_FIELD_LABELS, type ContractField } from "@/lib/contracts-api"
 import { cn } from "@/lib/utils"
+import { Checkbox } from "@/components/ui/checkbox"
+import { FormField } from "@/components/ui/form-field"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 
 const GROUPS: Array<{ title: string; keys: string[] }> = [
   {
@@ -83,7 +87,7 @@ export function ContractFieldsPanel({
           </p>
         </div>
         <label className="flex items-center gap-2 text-xs">
-          <input type="checkbox" checked={showAll} onChange={(event) => setShowAll(event.target.checked)} />
+          <Checkbox checked={showAll} onCheckedChange={(checked) => setShowAll(checked)} />
           Show fields not used in the clauses
         </label>
       </div>
@@ -110,23 +114,26 @@ export function ContractFieldsPanel({
                   value,
                   placeholder: field.automatic || "Not available — type a value",
                   onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(field.key, event.target.value),
-                  className: cn(
-                    "w-full rounded-md border px-2.5 text-sm placeholder:text-slate-400",
-                    empty ? "border-amber-400 bg-amber-50/40" : "border-border",
-                  ),
+                  className: cn("w-full", empty && "bg-amber-50/40"),
                 }
                 return (
-                  <label key={field.key} htmlFor={common.id} className={cn("grid gap-1 text-sm", LONG.has(field.key) && "sm:col-span-2")}>
-                    <span className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-slate-700">{CONTRACT_FIELD_LABELS[field.key] ?? field.key}</span>
-                      {value.trim() ? <span className="text-[11px] font-medium text-sky-700">Edited for this contract</span> : null}
-                    </span>
+                  <FormField
+                    key={field.key}
+                    htmlFor={common.id}
+                    className={cn(LONG.has(field.key) && "sm:col-span-2")}
+                    label={
+                      <span className="flex items-center justify-between gap-2">
+                        <span>{CONTRACT_FIELD_LABELS[field.key] ?? field.key}</span>
+                        {value.trim() ? <span className="text-[11px] font-medium text-sky-700">Edited for this contract</span> : null}
+                      </span>
+                    }
+                  >
                     {LONG.has(field.key) ? (
-                      <textarea {...common} className={cn(common.className, "min-h-14 py-1.5")} />
+                      <Textarea {...common} formatting={false} />
                     ) : (
-                      <input {...common} className={cn(common.className, "h-9")} />
+                      <Input {...common} />
                     )}
-                  </label>
+                  </FormField>
                 )
               })}
             </div>

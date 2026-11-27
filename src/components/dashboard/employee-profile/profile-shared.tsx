@@ -4,10 +4,11 @@ import * as React from "react"
 import { UploadIcon } from "lucide-react"
 import { getCountryCallingCode } from "libphonenumber-js"
 import { countries as countryCodes } from "country-flag-icons"
-import { CountryFlag } from "@/components/country-flag"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { BankSelect } from "@/components/common/bank-select"
+import { CountrySelect } from "@/components/ui/country-select"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import { PhoneInput } from "@/components/ui/phone-input"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -969,77 +970,17 @@ export function findCountryOption(value: string) {
   )
 }
 
+/** Country picker for profile forms; the shared CountrySelect (stores the name). */
 export function CountrySelectInput({
   value,
   onChange,
+  invalid,
 }: {
   value: string
   onChange: (value: string) => void
+  invalid?: boolean
 }) {
-  const [open, setOpen] = React.useState(false)
-  const [search, setSearch] = React.useState("")
-
-  const normalizedValue = value.trim().toLowerCase()
-  const selected = COUNTRY_OPTIONS.find(
-    (option) => option.name.toLowerCase() === normalizedValue || option.code.toLowerCase() === normalizedValue
-  ) ?? null
-
-  const filtered = COUNTRY_OPTIONS.filter((option) => {
-    const term = search.trim().toLowerCase()
-    if (!term) {
-      return true
-    }
-    return option.name.toLowerCase().includes(term) || option.code.toLowerCase().includes(term)
-  })
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <button
-            type="button"
-            className="flex h-[var(--hrms-control-height)] w-full items-center justify-between rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-3 text-sm"
-          />
-        }
-      >
-        <span className="flex items-center gap-2 truncate">
-          {selected ? (
-            <CountryFlag code={selected.code} className="h-4 w-6 rounded-sm border border-slate-200" />
-          ) : null}
-          <span className="truncate text-slate-900">{selected?.name ?? "Select country"}</span>
-        </span>
-        <span className="text-slate-400">▼</span>
-      </PopoverTrigger>
-      <PopoverContent className="w-[320px] p-2">
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search country..."
-          className="mb-2 h-9 w-full rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-2 text-sm"
-        />
-        <div className="max-h-56 overflow-auto">
-          {filtered.map((option) => {
-            return (
-              <button
-                key={option.code}
-                type="button"
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-slate-50"
-                onClick={() => {
-                  onChange(option.name)
-                  setOpen(false)
-                  setSearch("")
-                }}
-              >
-                <CountryFlag code={option.code} className="h-4 w-6 rounded-sm border border-slate-200" />
-                <span className="flex-1 truncate">{option.name}</span>
-                <span className="text-xs text-slate-500">{option.code}</span>
-              </button>
-            )
-          })}
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
+  return <CountrySelect value={value} onChange={onChange} invalid={invalid} />
 }
 
 export function formatFileSize(bytes: number) {
@@ -1181,89 +1122,17 @@ export function splitPhoneValue(value: string) {
   }
 }
 
+/** Phone field for profile forms; the shared single-field PhoneInput (E.164 value). */
 export function PhoneWithCountryCodeInput({
   value,
   onChange,
+  invalid,
 }: {
   value: string
   onChange: (value: string) => void
+  invalid?: boolean
 }) {
-  const parsed = splitPhoneValue(value)
-  const [open, setOpen] = React.useState(false)
-  const [search, setSearch] = React.useState("")
-
-  const selected = COUNTRY_DIAL_OPTIONS.find((option) => option.code === parsed.dialCode) ?? null
-
-  const filtered = COUNTRY_DIAL_OPTIONS.filter((option) => {
-    const term = search.trim().toLowerCase()
-    if (!term) {
-      return true
-    }
-    return (
-      option.code.toLowerCase().includes(term) ||
-      option.name.toLowerCase().includes(term) ||
-      option.iso.toLowerCase().includes(term)
-    )
-  })
-
-  return (
-    <div className="flex gap-2">
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger
-          render={
-            <button
-              type="button"
-              className="flex h-[var(--hrms-control-height)] w-36 items-center justify-between rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-2 text-sm"
-            />
-          }
-        >
-          <span className="flex items-center gap-2 truncate">
-            {selected ? (
-              <CountryFlag code={selected.iso} className="h-4 w-6 rounded-sm border border-slate-200" />
-            ) : null}
-            <span className="truncate text-slate-900">{selected?.code ?? parsed.dialCode}</span>
-          </span>
-          <span className="text-slate-400">▼</span>
-        </PopoverTrigger>
-        <PopoverContent className="w-[260px] p-2">
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search code or country..."
-            className="mb-2 h-9 w-full rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-2 text-sm"
-          />
-          <div className="max-h-56 overflow-auto">
-            {filtered.map((option) => {
-              return (
-                <button
-                  key={`${option.iso}-${option.code}`}
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-slate-50"
-                  onClick={() => {
-                    onChange(`${option.code}${parsed.number}`)
-                    setOpen(false)
-                    setSearch("")
-                  }}
-                >
-                  <CountryFlag code={option.iso} className="h-4 w-6 rounded-sm border border-slate-200" />
-                  <span className="font-medium text-slate-900">{option.code}</span>
-                </button>
-              )
-            })}
-          </div>
-        </PopoverContent>
-      </Popover>
-      <Input
-        value={parsed.number}
-        onChange={(event) => {
-          const digits = event.target.value
-          onChange(`${parsed.dialCode}${digits}`)
-        }}
-        className="w-full"
-        placeholder="Phone number"
-      />
-    </div>
-  )
+  return <PhoneInput value={value} onChange={(next) => onChange(next)} invalid={invalid} />
 }
 
 export function renderEntryInput({
@@ -1358,6 +1227,10 @@ export function renderEntryInput({
         ]}
       />
     )
+  }
+
+  if (entry.key === "bank_name") {
+    return <BankSelect value={value} onChange={onChange} />
   }
 
   if (entry.key === "phone" || entry.key === "phone_number") {

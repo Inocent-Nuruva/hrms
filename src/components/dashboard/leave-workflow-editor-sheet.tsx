@@ -24,6 +24,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
+import { FormField } from "@/components/ui/form-field"
+import { Input } from "@/components/ui/input"
 
 export type LeaveWorkflowFormValue = {
   name: string
@@ -345,55 +347,60 @@ export function LeaveWorkflowEditorSheet({
 
   const detailsForm = (
     <div className="w-full min-w-0 space-y-4">
-      <label className="grid gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
-        <span>Workflow name</span>
-        <input
-          className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-border dark:bg-background dark:text-white"
+      <FormField label="Workflow name" htmlFor="leave-workflow-name">
+        <Input
+          id="leave-workflow-name"
           placeholder="e.g. Annual leave approval"
           value={value.name}
           onChange={(event) => onValueChange({ name: event.target.value })}
         />
-      </label>
+      </FormField>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="grid gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
-          <span>Remind approvers after (days)</span>
-          <input
+        <FormField
+          label="Remind approvers after (days)"
+          htmlFor="leave-workflow-reminder"
+          hint="Repeats every N days while a step is waiting."
+        >
+          <Input
+            id="leave-workflow-reminder"
             type="number"
             min={1}
-            className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-border dark:bg-background dark:text-white"
             placeholder="Off"
             value={value.reminder_after_days}
             onChange={(event) => onValueChange({ reminder_after_days: event.target.value })}
           />
-          <span className="text-xs font-normal text-slate-500">Repeats every N days while a step is waiting.</span>
-        </label>
-        <label className="grid gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
-          <span>Escalate after (days)</span>
-          <input
+        </FormField>
+        <FormField
+          label="Escalate after (days)"
+          htmlFor="leave-workflow-escalate"
+          hint="Adds the waiting approver's manager (or HR), and again every N days."
+        >
+          <Input
+            id="leave-workflow-escalate"
             type="number"
             min={1}
-            className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-border dark:bg-background dark:text-white"
             placeholder="Off"
             value={value.escalate_after_days}
             onChange={(event) => onValueChange({ escalate_after_days: event.target.value })}
           />
-          <span className="text-xs font-normal text-slate-500">Adds the waiting approver&apos;s manager (or HR), and again every N days.</span>
-        </label>
+        </FormField>
         {value.escalate_after_days ? (
-          <label className="grid gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
-            <span>Maximum escalations per step</span>
-            <input
+          <FormField
+            label="Maximum escalations per step"
+            htmlFor="leave-workflow-max-escalations"
+            hint="Each escalation goes one level up. After the last one, HR is told once that the request is overdue."
+          >
+            <Input
+              id="leave-workflow-max-escalations"
               type="number"
               min={1}
               max={5}
-              className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-border dark:bg-background dark:text-white"
               placeholder="1"
               value={value.max_escalations ?? ""}
               onChange={(event) => onValueChange({ max_escalations: event.target.value })}
             />
-            <span className="text-xs font-normal text-slate-500">Each escalation goes one level up. After the last one, HR is told once that the request is overdue.</span>
-          </label>
+          </FormField>
         ) : null}
       </div>
 

@@ -1,5 +1,8 @@
 "use client"
 
+import { FormField } from "@/components/ui/form-field"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import { getStaffingPolicy } from "@/lib/admin-api"
 import * as React from "react"
 import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
@@ -540,9 +543,9 @@ export function PositionsView() {
         <h2 className="font-semibold">Department staffing policy</h2>
         {policyError && <p role="alert">{policyError}</p>}
         {typeof strictStaffing === "boolean" && <>
-          <label className="flex items-center gap-2"><input type="checkbox" checked={strictStaffing}
+          <label className="flex items-center gap-2"><Checkbox checked={strictStaffing}
             disabled={changingPolicy || !canUpdatePositions || !canPerformPermission(actorPermissions,"data_scope:company")}
-            onChange={event => void changeStaffingPolicy(event.target.checked)} />Enforce staffing limits across hiring and transfers</label>
+            onCheckedChange={checked => void changeStaffingPolicy(checked)} />Enforce staffing limits across hiring and transfers</label>
           <p className="text-muted-foreground">{strictStaffing ? "Active employees, employees joining, suspended employees and unexpired pending invitations take up seats in the selected department." : "Invitations warn when a position is full. Direct hires and position changes check occupied seats."}</p>
         </>}
       </section>
@@ -647,16 +650,13 @@ export function PositionsView() {
             <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
             <div className="grid gap-3 md:grid-cols-2">
               {error ? <p role="alert" className="text-sm text-rose-600 md:col-span-2">{error}</p> : null}
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Name</span>
-                <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Code</span>
-                <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.code} onChange={(event) => setForm((prev) => ({ ...prev, code: event.target.value }))} />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Branch</span>
+              <FormField label="Name">
+                <Input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
+              </FormField>
+              <FormField label="Code">
+                <Input value={form.code} onChange={(event) => setForm((prev) => ({ ...prev, code: event.target.value }))} />
+              </FormField>
+              <FormField label="Branch">
                 <FluentSelect
                   ariaLabel="Branch"
                   placeholder="Select branch"
@@ -673,24 +673,23 @@ export function PositionsView() {
                     }),
                   ]}
                 />
-              </label>
+              </FormField>
               <fieldset className="grid gap-1 md:col-span-2">
                 <legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Departments
                 </legend>
                 <div className="max-h-40 overflow-y-auto rounded-md border border-slate-300 bg-white p-2">
                   <label className="mb-1 flex items-center gap-2 rounded border-b border-slate-200 px-2 py-2 text-sm font-medium">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={allAvailableDepartmentsSelected}
                       disabled={!form.branch_id || availableDepartmentIds.length === 0}
-                      onChange={(event) => {
+                      onCheckedChange={(checked) => {
                         setError(null)
                         setForm((previous) => {
                           const availableIds = new Set(availableDepartmentIds)
                           return {
                             ...previous,
-                            department_ids: event.target.checked
+                            department_ids: checked
                               ? Array.from(new Set([...previous.department_ids, ...availableDepartmentIds]))
                               : previous.department_ids.filter((id) => !availableIds.has(id)),
                           }
@@ -722,15 +721,14 @@ export function PositionsView() {
                             className={`flex min-w-0 items-center gap-2 rounded px-2 py-1.5 text-sm ${isAvailable ? "hover:bg-slate-50" : "cursor-not-allowed bg-slate-50 text-slate-400"}`}
                             title={isAvailable ? undefined : `${readString(department, ["name", "code"])} belongs to ${departmentBranch}, not the selected branch.`}
                           >
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               checked={checked}
                               disabled={!form.branch_id || !isAvailable}
-                              onChange={(event) => {
+                              onCheckedChange={(checked) => {
                                 setError(null)
                                 setForm((previous) => ({
                                   ...previous,
-                                  department_ids: event.target.checked
+                                  department_ids: checked
                                     ? Array.from(new Set([...previous.department_ids, value]))
                                     : previous.department_ids.filter((entry) => entry !== value),
                                 }))
@@ -747,8 +745,7 @@ export function PositionsView() {
                   Select every department where this position is available.
                 </span>
               </fieldset>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reports To Position</span>
+              <FormField label="Reports to position">
                 <FluentSelect
                   ariaLabel="Reports to position"
                   placeholder="None"
@@ -763,18 +760,15 @@ export function PositionsView() {
                     }),
                   ]}
                 />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Level</span>
-                <input type="number" min={1} max={100} className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.level} onChange={(event) => setForm((prev) => ({ ...prev, level: event.target.value }))} />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Department staffing limit</span>
-                <input type="number" min={1} className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.headcount} onChange={(event) => setForm((prev) => ({ ...prev, headcount: event.target.value }))} />
+              </FormField>
+              <FormField label="Level">
+                <Input type="number" min={1} max={100} value={form.level} onChange={(event) => setForm((prev) => ({ ...prev, level: event.target.value }))} />
+              </FormField>
+              <FormField label="Department staffing limit">
+                <Input type="number" min={1} value={form.headcount} onChange={(event) => setForm((prev) => ({ ...prev, headcount: event.target.value }))} />
                 <span className="text-[11px] text-slate-500">Maximum employees allowed for this position in each selected department.</span>
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Manager Position</span>
+              </FormField>
+              <FormField label="Manager position">
                 <FluentSelect
                   ariaLabel="Manager position"
                   value={form.is_manager}
@@ -784,9 +778,8 @@ export function PositionsView() {
                     { value: "true", label: "Yes" },
                   ]}
                 />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Active</span>
+              </FormField>
+              <FormField label="Active">
                 <FluentSelect
                   ariaLabel="Active"
                   value={form.is_active}
@@ -796,9 +789,8 @@ export function PositionsView() {
                     { value: "false", label: "No" },
                   ]}
                 />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>
+              </FormField>
+              <FormField label="Status">
                 <FluentSelect
                   ariaLabel="Status"
                   value={form.status}
@@ -808,11 +800,10 @@ export function PositionsView() {
                     { value: "inactive", label: "inactive" },
                   ]}
                 />
-              </label>
-              <label className="grid gap-1 md:col-span-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Description</span>
+              </FormField>
+              <FormField label="Description" className="md:col-span-2">
                 <Textarea className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm" value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} />
-              </label>
+              </FormField>
             </div>
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-200 px-4 py-4 sm:px-5">

@@ -1,5 +1,6 @@
 "use client"
 
+import { Input } from "@/components/ui/input"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { MapPin, Wifi } from "lucide-react";
@@ -625,7 +626,7 @@ export function AttendancePunchActions({
             {punchPolicy.allow_location_exception_override === true ? (
               <label className="grid gap-1 text-[11px] text-muted-foreground">
                 Location exception reason
-                <input value={exceptionReason} disabled={busyAction !== null} onChange={(event) => setExceptionReason(event.target.value)} maxLength={500} placeholder="Explain why location validation failed" className="h-8 rounded-md border border-input bg-background px-2 text-xs" />
+                <Input value={exceptionReason} disabled={busyAction !== null} onChange={(event) => setExceptionReason(event.target.value)} maxLength={500} placeholder="Explain why location validation failed" />
               </label>
             ) : null}
           </div>

@@ -1,5 +1,6 @@
 "use client"
 
+import { Input } from "@/components/ui/input"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
@@ -12,7 +13,7 @@ import {
   Eye16Regular,
   Add16Regular,
 } from "@fluentui/react-icons"
-import { Button as FluentButton, Input as FluentInput } from "@fluentui/react-components"
+import { Button as FluentButton } from "@fluentui/react-components"
 import {
   Dialog,
   DialogDescription,
@@ -811,8 +812,7 @@ function FieldInput({
   }
 
   return (
-    <input
-      className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+    <Input
       type={field.type === "number" ? "number" : "text"}
       value={value}
       placeholder={field.placeholder}
@@ -1636,9 +1636,9 @@ export function AccessControlManagementView({
           <>
             {activeSection === "templates" || activeSection === "week-plans" ? (
               <>
-                <FluentInput
+                <Input
                   size="small"
-                  className="!h-8 w-32 sm:w-40"
+                  className="w-32 sm:w-40"
                   placeholder={activeSection === "week-plans" ? "Search week plans…" : "Search templates…"}
                   value={templateSearch}
                   onChange={(event) => setTemplateSearch(event.target.value)}
@@ -1711,7 +1711,7 @@ export function AccessControlManagementView({
             {canCreate ? (
               <FluentButton
                 type="button"
-                className="!h-8 !min-h-8"
+                className="!min-h-8"
                 appearance="primary"
                 size="small"
                 icon={<Add16Regular />}
@@ -1731,7 +1731,7 @@ export function AccessControlManagementView({
             <FluentButton
               type="button"
               onClick={() => void fetchRows()}
-              className="!h-8 !min-h-8 !px-[14px]"
+              className="!min-h-8 !px-[14px]"
               appearance="outline"
               size="small"
               disabled={loading}
@@ -1871,7 +1871,7 @@ export function AccessControlManagementView({
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
               Name: {deletingName || "-"}
             </div>
-            <FluentInput
+            <Input
               size="small"
               aria-label={`Type ${deletingName} to confirm deletion`}
               placeholder={`Type ${deletingName} to confirm`}

@@ -61,6 +61,7 @@ import { NotificationSettingsEditor } from "@/components/dashboard/notification-
 import { canPerformPermission, decodeJwtPayload } from "@/lib/dashboard-permissions"
 import { Badge } from "@/components/ui/badge"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import {
   Sheet,
@@ -2257,10 +2258,9 @@ export function NotificationsView() {
                   ]}
                 />
                 <label className="inline-flex h-8 items-center gap-2 rounded-lg border border-border bg-background px-2 text-xs text-muted-foreground">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={includeArchived}
-                    onChange={(event) => setIncludeArchived(event.target.checked)}
+                    onCheckedChange={(checked) => setIncludeArchived(checked)}
                   />
                   Show archived
                 </label>

@@ -5,7 +5,11 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, Copy, Download, Eye, FileUp, Loader2, Send, Printer, XCircle } from "lucide-react"
 
+import { DateInput } from "@/components/ui/date-input"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import { FormField } from "@/components/ui/form-field"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/fluent-toast-store"
 import { readStatusFieldErrors } from "@/lib/admin-api"
 import {
@@ -50,17 +54,14 @@ import {
   formatDateTime,
 } from "./contract-ui"
 
-const input = "h-9 w-full rounded-md border border-border px-2.5 text-sm"
 const btn = "inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
 const TERMINAL = ["SIGNED", "CANCELLED", "SUPERSEDED", "TERMINATED"]
 
 function Field({ label, children, error }: { label: string; children: React.ReactNode; error?: string }) {
   return (
-    <label className="grid gap-1 text-sm">
-      <span className="font-medium text-slate-700">{label}</span>
+    <FormField label={label} error={error}>
       {children}
-      {error ? <span className="text-xs text-rose-600">{error}</span> : null}
-    </label>
+    </FormField>
   )
 }
 
@@ -281,30 +282,30 @@ function DraftEditor({
               <FluentSelect ariaLabel="Contract type" value={form.contract_type} onChange={set("contract_type")} options={(Object.keys(CONTRACT_TYPE_LABELS) as ContractType[]).map((value) => ({ value, label: CONTRACT_TYPE_LABELS[value] }))} />
             </Field>
             <Field label="Title">
-              <input className={input} value={form.title} onChange={text("title")} />
+              <Input value={form.title} onChange={text("title")} />
             </Field>
             <Field label="Start date" error={fieldErrors.start_date}>
-              <input type="date" className={input} value={form.start_date} onChange={text("start_date")} />
+              <DateInput value={form.start_date} onValueChange={set("start_date")} />
             </Field>
             {needsEnd ? (
               <Field label="End date" error={fieldErrors.end_date}>
-                <input type="date" className={input} value={form.end_date} min={form.start_date} onChange={text("end_date")} />
+                <DateInput value={form.end_date} min={form.start_date} onValueChange={set("end_date")} />
               </Field>
             ) : null}
             <Field label="Job title">
-              <input className={input} value={form.job_title} onChange={text("job_title")} />
+              <Input value={form.job_title} onChange={text("job_title")} />
             </Field>
             <Field label="Place of work">
-              <input className={input} value={form.work_location} onChange={text("work_location")} />
+              <Input value={form.work_location} onChange={text("work_location")} />
             </Field>
             <Field label="Place of recruitment">
-              <input className={input} value={form.place_of_recruitment} onChange={text("place_of_recruitment")} />
+              <Input value={form.place_of_recruitment} onChange={text("place_of_recruitment")} />
             </Field>
             <Field label="Probation (months)">
-              <input type="number" min={0} max={24} className={input} value={form.probation_months} onChange={text("probation_months")} />
+              <Input type="number" min={0} max={24} value={form.probation_months} onChange={text("probation_months")} />
             </Field>
             <Field label="Hours of work">
-              <input className={input} placeholder="e.g. 08:00–17:00, Monday to Friday" value={form.hours_of_work} onChange={text("hours_of_work")} />
+              <Input placeholder="e.g. 08:00–17:00, Monday to Friday" value={form.hours_of_work} onChange={text("hours_of_work")} />
             </Field>
             <Field label="Basic salary">
               {contract.salaryHidden ? (
@@ -313,8 +314,8 @@ function DraftEditor({
                 </p>
               ) : (
               <div className="flex gap-2">
-                <input className={cn(input, "w-20")} placeholder="TZS" value={form.salary_currency} onChange={text("salary_currency")} aria-label="Currency" />
-                <input className={input} inputMode="decimal" value={form.salary_amount} onChange={text("salary_amount")} aria-label="Amount" />
+                <Input className="w-20" placeholder="TZS" value={form.salary_currency} onChange={text("salary_currency")} aria-label="Currency" />
+                <Input inputMode="decimal" value={form.salary_amount} onChange={text("salary_amount")} aria-label="Amount" />
               </div>
               )}
             </Field>
@@ -322,17 +323,17 @@ function DraftEditor({
               <FluentSelect ariaLabel="Pay frequency" value={form.pay_frequency} onChange={set("pay_frequency")} options={[{ value: "", label: "Not set" }, { value: "MONTHLY", label: "Monthly" }, { value: "BIWEEKLY", label: "Every two weeks" }, { value: "WEEKLY", label: "Weekly" }, { value: "DAILY", label: "Daily" }]} />
             </Field>
             <Field label="Payment method">
-              <input className={input} placeholder="e.g. bank transfer" value={form.remuneration_method} onChange={text("remuneration_method")} />
+              <Input placeholder="e.g. bank transfer" value={form.remuneration_method} onChange={text("remuneration_method")} />
             </Field>
             <Field label="Company signatory" error={fieldErrors.assigned_signatory_id}>
               <FluentSelect ariaLabel="Company signatory" value={form.assigned_signatory_id} onChange={set("assigned_signatory_id")} options={[{ value: "", label: "Automatic (company rules)" }, ...signatories.filter((row) => row.isActive && row.employeeId !== contract.employeeId).map((row) => ({ value: String(row.id), label: `${row.displayName} — ${row.jobTitle}` }))]} />
             </Field>
           </div>
           <Field label="Job description">
-            <textarea className="min-h-16 rounded-md border border-border px-2.5 py-1.5 text-sm" value={form.job_description} onChange={text("job_description")} />
+            <Textarea formatting={false} value={form.job_description} onChange={text("job_description")} />
           </Field>
           <Field label="Allowances and benefits">
-            <textarea className="min-h-12 rounded-md border border-border px-2.5 py-1.5 text-sm" value={form.benefits} onChange={text("benefits")} />
+            <Textarea formatting={false} value={form.benefits} onChange={text("benefits")} />
           </Field>
         </section>
         {fields.length ? (
@@ -438,7 +439,7 @@ function VerifyUpload({ token, contract, onDone }: { token: string; contract: Co
           <ContractPdfViewer token={token} contractId={contract.id} documentId={contract.companySignedDocumentId} />
         </div>
       </div>
-      <textarea className="min-h-12 rounded-md border border-border px-2.5 py-1.5 text-sm" placeholder="Reason (required to reject)" value={reason} onChange={(event) => setReason(event.target.value)} />
+      <Textarea formatting={false} placeholder="Reason (required to reject)" value={reason} onChange={(event) => setReason(event.target.value)} />
       <div className="flex gap-2">
         <button type="button" className={cn(btn, "bg-emerald-600 text-white")} disabled={busy} onClick={() => void decide("ACCEPT")}>
           Accept
@@ -479,8 +480,8 @@ function RenewPanel({ token, contract, movementId }: { token: string; contract: 
       {movementId ? <p className="text-xs text-muted-foreground">A promotion, transfer or salary change was applied. Prepare an amendment if contract terms changed.</p> : null}
       <div className="grid gap-3 sm:grid-cols-3">
         <FluentSelect ariaLabel="Kind" value={kind} onChange={(value) => setKind(value as "RENEWAL" | "AMENDMENT")} options={[{ value: "RENEWAL", label: "Renewal" }, { value: "AMENDMENT", label: "Amendment" }]} />
-        <input className={input} placeholder="Reason" value={reason} onChange={(event) => setReason(event.target.value)} aria-label="Reason" />
-        <input type="date" className={input} value={endDate} onChange={(event) => setEndDate(event.target.value)} aria-label="New end date (optional)" />
+        <Input placeholder="Reason" value={reason} onChange={(event) => setReason(event.target.value)} aria-label="Reason" />
+        <DateInput value={endDate} onValueChange={(value) => setEndDate(value)} aria-label="New end date (optional)" />
       </div>
       <button type="button" className={cn(btn, "w-fit bg-primary text-primary-foreground")} disabled={busy || reason.trim().length < 3} onClick={() => void submit()}>
         Prepare new version
@@ -697,8 +698,7 @@ function LegacyContractDetailView({ contractId, token }: { contractId: number; t
                   </>
                 ) : null}
                 {canManage && awaitingCompany ? (
-                  <label className="grid gap-1 text-xs">
-                    <span className="text-muted-foreground">Company signatory</span>
+                  <FormField label="Company signatory">
                     <FluentSelect
                       ariaLabel="Reassign signatory"
                       value={contract.assignedSignatoryId ? String(contract.assignedSignatoryId) : ""}
@@ -711,7 +711,7 @@ function LegacyContractDetailView({ contractId, token }: { contractId: number; t
                         .filter((row) => row.isActive && row.employeeId !== contract.employeeId)
                         .map((row) => ({ value: String(row.id), label: `${row.displayName} — ${row.jobTitle}` }))}
                     />
-                  </label>
+                  </FormField>
                 ) : null}
                 {canManage && !TERMINAL.includes(contract.status) ? (
                   <button type="button" className={cn(btn, actionButton, "text-rose-700")} onClick={() => void doCancel()}>

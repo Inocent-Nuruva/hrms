@@ -5,6 +5,7 @@ import * as React from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { showErrorAlert } from "@/lib/error-alert"
 import { createRolloverRun, days, listLeaveCycles, type LeaveCycleRow } from "@/lib/leave-engine-api"
 import { readStoredSessionTokens } from "@/lib/session-client"
@@ -90,21 +91,23 @@ export function LeaveCycleSchedulePanel({ canManage }: { canManage: boolean }) {
           className="sm:max-w-xs"
           aria-label="Search employees"
         />
-        <select
-          className="h-9 rounded-md border border-border bg-background px-2 text-sm"
+        <FluentSelect
+          className="max-w-56"
           value={status}
-          onChange={(e) => {
+          onChange={(value) => {
             setPage(1)
-            setStatus(e.target.value)
+            setStatus(value)
           }}
-          aria-label="Filter by status"
-        >
-          <option value="">All statuses</option>
-          <option value="open">Cycle running</option>
-          <option value="due">Rollover due</option>
-          <option value="failed">Rollover failed</option>
-          <option value="closed">Closed</option>
-        </select>
+          ariaLabel="Filter by status"
+          placeholder="All statuses"
+          options={[
+            { value: "", label: "All statuses" },
+            { value: "open", label: "Cycle running" },
+            { value: "due", label: "Rollover due" },
+            { value: "failed", label: "Rollover failed" },
+            { value: "closed", label: "Closed" },
+          ]}
+        />
       </div>
       <div className="overflow-x-auto">
         <StandardTable className="w-full min-w-[900px] text-sm">

@@ -1,5 +1,6 @@
 "use client"
 
+import { Input } from "@/components/ui/input"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import {
@@ -15,7 +16,6 @@ import {
   DialogPopup,
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
-import { Input as FluentInput } from "@fluentui/react-components"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import { Textarea } from "@/components/ui/textarea"
@@ -826,18 +826,18 @@ export function AccessControlActivityView({
                 ]}
               />
             ) : activeSection === "device-command-logs" ? (
-              <FluentInput
+              <Input
                 size="small"
-                className="!h-8 w-32 sm:w-40"
+                className="w-32 sm:w-40"
                 placeholder="Command type…"
                 value={typeFilter}
                 onChange={(event) => setTypeFilter(event.target.value)}
               />
             ) : activeSection === "hikvision-sync-logs" ? (
               <>
-                <FluentInput
+                <Input
                   size="small"
-                  className="!h-8 w-32 sm:w-40"
+                  className="w-32 sm:w-40"
                   placeholder="Sync type…"
                   value={typeFilter}
                   onChange={(event) => setTypeFilter(event.target.value)}

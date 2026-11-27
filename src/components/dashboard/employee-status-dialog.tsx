@@ -25,6 +25,8 @@ import {
   type StatusRequirementState,
 } from "@/lib/admin-api"
 import { cn } from "@/lib/utils"
+import { FormField } from "@/components/ui/form-field"
+import { Input } from "@/components/ui/input"
 
 const EXIT_STATUSES: EmployeeStatusValue[] = ["resigned", "terminated", "retired", "deceased", "exited"]
 
@@ -731,8 +733,7 @@ export function EmployeeStatusDialog({
             <div className="grid gap-5">
               {/* 1. Status + effective date */}
               <section className="grid gap-3 sm:grid-cols-2">
-                <label className="grid min-w-0 gap-1">
-                  <FieldLabel required>Employment Status</FieldLabel>
+                <FormField label="Employment status" required error={fieldErrors.employment_status}>
                   <FluentSelect
                     ariaLabel="Employment Status"
                     value={form.target}
@@ -741,13 +742,10 @@ export function EmployeeStatusDialog({
                     onChange={handleTargetChange}
                     options={targetOptions}
                   />
-                  <FieldError message={fieldErrors.employment_status} />
-                </label>
-                <label className="grid min-w-0 gap-1">
-                  <FieldLabel required>Effective Date</FieldLabel>
+                </FormField>
+                <FormField label="Effective date" required error={fieldErrors.effective_date}>
                   <DatePickerPresets value={form.effectiveDate} onChange={handleEffectiveDateChange} />
-                  <FieldError message={fieldErrors.effective_date} />
-                </label>
+                </FormField>
               </section>
 
               {/* 2. Requirements */}
@@ -871,15 +869,14 @@ export function EmployeeStatusDialog({
               ) : null}
 
               {/* 3. Notes */}
-              <label className="grid gap-1">
-                <FieldLabel>Notes</FieldLabel>
+              <FormField label="Notes" error={fieldErrors.notes}>
                 <Textarea
                   value={form.notes}
                   onChange={(event) => update((prev) => ({ ...prev, notes: event.target.value }))}
-                  className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  formatting={false}
+                  className="min-h-24"
                 />
-                <FieldError message={fieldErrors.notes} />
-              </label>
+              </FormField>
             </div>
           )}
         </div>
@@ -1064,8 +1061,7 @@ function ActivationFields({
                   ]}
                 />
               </div>
-              <label className="grid min-w-0 gap-1">
-                <FieldLabel required>{form.schedule.mode === "shift" ? "Shift" : "Timetable"}</FieldLabel>
+              <FormField label={form.schedule.mode === "shift" ? "Shift" : "Timetable"} required>
                 <FluentSelect
                   ariaLabel={form.schedule.mode === "shift" ? "Shift" : "Timetable"}
                   value={form.schedule.id}
@@ -1079,16 +1075,15 @@ function ActivationFields({
                       "start_time" in row && row.start_time ? `${row.start_time} – ${row.end_time ?? ""}` : undefined,
                   }))}
                 />
-              </label>
-              <label className="grid min-w-0 gap-1">
-                <FieldLabel required>Schedule start date</FieldLabel>
+              </FormField>
+              <FormField label="Schedule start date" required>
                 <DatePickerPresets
                   value={form.schedule.startDate}
                   onChange={(value) =>
                     update((prev) => ({ ...prev, schedule: { ...prev.schedule, startDate: value, startDateTouched: true } }))
                   }
                 />
-              </label>
+              </FormField>
             </div>
           ) : null}
           <FieldError message={scheduleError} />
@@ -1165,18 +1160,16 @@ function SuspensionFields({
 
       <RequirementCard state={stateOf("suspension_dates")} required title="Suspension period">
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="grid min-w-0 gap-1">
-            <FieldLabel required>Start date</FieldLabel>
+          <FormField label="Start date" required>
             <DatePickerPresets value={form.suspension.startDate} onChange={(value) => setSuspension({ startDate: value })} />
-          </label>
-          <label className="grid min-w-0 gap-1">
-            <FieldLabel>Expected end date</FieldLabel>
+          </FormField>
+          <FormField label="Expected end date">
             <DatePickerPresets
               value={form.suspension.expectedEndDate}
               placeholder="Open-ended"
               onChange={(value) => setSuspension({ expectedEndDate: value })}
             />
-          </label>
+          </FormField>
         </div>
         <FieldError message={fieldErrors["suspension.expected_end_date"]} />
       </RequirementCard>
@@ -1251,21 +1244,13 @@ function ExitFields({
     <>
       <RequirementCard state={stateOf("exit_dates")} required title="Exit date and last working day">
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="grid min-w-0 gap-1">
-            <FieldLabel required>Exit date</FieldLabel>
+          <FormField label="Exit date" required error={fieldErrors["exit.exit_date"]}>
             <DatePickerPresets value={form.exit.exitDate} onChange={(value) => setExit({ exitDate: value })} />
-            <FieldError message={fieldErrors["exit.exit_date"]} />
-          </label>
-          <label className="grid min-w-0 gap-1">
-            <FieldLabel required>Last working day</FieldLabel>
+          </FormField>
+          <FormField label="Last working day" required error={fieldErrors["exit.last_working_day"] ??
+                (form.exit.lastWorkingDay > form.exit.exitDate ? "Last working day cannot be after the exit date." : undefined)}>
             <DatePickerPresets value={form.exit.lastWorkingDay} onChange={(value) => setExit({ lastWorkingDay: value })} />
-            <FieldError
-              message={
-                fieldErrors["exit.last_working_day"] ??
-                (form.exit.lastWorkingDay > form.exit.exitDate ? "Last working day cannot be after the exit date." : undefined)
-              }
-            />
-          </label>
+          </FormField>
         </div>
       </RequirementCard>
 
@@ -1278,15 +1263,13 @@ function ExitFields({
           options={EXIT_REASON_OPTIONS}
         />
         {form.exit.reason === "other" ? (
-          <label className="grid gap-1">
-            <FieldLabel required>Details</FieldLabel>
-            <input
+          <FormField label="Details" required>
+            <Input
               value={form.exit.reasonDetails}
               onChange={(event) => setExit({ reasonDetails: event.target.value })}
-              className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
               placeholder="Describe the reason"
             />
-          </label>
+          </FormField>
         ) : null}
         <FieldError message={fieldErrors["exit.reason_details"] ?? fieldErrors["exit.reason"]} />
       </RequirementCard>

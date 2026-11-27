@@ -32,6 +32,8 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api"
 import { ProfileSidePanel } from "@/components/dashboard/employee-profile/profile-side-panel"
+import { FormField } from "@/components/ui/form-field"
+import { FileDropzone } from "@/components/ui/file-dropzone"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 import {
@@ -56,7 +58,6 @@ import {
   readNumber,
   sectionTitleToApiSection,
   sectionTitleToRouteKey,
-  formatFileSize,
   renderEntryInput,
   sectionSchema,
   editableEntries,
@@ -738,24 +739,14 @@ export function Section({
               ))
             )}
             {isDocumentsSection ? (
-              <label className="grid min-w-0 gap-1 md:col-span-2">
-                <span className="text-xs font-medium text-foreground">
-                  Attachment
-                </span>
-                <input
-                  type="file"
-                  className="block w-full rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] ?? null
-                    setDocumentUploadFile(file)
-                  }}
+              <FormField label="Attachment" htmlFor="profile-document-file" required className="sm:col-span-2">
+                <FileDropzone
+                  id="profile-document-file"
+                  file={documentUploadFile}
+                  onFileChange={setDocumentUploadFile}
+                  hint="PDF, image or office document"
                 />
-                <p className="text-xs text-slate-500">
-                  {documentUploadFile
-                    ? `${documentUploadFile.name} · ${formatFileSize(documentUploadFile.size)}`
-                    : "Choose the document file to upload."}
-                </p>
-              </label>
+              </FormField>
             ) : null}
           </div>
           {isDocumentsSection && !documentUploadFile ? (
@@ -772,7 +763,7 @@ export function Section({
 }
 
 
-/** Label (with a red star when required), the input, and its inline error. */
+/** Shared FormField, spanning both columns for long text fields. */
 function RecordFormField({
   label,
   required,
@@ -787,31 +778,9 @@ function RecordFormField({
   children: React.ReactNode
 }) {
   return (
-    <div
-      className={cn(
-        "grid min-w-0 gap-1.5",
-        wide && "sm:col-span-2",
-        error && "[&_input]:border-destructive [&_textarea]:border-destructive [&_button]:border-destructive"
-      )}
-    >
-      <span className="text-xs font-medium text-foreground">
-        {label}
-        {required ? (
-          <>
-            <span className="ml-0.5 text-destructive" aria-hidden="true">
-              *
-            </span>
-            <span className="sr-only"> (required)</span>
-          </>
-        ) : null}
-      </span>
+    <FormField label={label} required={required} error={error} className={wide ? "sm:col-span-2" : undefined}>
       {children}
-      {error ? (
-        <p role="alert" className="text-[11px] leading-snug text-destructive">
-          {error}
-        </p>
-      ) : null}
-    </div>
+    </FormField>
   )
 }
 

@@ -5,6 +5,10 @@ import { RefreshCwIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import { DateInput } from "@/components/ui/date-input"
+import { FluentSelect } from "@/components/ui/fluent-select"
+import { FormField } from "@/components/ui/form-field"
 import { PageHeader } from "@/components/ui/page-header"
 import { Textarea } from "@/components/ui/textarea"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
@@ -185,28 +189,27 @@ export function LeavePayrollIntegrationView() {
                 <Input value={form[key]} onChange={(event) => setForm({ ...form, [key]: event.target.value })} />
               </label>
             ))}
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium">Tax treatment</span>
-              <select
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            <FormField label="Tax treatment">
+              <FluentSelect
+                ariaLabel="Tax treatment"
                 value={form.tax_treatment}
-                onChange={(event) => setForm({ ...form, tax_treatment: event.target.value })}
-              >
-                <option value="TAXABLE">Taxable</option>
-                <option value="PARTIALLY_TAXABLE">Partially taxable</option>
-                <option value="NON_TAXABLE">Non-taxable</option>
-              </select>
-            </label>
+                onChange={(value) => setForm({ ...form, tax_treatment: value })}
+                options={[
+                  { value: "TAXABLE", label: "Taxable" },
+                  { value: "PARTIALLY_TAXABLE", label: "Partially taxable" },
+                  { value: "NON_TAXABLE", label: "Non-taxable" },
+                ]}
+              />
+            </FormField>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium">Taxable %</span>
               <Input type="number" value={form.taxable_percentage} onChange={(event) => setForm({ ...form, taxable_percentage: event.target.value })} />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium">Effective date</span>
-              <Input type="date" value={form.effective_date} onChange={(event) => setForm({ ...form, effective_date: event.target.value })} />
-            </label>
+            <FormField label="Effective date">
+              <DateInput aria-label="Effective date" value={form.effective_date} onChange={(event) => setForm({ ...form, effective_date: event.target.value })} />
+            </FormField>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={form.pensionable} onChange={(event) => setForm({ ...form, pensionable: event.target.checked })} />
+              <Checkbox checked={form.pensionable} onCheckedChange={(checked) => setForm({ ...form, pensionable: checked })} />
               Pensionable (NSSF applies)
             </label>
           </div>

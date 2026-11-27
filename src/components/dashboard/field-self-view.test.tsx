@@ -34,6 +34,7 @@ vi.mock("@/components/animate-ui/components/base/dialog", () => {
 vi.mock("@/components/ui/resizable-table", () => ({ ResizableTable: () => null }))
 vi.mock("@/components/ui/fluent-select", () => ({ FluentSelect: () => null }))
 vi.mock("@/components/ui/date-input", () => ({ DateInput: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} type="date" /> }))
+vi.mock("@/components/ui/time-input", () => ({ TimeInput: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} type="time" /> }))
 import { FieldSelfView } from "./field-self-view"
 
 let root: Root

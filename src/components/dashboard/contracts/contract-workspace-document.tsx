@@ -1,6 +1,11 @@
 ﻿"use client";
 import * as React from "react";
 import { CheckCircle2, ShieldCheck, XCircle } from "lucide-react";
+import { DateInput } from "@/components/ui/date-input";
+import { FluentSelect } from "@/components/ui/fluent-select";
+import { FormField } from "@/components/ui/form-field";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { ContractPdfViewer, formatDate } from "./contract-ui";
 import { ContractSigningPanel } from "./contract-signing-panel";
 import { SignatoriesPanel } from "./contract-page-panels";
@@ -445,32 +450,29 @@ export function ContractWorkspaceDocument({
         </button>
       ) : null}
       {contract.canManage && contract.status === "PENDING_HR_SIGNATURE" ? (
-        <label className="grid gap-1 rounded border border-border p-3">
-          {m.reassignSignatory}
-          <select
-            className="rounded border border-border bg-background p-2"
-            value={contract.assignedSignatoryId ?? ""}
-            onChange={(event) => {
-              const id = Number(event.target.value);
+        <FormField label={m.reassignSignatory} className="rounded border border-border p-3">
+          <FluentSelect
+            ariaLabel={m.reassignSignatory}
+            value={String(contract.assignedSignatoryId ?? "")}
+            placeholder={m.choose}
+            options={signatories
+              .filter(
+                (item) =>
+                  item.isActive && item.employeeId !== contract.employeeId,
+              )
+              .map((item) => ({
+                value: String(item.id),
+                label: `${item.displayName} — ${item.jobTitle}`,
+              }))}
+            onChange={(value) => {
+              const id = Number(value);
               if (id)
                 void reassignContractSignatory(token, contract.id, id)
                   .then(() => window.location.reload())
                   .catch(() => setError(m.reassignFailed));
             }}
-          >
-            <option value="">{m.choose}</option>
-            {signatories
-              .filter(
-                (item) =>
-                  item.isActive && item.employeeId !== contract.employeeId,
-              )
-              .map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.displayName} — {item.jobTitle}
-                </option>
-              ))}
-          </select>
-        </label>
+          />
+        </FormField>
       ) : null}
       <ContractWorkspaceFileAction token={token} contract={contract} />
       {contract.status === "SIGNED" && contract.canManage ? (
@@ -480,43 +482,40 @@ export function ContractWorkspaceDocument({
           {versions.some((row) => row.status === "DRAFT" && row.id !== contract.id) ? (
             <p className="text-sm">An existing draft is available. {versions.filter((row) => row.status === "DRAFT" && row.id !== contract.id).map((row) => <a key={row.id} className="text-primary underline" href={`/dashboard/employees/contracts/${row.id}`}>Open draft v{row.version} </a>)}</p>
           ) : null}
-          <label className="grid gap-1 text-sm">What would you like to do?
-          <select
-            aria-label={m.renewOrAmend}
-            className="rounded border border-border bg-background p-2"
+          <FormField label="What would you like to do?">
+          <FluentSelect
+            ariaLabel={m.renewOrAmend}
             value={renewKind}
-            onChange={(event) => {
-              const kind = event.target.value as "RENEWAL" | "AMENDMENT";
+            options={[
+              { value: "RENEWAL", label: m.renewal },
+              { value: "AMENDMENT", label: m.amendment },
+            ]}
+            onChange={(value) => {
+              const kind = value as "RENEWAL" | "AMENDMENT";
               setRenewKind(kind);
               setRenewStart(kind === "AMENDMENT" ? contract.startDate ?? "" : "");
               setRenewEnd(kind === "AMENDMENT" ? contract.endDate ?? "" : "");
             }}
-          >
-            <option value="RENEWAL">{m.renewal}</option>
-            <option value="AMENDMENT">{m.amendment}</option>
-          </select>
-          </label>
-          <label className="grid gap-1 text-sm">Reason for the change
-          <input
+          />
+          </FormField>
+          <FormField label="Reason for the change">
+          <Input
             aria-label={m.renewalReason}
             placeholder={m.renewalReason}
-            className="rounded border border-border bg-background p-2"
             value={renewReason}
             onChange={(event) => setRenewReason(event.target.value)}
           />
-          </label>
-          <label className="grid gap-1 text-sm">{renewKind === "AMENDMENT" ? "Corrected start date" : "New start date (optional)"}
-          <input aria-label={renewKind === "AMENDMENT" ? "Corrected start date" : "New start date (optional)"} className="rounded border border-border bg-background p-2" type="date" value={renewStart} onChange={(event) => setRenewStart(event.target.value)} />
-          </label>
-          <label className="grid gap-1 text-sm">{m.newEndDate}
-          <input
+          </FormField>
+          <FormField label={renewKind === "AMENDMENT" ? "Corrected start date" : "New start date (optional)"}>
+          <DateInput aria-label={renewKind === "AMENDMENT" ? "Corrected start date" : "New start date (optional)"} value={renewStart} onValueChange={(value) => setRenewStart(value)} />
+          </FormField>
+          <FormField label={m.newEndDate}>
+          <DateInput
             aria-label={m.newEndDate}
-            className="rounded border border-border bg-background p-2"
-            type="date"
             value={renewEnd}
-            onChange={(event) => setRenewEnd(event.target.value)}
+            onValueChange={(value) => setRenewEnd(value)}
           />
-          </label>
+          </FormField>
           {renewStart && renewEnd && renewEnd < renewStart ? <p role="alert" className="text-sm text-destructive">The end date must be on or after the start date.</p> : null}
           <button
             type="button"
@@ -615,19 +614,15 @@ export function ContractWorkspaceDocument({
                 />
               </div>
             </div>
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">
-                Reason for rejection{" "}
-                <span className="font-normal text-muted-foreground">(only needed to reject)</span>
-              </span>
-              <textarea
+            <FormField label="Reason for rejection" hint="Only needed to reject.">
+              <Textarea
+                formatting={false}
                 aria-label={m.rejectReason}
                 placeholder="e.g. Page 3 is not signed, or the scan is unreadable"
-                className="min-h-20 rounded-md border border-border bg-background p-2.5 text-sm focus:border-primary focus:outline-none"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
               />
-            </label>
+            </FormField>
             <div className="flex flex-wrap items-center gap-3 border-t border-sky-200 pt-3">
               <button
                 type="button"
@@ -682,35 +677,29 @@ export function ContractWorkspaceDocument({
         id="contract-version-compare"
         className="scroll-mt-40 rounded border border-border p-3"
       >
-        <label className="grid gap-1">
-          {m.earlierVersion}
-          <select
-            value={leftId}
-            onChange={(event) => setLeftId(event.target.value)}
-            className="rounded border border-border bg-background p-2"
-          >
-            <option value="">{m.choose}</option>
-            {versions.map((row) => (
-              <option key={row.id} value={row.id}>
-                {m.version} {row.version}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1">
-          {m.laterVersion}
-          <select
-            value={rightId}
-            onChange={(event) => setRightId(event.target.value)}
-            className="rounded border border-border bg-background p-2"
-          >
-            {versions.map((row) => (
-              <option key={row.id} value={row.id}>
-                {m.version} {row.version}
-              </option>
-            ))}
-          </select>
-        </label>
+        <FormField label={m.earlierVersion}>
+          <FluentSelect
+            ariaLabel={m.earlierVersion}
+            value={String(leftId)}
+            onChange={(value) => setLeftId(value)}
+            placeholder={m.choose}
+            options={versions.map((row) => ({
+              value: String(row.id),
+              label: `${m.version} ${row.version}`,
+            }))}
+          />
+        </FormField>
+        <FormField label={m.laterVersion}>
+          <FluentSelect
+            ariaLabel={m.laterVersion}
+            value={String(rightId)}
+            onChange={(value) => setRightId(value)}
+            options={versions.map((row) => ({
+              value: String(row.id),
+              label: `${m.version} ${row.version}`,
+            }))}
+          />
+        </FormField>
         <button type="button" onClick={() => void compare()}>
           {m.compareVersions}
         </button>

@@ -1,16 +1,11 @@
 "use client";
+import { FormField } from "@/components/ui/form-field";
+import { Input } from "@/components/ui/input";
 import { ATTENDANCE_PAGE_STACK, AttendancePageHead } from "@/components/dashboard/attendance-ops-ui";
 
 import * as React from "react";
-import {
-  Badge as FluentBadge,
-  Button as FluentButton,
-  Checkbox,
-  Field,
-  Input as FluentInput,
-  MessageBar,
-  MessageBarBody,
-} from "@fluentui/react-components";
+import { Badge as FluentBadge, Button as FluentButton, Checkbox, MessageBar, MessageBarBody } from "@fluentui/react-components"
+;
 import {
   ArrowClockwise20Regular,
 } from "@fluentui/react-icons";
@@ -219,21 +214,21 @@ export function AttendanceExemptionsClient() {
         </div>
         {canManage ? (
           <div className="grid gap-3 border-b border-border py-4 sm:grid-cols-[minmax(0,12rem)_1fr_auto] sm:items-end">
-            <Field label="Exempt from" required>
+            <FormField label="Exempt from" required>
               <DatePickerPresets
                 value={exemptFrom}
                 onChange={setExemptFrom}
                 placeholder="Select date"
               />
-            </Field>
-            <Field label="Reason">
-              <FluentInput
+            </FormField>
+            <FormField label="Reason">
+              <Input
                 maxLength={255}
                 value={reason}
-                onChange={(_event, data) => setReason(data.value)}
+                onChange={(event) => setReason(event.target.value)}
                 placeholder="e.g. Field staff, no device at site"
               />
-            </Field>
+            </FormField>
             <FluentButton
               appearance="primary"
               disabled={saving || !exemptFrom || selectedCandidates.size === 0}

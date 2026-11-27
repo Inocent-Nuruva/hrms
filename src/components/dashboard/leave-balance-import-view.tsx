@@ -10,13 +10,13 @@ import {
   CircleMinusIcon,
   CircleXIcon,
   DownloadIcon,
-  FileSpreadsheetIcon,
+
   HistoryIcon,
   InfoIcon,
   RefreshCcwIcon,
   TriangleAlertIcon,
   UploadIcon,
-  XIcon,
+
 } from "lucide-react";
 import {
   cancelLeaveBalanceImport,
@@ -70,6 +70,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { FluentSelect } from "@/components/ui/fluent-select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { FileDropzone } from "@/components/ui/file-dropzone";
+import { FormField } from "@/components/ui/form-field";
+import { Input } from "@/components/ui/input";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 
 type LookupOption = { id: number; label: string };
@@ -302,9 +306,8 @@ export function LeaveBalanceImportView() {
   const [templateBusy, setTemplateBusy] = React.useState(false);
 
   // Upload
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
   const [file, setFile] = React.useState<File | null>(null);
-  const [dragging, setDragging] = React.useState(false);
   const [defaultReason, setDefaultReason] = React.useState("");
   const [uploading, setUploading] = React.useState(false);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
@@ -573,7 +576,7 @@ export function LeaveBalanceImportView() {
       });
       showBatch(result);
       setFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+
       void loadHistory();
     } catch (error) {
       setUploadError(errorMessage(error, "The file could not be validated."));
@@ -1039,96 +1042,25 @@ export function LeaveBalanceImportView() {
                     you review the preview and confirm.
                   </p>
                 </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
+                <FileDropzone
+                  file={file}
+                  onFileChange={selectFile}
                   accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  className="sr-only"
-                  aria-label="Completed leave balance template"
-                  onChange={(event) =>
-                    selectFile(event.target.files?.[0] ?? null)
-                  }
+                  hint="Completed leave balance template, .xlsx file (max 10 MB)"
                 />
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => fileInputRef.current?.click()}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      fileInputRef.current?.click();
-                    }
-                  }}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    setDragging(true);
-                  }}
-                  onDragLeave={() => setDragging(false)}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    setDragging(false);
-                    selectFile(event.dataTransfer.files?.[0] ?? null);
-                  }}
-                  className={cn(
-                    "flex cursor-pointer items-center gap-3 rounded-lg border border-dashed px-4 py-5 text-sm transition-colors",
-                    dragging
-                      ? "border-primary bg-primary/[0.06]"
-                      : "border-border hover:bg-muted/40",
-                  )}
+                <FormField
+                  label="Default adjustment reason (optional)"
+                  htmlFor="leave-balance-import-default-reason"
                 >
-                  <FileSpreadsheetIcon
-                    className="size-8 shrink-0 text-emerald-600"
-                    aria-hidden
-                  />
-                  <span className="min-w-0 flex-1">
-                    {file ? (
-                      <>
-                        <span className="block truncate font-medium">
-                          {file.name}
-                        </span>
-                        <span className="block text-xs text-muted-foreground">
-                          {Math.max(1, Math.round(file.size / 1024))} KB · ready
-                          to validate
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="block font-medium">
-                          Drop the completed template here
-                        </span>
-                        <span className="block text-xs text-muted-foreground">
-                          or click to choose an .xlsx file (max 10 MB)
-                        </span>
-                      </>
-                    )}
-                  </span>
-                  {file ? (
-                    <button
-                      type="button"
-                      className="rounded p-1 text-muted-foreground hover:bg-muted"
-                      aria-label="Remove file"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        selectFile(null);
-                        if (fileInputRef.current)
-                          fileInputRef.current.value = "";
-                      }}
-                    >
-                      <XIcon className="size-4" />
-                    </button>
-                  ) : null}
-                </div>
-                <label className="block space-y-1 text-xs font-medium">
-                  <span>Default adjustment reason (optional)</span>
-                  <input
+                  <Input
+                    id="leave-balance-import-default-reason"
                     type="text"
                     maxLength={500}
                     value={defaultReason}
                     onChange={(event) => setDefaultReason(event.target.value)}
                     placeholder="Used for changed rows with a blank Adjustment Reason / Remarks"
-                    className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs"
                   />
-                </label>
+                </FormField>
                 {uploadError ? (
                   <div
                     role="alert"
@@ -1412,7 +1344,7 @@ export function LeaveBalanceImportView() {
                       </button>
                     ))}
                   </div>
-                  <input
+                  <Input
                     type="search"
                     value={rowSearch}
                     onChange={(event) => {
@@ -1421,7 +1353,7 @@ export function LeaveBalanceImportView() {
                     }}
                     placeholder="Employee number or name"
                     aria-label="Search by employee number or name"
-                    className="h-8 w-44 rounded-md border border-border bg-background px-2 text-xs"
+                    className="w-44"
                   />
                   {facets?.leave_types?.length ? (
                     <FluentSelect
@@ -1620,13 +1552,10 @@ export function LeaveBalanceImportView() {
                     TONE_STYLES.warn.panel,
                   )}
                 >
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     className="mt-0.5"
                     checked={acknowledgeWarnings}
-                    onChange={(event) =>
-                      setAcknowledgeWarnings(event.target.checked)
-                    }
+                    onCheckedChange={(checked) => setAcknowledgeWarnings(checked)}
                   />
                   <span>
                     I reviewed the {batch.warning_rows} row(s) with warnings and
@@ -1641,12 +1570,11 @@ export function LeaveBalanceImportView() {
                     TONE_STYLES.danger.panel,
                   )}
                 >
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     className="mt-0.5"
                     checked={acknowledgeSkippedRows}
-                    onChange={(event) =>
-                      setAcknowledgeSkippedRows(event.target.checked)
+                    onCheckedChange={(checked) =>
+                      setAcknowledgeSkippedRows(checked)
                     }
                   />
                   <span>

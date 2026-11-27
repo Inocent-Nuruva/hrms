@@ -17,7 +17,9 @@ import {
   Money24Regular,
   Wallet24Regular,
 } from "@fluentui/react-icons";
-import { Button, Checkbox, Field, Input } from "@fluentui/react-components";
+import { Button, Checkbox } from "@fluentui/react-components";
+import { Input } from "@/components/ui/input";
+import { FormField as Field } from "@/components/ui/form-field";
 import { toast } from "@/components/ui/fluent-toast-store";
 
 import { SearchToggleField } from "@/components/common/search-toggle-field";
@@ -30,7 +32,6 @@ import {
   actionButtonClass,
   asRecord,
   employeeLabel,
-  inputClass,
   optionLabel,
   pageBleedClass,
   prettify,
@@ -40,7 +41,6 @@ import {
   rowId,
   secondaryButtonClass,
   statusChartItems,
-  textareaClass,
 } from "@/components/dashboard/talent-visuals";
 import {
   Dialog,
@@ -278,12 +278,11 @@ function FinanceInputField({
   return (
     <Field label={label}>
       <Input
-        appearance="outline"
         type={type}
         value={value}
         disabled={disabled}
         placeholder={placeholder}
-        onChange={(_event, data) => onValueChange(data.value)}
+        onChange={(event) => onValueChange(event.target.value)}
       />
     </Field>
   );
@@ -1765,8 +1764,6 @@ export function FinanceOperationsView({
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">From</span>
                   <DateInput
-
-                    className={inputClass}
                     value={reportFilters.date_from ?? ""}
                     onChange={(event) =>
                       setReportFilters((current) => ({
@@ -1779,14 +1776,12 @@ export function FinanceOperationsView({
                 {selectedReport === "outstanding" ? (
                   <label className="grid gap-1.5 text-sm sm:col-span-2">
                     <span className="font-medium">Overdue as of</span>
-                    <DateInput className={inputClass} value={reportFilters.as_of ?? ""} onChange={(event) => { setReportPage(1); setReportFilters((current) => ({ ...current, as_of: event.target.value })); }} />
+                    <DateInput value={reportFilters.as_of ?? ""} onChange={(event) => { setReportPage(1); setReportFilters((current) => ({ ...current, as_of: event.target.value })); }} />
                   </label>
                 ) : null}
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">To</span>
                   <DateInput
-
-                    className={inputClass}
                     value={reportFilters.date_to ?? ""}
                     onChange={(event) =>
                       setReportFilters((current) => ({
@@ -3104,8 +3099,7 @@ export function FinanceOperationsView({
                 {form.adjustment_type !== "WRITE_OFF" ? (
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">Amount</span>
-                    <input
-                      className={inputClass}
+                    <Input
                       value={form.amount ?? ""}
                       onChange={(event) =>
                         setForm((current) => ({ ...current, amount: event.target.value }))
@@ -3116,7 +3110,6 @@ export function FinanceOperationsView({
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Reason</span>
                   <Textarea
-                    className={textareaClass}
                     value={form.reason ?? ""}
                     onChange={(event) =>
                       setForm((current) => ({ ...current, reason: event.target.value }))
@@ -3129,8 +3122,7 @@ export function FinanceOperationsView({
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Bank payment reference</span>
-                  <input
-                    className={inputClass}
+                  <Input
                     value={form.payment_reference ?? ""}
                     onChange={(event) =>
                       setForm((current) => ({ ...current, payment_reference: event.target.value }))
@@ -3140,7 +3132,6 @@ export function FinanceOperationsView({
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Payment date</span>
                   <DateInput
-                    className={inputClass}
                     value={form.payment_date ?? ""}
                     onChange={(event) =>
                       setForm((current) => ({ ...current, payment_date: event.target.value }))
@@ -3417,8 +3408,6 @@ export function FinanceOperationsView({
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Effective from</span>
                   <DateInput
-
-                    className={inputClass}
                     value={form.effective_from ?? ""}
                     onChange={(event) =>
                       setForm((current) => ({
@@ -3434,8 +3423,7 @@ export function FinanceOperationsView({
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Amount</span>
-                  <input
-                    className={inputClass}
+                  <Input
                     value={form.amount ?? ""}
                     onChange={(event) =>
                       setForm((current) => ({
@@ -3448,8 +3436,6 @@ export function FinanceOperationsView({
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Payment date</span>
                   <DateInput
-
-                    className={inputClass}
                     value={form.payment_date ?? ""}
                     onChange={(event) =>
                       setForm((current) => ({
@@ -3461,8 +3447,7 @@ export function FinanceOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Reference</span>
-                  <input
-                    className={inputClass}
+                  <Input
                     value={form.payment_reference ?? ""}
                     onChange={(event) =>
                       setForm((current) => ({
@@ -3478,8 +3463,7 @@ export function FinanceOperationsView({
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">New term (months)</span>
-                  <input
-                    className={inputClass}
+                  <Input
                     value={form.new_term_months ?? ""}
                     onChange={(event) =>
                       setForm((current) => ({
@@ -3492,7 +3476,6 @@ export function FinanceOperationsView({
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Reason</span>
                   <Textarea
-                    className={textareaClass}
                     value={form.reason ?? ""}
                     onChange={(event) =>
                       setForm((current) => ({
@@ -3508,8 +3491,7 @@ export function FinanceOperationsView({
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Installment ID</span>
-                  <input
-                    className={inputClass}
+                  <Input
                     value={form.installment_id ?? ""}
                     onChange={(event) =>
                       setForm((current) => ({
@@ -3522,7 +3504,6 @@ export function FinanceOperationsView({
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Reason</span>
                   <Textarea
-                    className={textareaClass}
                     value={form.reason ?? ""}
                     onChange={(event) =>
                       setForm((current) => ({
@@ -3585,7 +3566,6 @@ export function FinanceOperationsView({
           <label className="grid gap-1.5 text-sm">
             <span className="font-medium">Reason for the employee</span>
             <Textarea
-              className={textareaClass}
               value={decisionComments}
               onChange={(event) => setDecisionComments(event.target.value)}
             />

@@ -16,6 +16,8 @@ import {
   type FinanceCheckpoint,
 } from "@/lib/finance-draft-workflow";
 import { Textarea } from "@/components/ui/textarea";
+import { FileDropzone } from "@/components/ui/file-dropzone";
+import { Input } from "@/components/ui/input";
 import {
   CheckCircle2Icon,
   FileTextIcon,
@@ -31,7 +33,6 @@ import {
   Button,
   Checkbox,
   Field,
-  Input,
   Tag,
   TagPicker,
   TagPickerControl,
@@ -64,7 +65,6 @@ import {
   actionButtonClass,
   asRecord,
   asRecordArray,
-  inputClass,
   optionLabel,
   pageBleedClass,
   prettify,
@@ -73,7 +73,6 @@ import {
   readString,
   rowId,
   secondaryButtonClass,
-  textareaClass,
 } from "@/components/dashboard/talent-visuals";
 import {
   Dialog,
@@ -1677,8 +1676,7 @@ export function FinanceSelfView() {
           <div className="grid gap-3">
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">Amount</span>
-              <input
-                className={inputClass}
+              <Input
                 value={correctForm.requested_amount ?? ""}
                 onChange={(event) =>
                   setCorrectForm((current) => ({
@@ -1690,8 +1688,7 @@ export function FinanceSelfView() {
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">Repayment period (months)</span>
-              <input
-                className={inputClass}
+              <Input
                 value={correctForm.requested_term_months ?? ""}
                 onChange={(event) =>
                   setCorrectForm((current) => ({
@@ -1704,7 +1701,6 @@ export function FinanceSelfView() {
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">Purpose</span>
               <Textarea
-                className={textareaClass}
                 value={correctForm.purpose ?? ""}
                 onChange={(event) =>
                   setCorrectForm((current) => ({
@@ -1761,7 +1757,6 @@ export function FinanceSelfView() {
           <label className="grid gap-1.5 text-sm">
             <span className="font-medium">Reason</span>
             <Textarea
-              className={textareaClass}
               value={deferReason}
               onChange={(event) => setDeferReason(event.target.value)}
             />
@@ -1926,10 +1921,10 @@ export function FinanceSelfView() {
                       inputMode="decimal"
                       disabled={saving || Boolean(checkpoint)}
                       value={form.requested_amount ?? ""}
-                      onChange={(_event, data) =>
+                      onChange={(event) =>
                         setForm((current) => ({
                           ...current,
-                          requested_amount: data.value,
+                          requested_amount: event.target.value,
                         }))
                       }
                     />
@@ -1940,10 +1935,10 @@ export function FinanceSelfView() {
                       inputMode="numeric"
                       disabled={saving || Boolean(checkpoint)}
                       value={form.requested_term_months ?? ""}
-                      onChange={(_event, data) =>
+                      onChange={(event) =>
                         setForm((current) => ({
                           ...current,
-                          requested_term_months: data.value,
+                          requested_term_months: event.target.value,
                         }))
                       }
                     />
@@ -2049,24 +2044,16 @@ export function FinanceSelfView() {
                   {ordinaryRequiredDocuments.length ? (
                     ordinaryRequiredDocuments.map((type) => (
                       <Field key={type} label={prettify(type)}>
-                        <input
-                          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:border-0 file:bg-transparent file:text-sm file:font-medium"
-                          type="file"
+                        <FileDropzone
                           accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.xls,.xlsx"
-                          onChange={(event) => {
-                            const selectedFile =
-                              event.currentTarget.files?.[0] ?? null;
+                          file={documentFiles[type] ?? null}
+                          onFileChange={(selectedFile) =>
                             setDocumentFiles((current) => ({
                               ...current,
                               [type]: selectedFile,
-                            }));
-                          }}
+                            }))
+                          }
                         />
-                        {documentFiles[type] ? (
-                          <span className="text-xs text-muted-foreground">
-                            {documentFiles[type]?.name}
-                          </span>
-                        ) : null}
                       </Field>
                     ))
                   ) : !requiresGuarantorForms ? (
@@ -2221,25 +2208,17 @@ export function FinanceSelfView() {
                         const key = guarantorFormKey(employeeId);
                         return (
                           <Field key={key} label={`Form for ${label}`}>
-                            <input
-                              className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:border-0 file:bg-transparent file:text-sm file:font-medium"
-                              type="file"
+                            <FileDropzone
                               accept=".pdf,.png,.jpg,.jpeg,.webp"
                               disabled={saving || Boolean(checkpoint)}
-                              onChange={(event) => {
-                                const selectedFile =
-                                  event.currentTarget.files?.[0] ?? null;
+                              file={documentFiles[key] ?? null}
+                              onFileChange={(selectedFile) =>
                                 setDocumentFiles((current) => ({
                                   ...current,
                                   [key]: selectedFile,
-                                }));
-                              }}
+                                }))
+                              }
                             />
-                            {documentFiles[key] ? (
-                              <span className="text-xs text-muted-foreground">
-                                {documentFiles[key]?.name}
-                              </span>
-                            ) : null}
                           </Field>
                         );
                       })}

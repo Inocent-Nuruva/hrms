@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   AlertDialog as Dialog,
   AlertDialogContent as DialogContent,
@@ -187,7 +188,7 @@ export function LeaveSignaturesPanel({
             </DialogDescription>
           </DialogHeader>
           <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" className="mt-0.5 size-4" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+            <Checkbox className="mt-0.5" checked={agreed} onCheckedChange={(checked) => setAgreed(checked)} />
             <span>
               {pending?.kind === "application"
                 ? "I confirm the details of this leave application are correct and I sign it electronically."

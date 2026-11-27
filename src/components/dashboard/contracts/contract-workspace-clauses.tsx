@@ -6,6 +6,7 @@ import type {
   ContractSection,
 } from "@/lib/contracts-api";
 import { contractWorkspaceMessages as m } from "./contract-workspace-messages";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/components/ui/fluent-toast-store";
 import { ArrowDown, ArrowUp, Lock, Plus, RotateCcw, Trash2 } from "lucide-react";
 
@@ -182,11 +183,10 @@ export function ContractWorkspaceClauses({
                 ) : null}
                 {section.optional === true ? (
                   <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={section.enabled !== false}
-                      onChange={(event) =>
-                        update(index, { enabled: event.target.checked })
+                      onCheckedChange={(checked) =>
+                        update(index, { enabled: checked })
                       }
                     />
                     {m.enabled}

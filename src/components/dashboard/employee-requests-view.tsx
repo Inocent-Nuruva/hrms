@@ -17,9 +17,6 @@ import {
   MessageBarTitle,
   Badge as FluentBadge,
   Button as FluentButton,
-  Field as FluentField,
-  Input as FluentInput,
-  Textarea as FluentTextarea,
 } from "@fluentui/react-components"
 import { toast } from "@/components/ui/fluent-toast-store"
 
@@ -75,6 +72,10 @@ import { EMPLOYEE_LIFECYCLE_REQUESTS_CHANGED } from "@/lib/employee-lifecycle-ev
 import { listAllMyActionItems } from "@/lib/admin-api"
 import { resignationStage } from "./resignation-progress"
 import { isEmployeeRequestAction, isOpenAction } from "./request-inbox-utils"
+import { FormField } from "@/components/ui/form-field"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { PhoneInput, toE164 } from "@/components/ui/phone-input"
 
 export type RequestsSelfTab = "actions" | "timeline" | "documents" | "profile-changes" | "resignation"
 
@@ -128,7 +129,7 @@ const PROFILE_CHANGE_FIELDS: Record<
   Array<{
     key: string
     label: string
-    type?: React.ComponentProps<typeof FluentInput>["type"]
+    type?: React.ComponentProps<typeof Input>["type"]
   }>
 > = {
   PERSONAL_INFORMATION: [
@@ -222,73 +223,15 @@ function TanzaniaPhoneInput({
   value: string
   onChange: (value: string) => void
 }) {
-  const inputRefs = React.useRef<Array<HTMLInputElement | null>>([])
-  const nationalNumber = value
-    .replace(/\D/g, "")
-    .replace(/^255/, "")
-    .replace(/^0/, "")
-    .slice(0, TANZANIA_PHONE_DIGITS)
-  const digits = Array.from(
-    { length: TANZANIA_PHONE_DIGITS },
-    (_item, index) => nationalNumber[index] ?? "",
-  )
-
-  function updateDigits(nextDigits: string[]) {
-    const number = nextDigits.join("").slice(0, TANZANIA_PHONE_DIGITS)
-    onChange(number ? `+255${number}` : "")
-  }
-
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <FluentSelect
-        ariaLabel={`${ariaLabel} country code`}
-        className="!w-28 !shrink-0"
-        value="TZ"
-        onChange={() => undefined}
-        options={[{ value: "TZ", label: "TZ +255" }]}
-      />
-      <div className="flex min-w-0 flex-wrap gap-1.5" role="group" aria-label={`${ariaLabel} number`}>
-        {digits.map((digit, index) => (
-          <FluentInput
-            key={`${ariaLabel}-${index}`}
-            ref={(element) => {
-              inputRefs.current[index] = element
-            }}
-            aria-label={`${ariaLabel} digit ${index + 1}`}
-            className="!w-10 !min-w-10 [&_input]:!px-0 [&_input]:text-center [&_input]:tabular-nums"
-            inputMode="numeric"
-            maxLength={1}
-            value={digit}
-            onChange={(_event, data) => {
-              const nextDigit = data.value.replace(/\D/g, "").slice(-1)
-              const nextDigits = [...digits]
-              nextDigits[index] = nextDigit
-              updateDigits(nextDigits)
-              if (nextDigit && index < TANZANIA_PHONE_DIGITS - 1) {
-                inputRefs.current[index + 1]?.focus()
-              }
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Backspace" && !digit && index > 0) {
-                inputRefs.current[index - 1]?.focus()
-              }
-            }}
-            onPaste={(event) => {
-              const pastedDigits = event.clipboardData
-                .getData("text")
-                .replace(/\D/g, "")
-                .replace(/^255/, "")
-                .replace(/^0/, "")
-                .slice(0, TANZANIA_PHONE_DIGITS)
-              if (!pastedDigits) return
-              event.preventDefault()
-              updateDigits(Array.from({ length: TANZANIA_PHONE_DIGITS }, (_item, digitIndex) => pastedDigits[digitIndex] ?? ""))
-              inputRefs.current[Math.min(pastedDigits.length, TANZANIA_PHONE_DIGITS) - 1]?.focus()
-            }}
-          />
-        ))}
-      </div>
-    </div>
+    <PhoneInput
+      aria-label={ariaLabel}
+      value={value}
+      countries={["TZ"]}
+      defaultCountry="TZ"
+      placeholder="712345678"
+      onChange={(_value, details) => onChange(toE164("TZ", details.national.slice(0, TANZANIA_PHONE_DIGITS)))}
+    />
   )
 }
 
@@ -977,7 +920,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
               <p className="mt-1 text-xs text-muted-foreground">Provide your dates and a short explanation for HR.</p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <FluentField label="Last working day" required>
+              <FormField label="Last working day" required>
                 <DateInput
                   id="resignation-last-working-date"
                   className="!max-w-none"
@@ -985,8 +928,8 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
                   onChange={(event) => setForm((current) => ({ ...current, last_working_date: event.target.value }))}
                   disabled={saving}
                 />
-              </FluentField>
-              <FluentField label="Notice date (optional)">
+              </FormField>
+              <FormField label="Notice date (optional)">
                 <DateInput
                   id="resignation-notice-date"
                   className="!max-w-none"
@@ -994,18 +937,19 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
                   onChange={(event) => setForm((current) => ({ ...current, notice_date: event.target.value }))}
                   disabled={saving}
                 />
-              </FluentField>
+              </FormField>
             </div>
-            <FluentField label="Reason" required hint="Share a short explanation for HR.">
-              <FluentTextarea
+            <FormField label="Reason" required hint="Share a short explanation for HR.">
+              <Textarea
+              formatting={false}
                 value={form.reason ?? ""}
-                onChange={(_event, data) => setForm((current) => ({ ...current, reason: data.value }))}
+                onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}
                 placeholder="Enter your reason for resigning"
                 rows={4}
                 resize="vertical"
                 disabled={saving}
               />
-            </FluentField>
+            </FormField>
             {formError ? <MessageBar intent="error"><MessageBarBody>{formError}</MessageBarBody></MessageBar> : null}
             <div className="flex justify-end border-t border-border pt-3">
               <FluentButton
@@ -1082,7 +1026,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
           <div className="grid gap-3">
             {createMode === "change" ? (
               <>
-                <FluentField label="What should change">
+                <FormField label="What should change">
                   <FluentSelect
                     ariaLabel="What should change"
                     className="w-full"
@@ -1099,9 +1043,9 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
                       { value: "OTHER_PROFILE_INFORMATION", label: "Something else" },
                     ]}
                   />
-                </FluentField>
+                </FormField>
                 {form.request_type === "PROFILE_PHOTO" ? (
-                  <FluentField label="Photo">
+                  <FormField label="Photo">
                     <div className="flex flex-wrap items-center gap-2">
                       <input
                         ref={profilePhotoInputRef}
@@ -1119,10 +1063,10 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
                         {file?.name ?? "No photo selected"}
                       </span>
                     </div>
-                  </FluentField>
+                  </FormField>
                 ) : (
                   changeFields.map((field) => (
-                    <FluentField key={field.key} label={field.label}>
+                    <FormField key={field.key} label={field.label}>
                       {field.key === "phone" || field.key === "alternative_phone" ? (
                         <TanzaniaPhoneInput
                           ariaLabel={field.label}
@@ -1141,27 +1085,28 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
                           placeholder={`Select ${field.label.toLowerCase()}`}
                         />
                       ) : (
-                        <FluentInput
+                        <Input
                           type={field.type ?? "text"}
                           value={form[field.key] ?? ""}
-                          onChange={(_event, data) =>
-                            setForm((current) => ({ ...current, [field.key]: data.value }))
+                          onChange={(event) =>
+                            setForm((current) => ({ ...current, [field.key]: event.target.value }))
                           }
                         />
                       )}
-                    </FluentField>
+                    </FormField>
                   ))
                 )}
-                <FluentField label="Why (optional)">
-                  <FluentTextarea
+                <FormField label="Why (optional)">
+                  <Textarea
+              formatting={false}
                     resize="vertical"
                     value={form.reason ?? ""}
-                    onChange={(_event, data) =>
-                      setForm((current) => ({ ...current, reason: data.value }))
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, reason: event.target.value }))
                     }
                     placeholder="A short note for HR"
                   />
-                </FluentField>
+                </FormField>
               </>
             ) : null}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}

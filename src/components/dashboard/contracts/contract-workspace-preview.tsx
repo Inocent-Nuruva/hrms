@@ -1,5 +1,6 @@
 ﻿"use client";
 import * as React from "react";
+import { FluentSelect } from "@/components/ui/fluent-select";
 import { Dialog, DialogSurface, DialogTitle } from "@fluentui/react-components";
 import {
   base64ToBlob,
@@ -173,19 +174,20 @@ export function ContractWorkspacePreview({
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <ZoomIn className="size-4" aria-hidden />
             <span className="sr-only">{m.zoom}</span>
-            <select
-              aria-label={m.zoom}
-              className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground"
-              value={zoom}
-              onChange={(event) => setZoom(event.target.value)}
-            >
-              <option value="page-width">{m.fitWidth}</option>
-              {[50, 75, 100, 125, 150, 200].map((value) => (
-                <option key={value} value={value}>
-                  {value}%
-                </option>
-              ))}
-            </select>
+            <FluentSelect
+              ariaLabel={m.zoom}
+              size="small"
+              className="w-28"
+              value={String(zoom)}
+              onChange={(value) => setZoom(value)}
+              options={[
+                { value: "page-width", label: m.fitWidth },
+                ...[50, 75, 100, 125, 150, 200].map((value) => ({
+                  value: String(value),
+                  label: `${value}%`,
+                })),
+              ]}
+            />
           </label>
           <span className="flex-1" />
           <button

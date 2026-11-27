@@ -19,12 +19,12 @@ import {
   LayersIcon,
   PhoneIcon,
   PlusIcon,
-  SearchIcon,
   UserRoundIcon,
   UsersIcon,
   type LucideIcon,
 } from "lucide-react"
 
+import { Input } from "@/components/ui/input"
 import { CountryFlag } from "@/components/country-flag"
 import { findCountryOption } from "@/components/dashboard/employee-profile/profile-shared"
 import { readStorage, subscribeStorage, writeStorageBatch } from "@/lib/local-storage-store"
@@ -480,17 +480,14 @@ export function ProfileRecordCollection({
     <div className="flex flex-col gap-3">
       {searchable ? (
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative w-full sm:max-w-xs">
-            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={`Search ${title.toLowerCase()}`}
-              aria-label={`Search ${title.toLowerCase()}`}
-              className="h-[var(--hrms-control-height)] w-full rounded-[var(--hrms-control-radius)] border border-input bg-background pl-8 pr-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-            />
-          </div>
+          <Input
+            type="search"
+            value={query}
+            onChange={(_event, data) => setQuery(data.value)}
+            placeholder={`Search ${title.toLowerCase()}`}
+            aria-label={`Search ${title.toLowerCase()}`}
+            className="w-full sm:max-w-xs"
+          />
           {terms.length ? (
             <span className="text-xs text-muted-foreground" aria-live="polite">
               {visible.length} of {records.length}

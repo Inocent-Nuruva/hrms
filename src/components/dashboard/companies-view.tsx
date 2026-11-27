@@ -1,5 +1,9 @@
 "use client";
 
+import { FormField } from "@/components/ui/form-field";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
 
 import * as React from "react";
@@ -139,12 +143,11 @@ function CompanyModulesFields({
         administrators keep Access Governance regardless.
       </p>
       <label className="flex items-start gap-2 border border-border bg-background px-3 py-2">
-        <input
-          type="checkbox"
+        <Checkbox
           className="mt-1"
           checked={value.roles}
-          onChange={(event) =>
-            onChange({ ...value, roles: event.target.checked })
+          onCheckedChange={(checked) =>
+            onChange({ ...value, roles: checked })
           }
         />
         <span>
@@ -157,12 +160,11 @@ function CompanyModulesFields({
         </span>
       </label>
       <label className="flex items-start gap-2 border border-border bg-background px-3 py-2">
-        <input
-          type="checkbox"
+        <Checkbox
           className="mt-1"
           checked={value.permissions}
-          onChange={(event) =>
-            onChange({ ...value, permissions: event.target.checked })
+          onCheckedChange={(checked) =>
+            onChange({ ...value, permissions: checked })
           }
         />
         <span>
@@ -1552,10 +1554,7 @@ export function CompaniesView() {
             </div>
 
             <div className="mt-4 grid gap-3">
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Platform user
-                </span>
+              <FormField label="Platform user">
                 <FluentSelect
                   ariaLabel="Platform user"
                   value={memberForm.userId}
@@ -1577,7 +1576,7 @@ export function CompaniesView() {
                     }),
                   ]}
                 />
-              </label>
+              </FormField>
               <fieldset className="grid gap-1">
                 <legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Seed roles
@@ -1732,13 +1731,9 @@ export function CompaniesView() {
             </div>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <label className="grid gap-1 sm:col-span-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Company name
-                </span>
-                <input
+              <FormField label="Company name" className="sm:col-span-2">
+                <Input
                   autoFocus
-                  className="h-10 border border-border bg-background px-3 text-sm"
                   value={createCompanyForm.companyName}
                   onChange={(event) =>
                     setCreateCompanyForm((previous) => ({
@@ -1747,13 +1742,9 @@ export function CompaniesView() {
                     }))
                   }
                 />
-              </label>
-              <label className="grid gap-1 sm:col-span-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Company timezone
-                </span>
-                <input
-                  className="h-10 border border-border bg-background px-3 text-sm"
+              </FormField>
+              <FormField label="Company timezone" className="sm:col-span-2">
+                <Input
                   placeholder="Africa/Dar_es_Salaam"
                   value={createCompanyForm.timezone}
                   onChange={(event) =>
@@ -1767,14 +1758,13 @@ export function CompaniesView() {
                   Required for date boundaries across dashboards. Enter an IANA
                   timezone.
                 </span>
-              </label>
+              </FormField>
               <label className="grid gap-1 sm:col-span-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Company slug{" "}
                   <span className="font-normal normal-case">(optional)</span>
                 </span>
-                <input
-                  className="h-10 border border-border bg-background px-3 text-sm"
+                <Input
                   placeholder="alliance-insurance"
                   value={createCompanyForm.companySlug}
                   onChange={(event) =>
@@ -1785,12 +1775,8 @@ export function CompaniesView() {
                   }
                 />
               </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Admin first name
-                </span>
-                <input
-                  className="h-10 border border-border bg-background px-3 text-sm"
+              <FormField label="Admin first name">
+                <Input
                   autoComplete="given-name"
                   value={createCompanyForm.adminFirstName}
                   onChange={(event) =>
@@ -1800,13 +1786,9 @@ export function CompaniesView() {
                     }))
                   }
                 />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Admin last name
-                </span>
-                <input
-                  className="h-10 border border-border bg-background px-3 text-sm"
+              </FormField>
+              <FormField label="Admin last name">
+                <Input
                   autoComplete="family-name"
                   value={createCompanyForm.adminLastName}
                   onChange={(event) =>
@@ -1816,14 +1798,10 @@ export function CompaniesView() {
                     }))
                   }
                 />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Admin email
-                </span>
-                <input
+              </FormField>
+              <FormField label="Admin email">
+                <Input
                   type="email"
-                  className="h-10 border border-border bg-background px-3 text-sm"
                   autoComplete="email"
                   value={createCompanyForm.adminEmail}
                   onChange={(event) =>
@@ -1833,33 +1811,24 @@ export function CompaniesView() {
                     }))
                   }
                 />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Admin phone
-                </span>
-                <input
-                  type="tel"
-                  className="h-10 border border-border bg-background px-3 text-sm"
-                  autoComplete="tel"
+              </FormField>
+              <FormField label="Admin phone">
+                <PhoneInput
+                  aria-label="Admin phone"
                   value={createCompanyForm.adminPhone}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setCreateCompanyForm((previous) => ({
                       ...previous,
-                      adminPhone: event.target.value,
+                      adminPhone: value,
                     }))
                   }
                 />
-              </label>
-              <label className="grid gap-1 sm:col-span-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Temporary admin password
-                </span>
-                <input
+              </FormField>
+              <FormField label="Temporary admin password" className="sm:col-span-2">
+                <Input
                   type="password"
                   minLength={8}
                   autoComplete="new-password"
-                  className="h-10 border border-border bg-background px-3 text-sm"
                   value={createCompanyForm.adminPassword}
                   onChange={(event) =>
                     setCreateCompanyForm((previous) => ({
@@ -1871,7 +1840,7 @@ export function CompaniesView() {
                 <span className="text-xs text-muted-foreground">
                   Minimum 8 characters.
                 </span>
-              </label>
+              </FormField>
               <CompanyModulesFields
                 value={createCompanyForm.modules}
                 onChange={(modules) =>
@@ -1926,12 +1895,8 @@ export function CompaniesView() {
             </h3>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
               <div className="grid gap-3">
-                <label className="grid gap-1">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Name
-                  </span>
-                  <input
-                    className="h-10 border border-border bg-background px-3 text-sm"
+                <FormField label="Name">
+                  <Input
                     value={companyForm.name}
                     onChange={(event) =>
                       setCompanyForm((previous) => ({
@@ -1940,13 +1905,9 @@ export function CompaniesView() {
                       }))
                     }
                   />
-                </label>
-                <label className="grid gap-1">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Company timezone
-                  </span>
-                  <input
-                    className="h-10 border border-border bg-background px-3 text-sm"
+                </FormField>
+                <FormField label="Company timezone">
+                  <Input
                     value={companyForm.timezone}
                     placeholder="Africa/Dar_es_Salaam"
                     aria-describedby="company-timezone-help"
@@ -1964,7 +1925,7 @@ export function CompaniesView() {
                     Required for dashboard date boundaries. Enter an IANA
                     timezone, such as Africa/Dar_es_Salaam.
                   </span>
-                </label>
+                </FormField>
                 <CompanyModulesFields
                   value={companyForm.modules}
                   onChange={(modules) =>
@@ -2008,7 +1969,7 @@ export function CompaniesView() {
               Manage Access: {currentCompanyUserLabel(editingMember)}
             </h3>
             <label className="mt-3 grid gap-1 text-sm">Find a permission
-              <input type="search" className="rounded border p-2" value={grantSearch} onChange={event => setGrantSearch(event.target.value)} />
+              <Input type="search" value={grantSearch} onChange={event => setGrantSearch(event.target.value)} />
             </label>
             <details className="mt-2 text-sm"><summary>Effective permissions in this company</summary>
               <ul className="max-h-44 overflow-y-auto p-2">{(Array.isArray(editingMember.permission_names) ? editingMember.permission_names : []).filter((name): name is string => typeof name === "string" && name.toLowerCase().includes(grantSearch.trim().toLowerCase())).sort().map(name => <li key={name}>{name}</li>)}</ul>
@@ -2031,12 +1992,11 @@ export function CompaniesView() {
                           key={id}
                           className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50"
                         >
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={editingMemberRoleIds.includes(value)}
-                            onChange={(event) =>
+                            onCheckedChange={(checked) =>
                               setEditingMemberRoleIds((previous) =>
-                                event.target.checked
+                                checked
                                   ? Array.from(new Set([...previous, value]))
                                   : previous.filter((entry) => entry !== value),
                               )
@@ -2081,14 +2041,13 @@ export function CompaniesView() {
                                 : ""
                             }`}
                           >
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               checked={editingMemberPermissionIds.includes(
                                 value,
                               )}
-                              onChange={(event) =>
+                              onCheckedChange={(checked) =>
                                 setEditingMemberPermissionIds((previous) =>
-                                  event.target.checked
+                                  checked
                                     ? Array.from(new Set([...previous, value]))
                                     : previous.filter(
                                         (entry) => entry !== value,

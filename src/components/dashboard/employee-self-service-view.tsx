@@ -9,6 +9,7 @@ import { fluentForm } from "@/components/ui/fluent-dialog-service";
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { EmployeeProfileRequiredState } from "@/components/dashboard/employee-profile-required-state"
 import * as React from "react"
+import { BankSelect } from "@/components/common/bank-select"
 import { motion } from "framer-motion"
 import {
   Badge as FluentBadge,
@@ -22,10 +23,7 @@ import {
   DialogSurface as FluentDialogSurface,
   DialogTitle as FluentDialogTitle,
   Dropdown as FluentDropdown,
-  Field as FluentField,
-  Input as FluentInput,
   Option as FluentOption,
-  Textarea as FluentTextarea,
   makeStyles,
   Persona,
   PresenceBadge,
@@ -74,7 +72,6 @@ import {
   Savings20Regular,
   ShieldCheckmark20Regular,
   Camera20Color,
-  Add20Regular,
   ContactCard20Color,
   ContactCard20Regular,
   Edit16Regular,
@@ -122,7 +119,6 @@ import {
   listLeaveTypes,
   createMyProfileChangeRequest,
   createMyEmployeeSectionItem,
-  listCompanyBanks,
   getMyProfileChangeRequest,
   submitMyProfileChangeRequest,
   cancelMyProfileChangeRequest,
@@ -182,6 +178,9 @@ import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { AddProfileRecordButton, MyProfileRecordHistory, ProfileRecordActions } from "@/components/dashboard/profile-records/profile-records"
 import { MyDocumentsSection } from "@/components/dashboard/profile-records/my-documents-section"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import { FormField } from "@/components/ui/form-field"
+import { Checkbox } from "@/components/ui/checkbox"
+import { FileDropzone } from "@/components/ui/file-dropzone"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -2111,47 +2110,6 @@ const SELF_SERVICE_SECTION_TAB_LABELS: Record<string, string> = {
   company_user: "User",
 }
 
-function DirectoryBankLogo({
-  bank,
-  url,
-  className,
-}: {
-  bank: string
-  url: string
-  className?: string
-}) {
-  const initials = bank
-    .split(/\s+/)
-    .filter((word) => !["bank", "tanzania", "limited", "plc"].includes(word.toLowerCase()))
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join("")
-    .toUpperCase() || "B"
-
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "relative inline-flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-primary/10 text-[8px] font-bold text-primary",
-        className,
-      )}
-    >
-      {initials}
-      {/* Institution favicons are decorative, externally hosted, and intentionally not image-optimized. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={resolveBackendMediaUrl(url) ?? undefined}
-        referrerPolicy="no-referrer"
-        alt=""
-        className="absolute inset-0 size-full bg-white object-contain"
-        onError={(event) => {
-          event.currentTarget.style.display = "none"
-        }}
-      />
-    </span>
-  )
-}
-
 function SelfServiceProfileSectionTabs({
   sections,
   initialSectionId,
@@ -2823,8 +2781,6 @@ function ProfileRecordsTab({
   const experience = asRecordList(employee?.experience_details)
   const documents = asRecordList(employee?.documents)
   const [bankDialogOpen, setBankDialogOpen] = React.useState(false)
-  const [manualBankName, setManualBankName] = React.useState(false)
-  const [companyBanks, setCompanyBanks] = React.useState<AdminRecord[]>([])
   const [bankSaving, setBankSaving] = React.useState(false)
   const [bankError, setBankError] = React.useState("")
   const [bankDraft, setBankDraft] = React.useState({
@@ -2836,18 +2792,6 @@ function ProfileRecordsTab({
     is_primary: false,
   })
 
-  React.useEffect(() => {
-    if (!token) return
-    void listCompanyBanks(token).then(setCompanyBanks).catch(() => setCompanyBanks([]))
-  }, [token])
-
-  const bankChoices = React.useMemo(() => {
-    return companyBanks.flatMap(record => {
-      const name = readString(record, ["name"], "").trim()
-      return name ? [{ name, logo_url: readString(record, ["logo_url"], "") }] : []
-    })
-  }, [companyBanks])
-  const selectedBankChoice = bankChoices.find((choice) => choice.name === bankDraft.bank_name)
 
   async function saveBankAccount() {
     if (!bankDraft.bank_name.trim() || !bankDraft.account_number.trim()) {
@@ -2871,7 +2815,6 @@ function ProfileRecordsTab({
       })
       await onRefresh()
       setBankDialogOpen(false)
-      setManualBankName(false)
       setBankDraft({
         bank_name: "",
         account_name: "",
@@ -3130,63 +3073,11 @@ function ProfileRecordsTab({
               <div key={field} className={cn("min-w-0 space-y-1", field === "account_number" && "sm:col-span-2")}>
                 <Label htmlFor={`bank-${field}`}>{label}</Label>
                 {field === "bank_name" ? (
-                  <div className="relative min-w-0">
-                    {manualBankName ? (
-                      <div className="flex min-w-0 gap-2">
-                        <Input
-                          id="bank-bank_name"
-                          autoFocus
-                          placeholder="Enter bank name"
-                          value={bankDraft.bank_name}
-                          onChange={(event) => setBankDraft((current) => ({ ...current, bank_name: event.target.value }))}
-                        />
-                        <Button type="button" variant="outline" onClick={() => {
-                          setManualBankName(false)
-                          setBankDraft((current) => ({ ...current, bank_name: "" }))
-                        }}>Choose list</Button>
-                      </div>
-                    ) : (
-                      <>
-                    {selectedBankChoice?.logo_url && (
-                      <DirectoryBankLogo bank={selectedBankChoice.name} url={selectedBankChoice.logo_url}
-                        className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2" />
-                    )}
-                    <FluentDropdown
-                      id="bank-bank_name"
-                      aria-label="Bank name"
-                      placeholder="Select a bank"
-                      className="!w-full !min-w-0"
-                      button={{ className: cn("!w-full !min-w-0", bankDraft.bank_name && "!pl-10") }}
-                      value={bankDraft.bank_name}
-                      selectedOptions={bankDraft.bank_name ? [bankDraft.bank_name] : []}
-                      onOptionSelect={(_, data) => {
-                        if (data.optionValue === "__other__") {
-                          setManualBankName(true)
-                          setBankDraft((current) => ({ ...current, bank_name: "" }))
-                          return
-                        }
-                        setBankDraft((current) => ({ ...current, bank_name: data.optionValue ?? "" }))
-                      }}
-                    >
-                      <FluentOption value="__other__" text="Other bank">
-                        <span className="flex items-center gap-2.5"><Add20Regular />Other bank — enter manually</span>
-                      </FluentOption>
-                      {bankChoices.map((choice) => (
-                        <FluentOption key={choice.name} value={choice.name} text={choice.name}>
-                          <span className="flex min-w-0 items-center gap-2.5">
-                            {choice.logo_url ? (
-                              <DirectoryBankLogo bank={choice.name} url={choice.logo_url} />
-                            ) : (
-                              <BuildingBank20Regular className="size-5 shrink-0 text-primary" />
-                            )}
-                            <span className="truncate">{choice.name}</span>
-                          </span>
-                        </FluentOption>
-                      ))}
-                    </FluentDropdown>
-                      </>
-                    )}
-                  </div>
+                  <BankSelect
+                    id="bank-bank_name"
+                    value={bankDraft.bank_name}
+                    onChange={(name) => setBankDraft((current) => ({ ...current, bank_name: name }))}
+                  />
                 ) : (
                   <Input
                     id={`bank-${field}`}
@@ -3197,10 +3088,9 @@ function ProfileRecordsTab({
               </div>
             ))}
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={bankDraft.is_primary}
-                onChange={(event) => setBankDraft((current) => ({ ...current, is_primary: event.target.checked }))}
+                onCheckedChange={(checked) => setBankDraft((current) => ({ ...current, is_primary: Boolean(checked) }))}
               />
               Make this my primary bank account
             </label>
@@ -6872,7 +6762,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
               appearance="outline"
               aria-pressed={holidayFilter === item.key}
               onClick={() => setHolidayFilter(item.key)}
-              className={`!h-auto !w-full !justify-start !whitespace-normal !p-3 text-left ${holidayFilter === item.key ? "border-primary bg-primary/5" : ""}`}
+              className={`!h-auto !justify-start !whitespace-normal !p-3 text-left ${holidayFilter === item.key ? "border-primary bg-primary/5" : ""}`}
             >
               <div className="flex w-full items-center justify-between gap-3 text-left">
                 <div className="flex flex-col gap-1">
@@ -7012,7 +6902,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
               </div>
             ) : null}
             <FluentDialogContent className="grid max-h-[65vh] min-h-0 gap-4 overflow-y-auto py-4 pr-1">
-            <FluentField label="Leave type">
+            <FormField label="Leave type">
               <FluentDropdown
                 placeholder={availableLeaveTypes.length > 0 ? "Select leave type" : "No leave types available"}
                 selectedOptions={requestForm.leave_type_id ? [requestForm.leave_type_id] : []}
@@ -7021,7 +6911,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
               >
                 {availableLeaveTypes.map((row) => <FluentOption key={row.id} value={row.id}>{row.label}</FluentOption>)}
               </FluentDropdown>
-            </FluentField>
+            </FormField>
             <div className="space-y-1">
               {availableLeaveTypes.length === 0 && leaveTypesError ? <p className="text-xs text-slate-500">{leaveTypesError}</p> : null}
               {selectedLeaveBalance?.formattedAvailable ? (
@@ -7053,7 +6943,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 <p className="text-xs text-rose-600">{leaveSubmissionBalanceError}</p>
               ) : null}
             </div>
-            <FluentField label="Duration">
+            <FormField label="Duration">
               <FluentDropdown
                 selectedOptions={[requestForm.duration_type]}
                 value={requestForm.duration_type === "HALF_DAY" ? "Half day" : requestForm.duration_type === "SHORT_LEAVE" ? "Short leave by hours" : "Full day or multiple days"}
@@ -7066,40 +6956,41 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 <FluentOption value="HALF_DAY">Half day</FluentOption>
                 <FluentOption value="SHORT_LEAVE">Short leave by hours</FluentOption>
               </FluentDropdown>
-            </FluentField>
+            </FormField>
             <div className="grid gap-3 sm:grid-cols-2">
-              <FluentField label="Start date"><DatePickerPresets value={requestForm.start_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, start_date: value, ...(value && (prev.duration_type !== "FULL_DAY" || !prev.end_date || prev.end_date < value) ? { end_date: value } : {}) }))} placeholder="Select start date" className="max-w-none" /></FluentField>
+              <FormField label="Start date"><DatePickerPresets value={requestForm.start_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, start_date: value, ...(value && (prev.duration_type !== "FULL_DAY" || !prev.end_date || prev.end_date < value) ? { end_date: value } : {}) }))} placeholder="Select start date" className="max-w-none" /></FormField>
               {selectedLeaveTypeIsFamilyLeave ? (
-                <FluentField label="Date of birth"><DatePickerPresets value={requestForm.event_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, event_date: value }))} placeholder="Date of the birth" className="max-w-none" /></FluentField>
+                <FormField label="Date of birth"><DatePickerPresets value={requestForm.event_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, event_date: value }))} placeholder="Date of the birth" className="max-w-none" /></FormField>
               ) : null}
-              <FluentField label="End date"><DatePickerPresets value={requestForm.end_date} min={requestForm.start_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, end_date: value, ...(prev.duration_type === "FULL_DAY" ? {} : { start_date: value }) }))} placeholder="Select end date" className="max-w-none" /></FluentField>
+              <FormField label="End date"><DatePickerPresets value={requestForm.end_date} min={requestForm.start_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, end_date: value, ...(prev.duration_type === "FULL_DAY" ? {} : { start_date: value }) }))} placeholder="Select end date" className="max-w-none" /></FormField>
             </div>
             {requestForm.duration_type === "HALF_DAY" ? (
-              <FluentField label="Half-day session" hint="Half-day leave uses the same start and end date.">
+              <FormField label="Half-day session" hint="Half-day leave uses the same start and end date.">
                 <FluentDropdown selectedOptions={[requestForm.half_day_session]} value={requestForm.half_day_session === "SECOND_HALF" ? "Second half" : "First half"} onOptionSelect={(_event, data) => setRequestForm((prev) => ({ ...prev, half_day_session: (data.optionValue ?? "FIRST_HALF") as typeof prev.half_day_session }))}>
                   <FluentOption value="FIRST_HALF">First half</FluentOption><FluentOption value="SECOND_HALF">Second half</FluentOption>
                 </FluentDropdown>
-              </FluentField>
+              </FormField>
             ) : null}
             {requestForm.duration_type === "SHORT_LEAVE" ? (
               <div className="grid gap-3 sm:grid-cols-2">
-                <FluentField label="Start time"><FluentInput type="time" value={requestForm.start_time} onChange={(event) => setRequestForm((prev) => ({ ...prev, start_time: event.target.value }))} /></FluentField>
-                <FluentField label="End time"><FluentInput type="time" value={requestForm.end_time} onChange={(event) => setRequestForm((prev) => ({ ...prev, end_time: event.target.value }))} /></FluentField>
+                <FormField label="Start time"><Input type="time" value={requestForm.start_time} onChange={(event) => setRequestForm((prev) => ({ ...prev, start_time: event.target.value }))} /></FormField>
+                <FormField label="End time"><Input type="time" value={requestForm.end_time} onChange={(event) => setRequestForm((prev) => ({ ...prev, end_time: event.target.value }))} /></FormField>
                 <p className="text-xs text-muted-foreground sm:col-span-2">Short leave uses one date. The server calculates the balance deduction from the configured working-day length.</p>
               </div>
             ) : null}
-            <FluentField label={`Supporting attachment ${selectedLeaveTypeRequiresAttachment ? (evidenceDayThreshold(selectedLeaveTypeRecord) !== null ? `(needed beyond ${evidenceDayThreshold(selectedLeaveTypeRecord)} day(s), can be uploaded later)` : "(can be uploaded later)") : "(optional)"}`} hint={leaveAttachmentFile ? `Selected: ${leaveAttachmentFile.name}` : undefined}>
-              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm file:mr-3 file:rounded-sm file:border-0 file:bg-muted file:px-3 file:py-1.5" onChange={(event) => setLeaveAttachmentFile(event.target.files?.[0] ?? null)} />
-            </FluentField>
-            <FluentField label="Reason" hint={requestForm.reason.trim() ? undefined : "Required to submit"}>
-              <FluentTextarea
+            <FormField label={`Supporting attachment ${selectedLeaveTypeRequiresAttachment ? (evidenceDayThreshold(selectedLeaveTypeRecord) !== null ? `(needed beyond ${evidenceDayThreshold(selectedLeaveTypeRecord)} day(s), can be uploaded later)` : "(can be uploaded later)") : "(optional)"}`}>
+              <FileDropzone file={leaveAttachmentFile} accept=".pdf,.png,.jpg,.jpeg,.webp" hint="PDF or image" onFileChange={setLeaveAttachmentFile} />
+            </FormField>
+            <FormField label="Reason" hint={requestForm.reason.trim() ? undefined : "Required to submit"}>
+              <Textarea
+              formatting={false}
                 resize="vertical"
                 rows={4}
                 placeholder="Why are you taking leave?"
                 value={requestForm.reason}
                 onChange={(event) => setRequestForm((prev) => ({ ...prev, reason: event.target.value }))}
               />
-            </FluentField>
+            </FormField>
             </FluentDialogContent>
             <FluentDialogActions position="end">
               <FluentButton appearance="secondary" onClick={() => closeRequestDialog(false)}>Close</FluentButton>

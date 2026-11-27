@@ -24,6 +24,10 @@ import {
   type RecommendationKind,
   type ReviewDecision,
 } from "@/lib/team-recommendations"
+import { FormField } from "@/components/ui/form-field"
+import { FluentSelect } from "@/components/ui/fluent-select"
+import { Textarea } from "@/components/ui/textarea"
+import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 
 const kinds: Record<RecommendationKind, string> = {
   PROMOTION: "Promotion",
@@ -36,8 +40,6 @@ const states: Record<Recommendation["status"], string> = {
   APPROVED: "Approved",
   REJECTED: "Rejected",
 }
-const selectClass =
-  "mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
 function failure(e: unknown) {
   return e instanceof Error ? e.message : "The request could not be completed."
 }
@@ -80,6 +82,10 @@ function SubmissionForm({
     e.preventDefault()
     if (busy) return
     setError("")
+    if (!employee) {
+      setError("Select a team member.")
+      return
+    }
     if (rationale.trim().length < 20) {
       setError("Enter at least 20 characters of rationale.")
       return
@@ -123,58 +129,50 @@ function SubmissionForm({
       </h2>
       {previous?.feedback && <p>HR feedback · {previous.feedback}</p>}
       <fieldset disabled={busy} className="grid min-w-0 gap-4 sm:grid-cols-2">
-        <label>
-          Team member
-          <select
-            className={selectClass}
+        <FormField label="Team member" required>
+          <FluentSelect
+            ariaLabel="Team member"
+            className="w-full"
             value={employee}
-            onChange={(e) => setEmployee(e.target.value)}
-            required
-            disabled={!!previous}
-          >
-            <option value="">Select a team member</option>
-            {choices.employees.map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Recommendation type
-          <select
-            className={selectClass}
+            onChange={(value) => setEmployee(value)}
+            disabled={busy || !!previous}
+            placeholder="Select a team member"
+            options={[
+              { value: "", label: "Select a team member" },
+              ...choices.employees.map((x) => ({ value: String(x.id), label: x.name })),
+            ]}
+          />
+        </FormField>
+        <FormField label="Recommendation type">
+          <FluentSelect
+            ariaLabel="Recommendation type"
+            className="w-full"
             value={kind}
-            onChange={(e) => setKind(e.target.value as RecommendationKind)}
-            disabled={!!previous}
-          >
-            {Object.entries(kinds).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </label>
+            onChange={(value) => setKind(value as RecommendationKind)}
+            disabled={busy || !!previous}
+            options={Object.entries(kinds).map(([k, v]) => ({ value: k, label: v }))}
+          />
+        </FormField>
         {kind === "PROMOTION" && (
-          <label>
-            Proposed position title
+          <FormField label="Proposed position title" required>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
               maxLength={120}
             />
-          </label>
+          </FormField>
         )}
         {kind === "TRANSFER" && (
           <>
-            <label>
-              Proposed branch
-              <select
-                className={selectClass}
+            <FormField label="Proposed branch">
+              <FluentSelect
+                ariaLabel="Proposed branch"
+                className="w-full"
                 value={branch}
-                onChange={(e) => {
-                  const v = e.target.value
+                disabled={busy}
+                placeholder="Select a branch"
+                onChange={(v) => {
                   setBranch(v)
                   const d = choices.departments.find(
                     (x) => String(x.id) === department
@@ -182,45 +180,40 @@ function SubmissionForm({
                   if (v && d?.branch_id && String(d.branch_id) !== v)
                     setDepartment("")
                 }}
-              >
-                <option value="">Select a branch</option>
-                {choices.branches.map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Proposed department
-              <select
-                className={selectClass}
+                options={[
+                  { value: "", label: "Select a branch" },
+                  ...choices.branches.map((x) => ({ value: String(x.id), label: x.name })),
+                ]}
+              />
+            </FormField>
+            <FormField label="Proposed department">
+              <FluentSelect
+                ariaLabel="Proposed department"
+                className="w-full"
                 value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-              >
-                <option value="">Select a department</option>
-                {availableDepartments.map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                disabled={busy}
+                placeholder="Select a department"
+                onChange={(value) => setDepartment(value)}
+                options={[
+                  { value: "", label: "Select a department" },
+                  ...availableDepartments.map((x) => ({ value: String(x.id), label: x.name })),
+                ]}
+              />
+            </FormField>
           </>
         )}
-        <label>
-          Proposed effective date (optional)
-          <Input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-        </label>
-        <div className="sm:col-span-2">
-          <label htmlFor="recommendation-rationale">Rationale</label>
-          <textarea
+        <FormField label="Proposed effective date (optional)">
+          <DatePickerPresets value={date} onChange={(value) => setDate(value)} />
+        </FormField>
+        <FormField
+          label="Rationale"
+          htmlFor="recommendation-rationale"
+          required
+          className="sm:col-span-2"
+        >
+          <Textarea
             id="recommendation-rationale"
-            className={selectClass}
+            formatting={false}
             rows={3}
             minLength={20}
             maxLength={3000}
@@ -228,7 +221,7 @@ function SubmissionForm({
             value={rationale}
             onChange={(e) => setRationale(e.target.value)}
           />
-        </div>
+        </FormField>
       </fieldset>
       {error && <p role="alert">{error}</p>}
       <div className="flex flex-wrap gap-2">
@@ -285,19 +278,19 @@ function ReviewForm({
   }
   return (
     <div className="mt-3 space-y-2">
-      <div>
-        <label htmlFor={`manager-feedback-${row.id}`}>
-          Feedback to the manager
-        </label>
-        <textarea
+      <FormField
+        label="Feedback to the manager"
+        htmlFor={`manager-feedback-${row.id}`}
+      >
+        <Textarea
           id={`manager-feedback-${row.id}`}
-          className={selectClass}
+          formatting={false}
           rows={2}
           maxLength={2000}
           value={comment}
           onChange={(e) => setComment(e.target.value)}
         />
-      </div>
+      </FormField>
       <p className="text-sm text-muted-foreground">
         Feedback is required for Return and Reject.
       </p>

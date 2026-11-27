@@ -1,8 +1,13 @@
 "use client"
 
 import * as React from "react"
+import { refreshBankDirectory } from "@/components/common/bank-select"
 import { BuildingBank20Regular } from "@fluentui/react-icons"
-import { Button, Card, Input } from "@fluentui/react-components"
+import { Button, Card } from "@fluentui/react-components"
+import { Checkbox } from "@/components/ui/checkbox"
+import { FileDropzone } from "@/components/ui/file-dropzone"
+import { FormField } from "@/components/ui/form-field"
+import { Input } from "@/components/ui/input"
 
 import { fluentConfirm } from "@/components/ui/fluent-dialog-service"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
@@ -48,7 +53,6 @@ function CompanyBankDirectory() {
   const [error, setError] = React.useState("")
   const [message, setMessage] = React.useState("")
   const nameInput = React.useRef<HTMLInputElement>(null)
-  const fileInput = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
     let current = true
@@ -71,6 +75,11 @@ function CompanyBankDirectory() {
     }
   }, [allowed, loadAttempt])
 
+  // Bank pickers elsewhere cache the directory; drop it whenever it changes here.
+  React.useEffect(() => {
+    refreshBankDirectory()
+  }, [banks])
+
   function openForm(bank: AdminRecord | null) {
     setEditing(bank)
     setName(typeof bank?.name === "string" ? bank.name : "")
@@ -79,7 +88,6 @@ function CompanyBankDirectory() {
     setActive(bank?.is_active !== false)
     setRemoveLogo(false)
     setFile(null)
-    if (fileInput.current) fileInput.current.value = ""
     setError("")
     setMessage("")
     if (bank) nameInput.current?.focus()
@@ -173,53 +181,47 @@ function CompanyBankDirectory() {
             <h2 className="font-semibold md:col-span-2">
               {editing ? "Edit bank" : "Add bank"}
             </h2>
-            <label className="grid gap-1 text-sm">
-              Bank name
+            <FormField label="Bank name" required>
               <Input
                 ref={nameInput}
                 required
                 maxLength={160}
                 value={name}
-                onChange={(_, data) => setName(data.value)}
+                onChange={(event) => setName(event.target.value)}
               />
-            </label>
-            <label className="grid gap-1 text-sm">
-              Logo URL
+            </FormField>
+            <FormField label="Logo URL">
               <Input
                 type="url"
                 maxLength={500}
                 disabled={removeLogo || Boolean(file)}
                 value={logoUrl}
-                onChange={(_, data) => setLogoUrl(data.value)}
+                onChange={(event) => setLogoUrl(event.target.value)}
               />
-            </label>
-            <label className="grid gap-1 text-sm">
-              Or upload a logo
-              <input
-                type="file"
-                ref={fileInput}
+            </FormField>
+            <FormField label="Or upload a logo">
+              <FileDropzone
+                file={file}
                 disabled={removeLogo}
                 accept="image/png,image/jpeg,image/webp"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                onFileChange={(next) => setFile(next)}
               />
-            </label>
+            </FormField>
             <div className="flex flex-wrap items-center gap-4 text-sm">
-              <label>
-                <input
-                  type="checkbox"
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
                   checked={active}
-                  onChange={(e) => setActive(e.target.checked)}
-                />{" "}
+                  onCheckedChange={(checked) => setActive(checked)}
+                />
                 Active
               </label>
               {bankLogo(editing) && (
-                <label>
-                  <input
-                    type="checkbox"
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
                     checked={removeLogo}
                     disabled={Boolean(file)}
-                    onChange={(e) => setRemoveLogo(e.target.checked)}
-                  />{" "}
+                    onCheckedChange={(checked) => setRemoveLogo(checked)}
+                  />
                   Remove existing logo
                 </label>
               )}

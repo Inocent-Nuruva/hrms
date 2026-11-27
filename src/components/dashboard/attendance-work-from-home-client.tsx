@@ -1,16 +1,12 @@
 "use client";
+import { FormField } from "@/components/ui/form-field";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { ATTENDANCE_PAGE_STACK, AttendancePageHead } from "@/components/dashboard/attendance-ops-ui";
 
 import * as React from "react";
-import {
-  Badge as FluentBadge,
-  Button as FluentButton,
-  Field,
-  Input as FluentInput,
-  MessageBar,
-  MessageBarBody,
-  Textarea as FluentTextarea,
-} from "@fluentui/react-components";
+import { Badge as FluentBadge, Button as FluentButton, MessageBar, MessageBarBody } from "@fluentui/react-components"
+;
 import {
   ArrowClockwise20Regular,
   CalendarLtr20Regular,
@@ -332,23 +328,20 @@ export function AttendanceWorkFromHomeClient() {
               Approval must cover every requested date.
             </p>
           </div>
-          <Field label="Start date" required>
+          <FormField label="Start date" required>
             <DatePickerPresets
               value={startDate}
               onChange={setStartDate}
               placeholder="Select start date"
             />
-          </Field>
-          <Field
+          </FormField>
+          <FormField
             label="End date"
             required
-            validationMessage={
+            error={
               startDate && endDate && endDate < startDate
                 ? "End date cannot be before the start date."
                 : undefined
-            }
-            validationState={
-              startDate && endDate && endDate < startDate ? "error" : "none"
             }
           >
             <DatePickerPresets
@@ -356,18 +349,18 @@ export function AttendanceWorkFromHomeClient() {
               onChange={setEndDate}
               placeholder="Select end date"
             />
-          </Field>
-          <Field label="Reason" required>
-            <FluentTextarea
+          </FormField>
+          <FormField label="Reason" required>
+            <Textarea
+              formatting={false}
               required
               maxLength={2000}
-              resize="none"
               value={reason}
-              onChange={(_event, data) => setReason(data.value)}
+              onChange={(event) => setReason(event.target.value)}
               placeholder="Why do you need to work remotely?"
               className="min-h-8"
             />
-          </Field>
+          </FormField>
           <FluentButton
             disabled={
               saving ||
@@ -539,13 +532,13 @@ export function AttendanceWorkFromHomeClient() {
                   !isOwnRequest &&
                   request.status === "PENDING" ? (
                     <>
-                      <FluentInput
+                      <Input
                         aria-label={`Review note for request ${request.id}`}
                         value={comments[request.id] ?? ""}
-                        onChange={(_event, data) =>
+                        onChange={(event) =>
                           setComments((current) => ({
                             ...current,
-                            [request.id]: data.value,
+                            [request.id]: event.target.value,
                           }))
                         }
                         placeholder="Comment or rejection reason"

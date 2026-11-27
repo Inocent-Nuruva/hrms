@@ -4,6 +4,7 @@ import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import {
   cancelMyLeaveEncashmentRequest,
   createMyLeaveEncashmentRequest,
@@ -103,19 +104,13 @@ export function LeaveEncashmentSelfPanel({ token, balances }: { token: string | 
       </p>
       {options.length ? (
         <div className="mb-4 grid gap-2 sm:grid-cols-[2fr_1fr_2fr_auto]">
-          <select
-            className="h-9 rounded-md border border-border bg-background px-2 text-sm"
-            aria-label="Leave balance"
+          <FluentSelect
+            ariaLabel="Leave balance"
+            placeholder="Choose a balance…"
             value={balanceKey}
-            onChange={(event) => setBalanceKey(event.target.value)}
-          >
-            <option value="">Choose a balance…</option>
-            {options.map((o) => (
-              <option key={o.key} value={o.key}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+            onChange={setBalanceKey}
+            options={options.map((o) => ({ value: o.key, label: o.label }))}
+          />
           <Input inputMode="decimal" placeholder="Days" aria-label="Days to encash" value={days} onChange={(e) => setDays(e.target.value)} />
           <Input placeholder="Reason" aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
           <Button disabled={busy} onClick={() => void submit()}>

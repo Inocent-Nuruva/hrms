@@ -6,6 +6,7 @@ import { Dialog as FluentDialog, DialogSurface, DialogTitle } from "@fluentui/re
 import { AlertTriangle, Loader2 } from "lucide-react"
 
 import { Checkbox } from "@/components/ui/checkbox"
+import { Textarea } from "@/components/ui/textarea"
 import {
   acknowledgePayrollContractWarnings,
   errorMessage,
@@ -102,7 +103,7 @@ export function PayrollContractWarningsDialog({
           </ul>
         </div>
         <div className="grid gap-2 border-t border-border px-5 py-3">
-          <textarea className="min-h-12 rounded-md border border-border px-2.5 py-1.5 text-sm" placeholder="Note (optional)" value={note} onChange={(event) => setNote(event.target.value)} />
+          <Textarea formatting={false} placeholder="Note (optional)" value={note} onChange={(event) => setNote(event.target.value)} />
           <label className="flex items-center gap-2 text-sm">
             <Checkbox checked={confirmed} onCheckedChange={(value) => setConfirmed(Boolean(value))} />
             I have reviewed these contract warnings.

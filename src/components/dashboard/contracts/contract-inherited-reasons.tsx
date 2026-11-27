@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import { Input } from "@/components/ui/input";
 import type { ContractDetail } from "@/lib/contracts-api";
 import { contractWorkspaceMessages as m } from "./contract-workspace-messages";
 import { missingInheritedReasons } from "./contract-workspace-inheritance";
@@ -41,8 +42,7 @@ export function ContractInheritedReasons({
         return (
           <label key={key} className="grid gap-1">
             {m.inheritedReason}: {m.label(key)}
-            <input
-              className="rounded border border-border bg-background p-2"
+            <Input
               disabled={restricted}
               aria-invalid={invalid}
               aria-describedby={invalid || restricted ? errorId : undefined}

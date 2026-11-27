@@ -15,6 +15,7 @@ The frontend mirrors the backend's immutable release layout at
   Unit tests stay isolated on `http://localhost:8888`.
 - CI builds and validates one environment-specific standalone artifact. The deployment runner verifies its checksum, revision, build settings, Node ABI, CPU architecture, and glibc compatibility before staging it; the runner does not rebuild the release. UAT and production artifacts are built separately because Next.js embeds public settings and proxy routes at build time.
 - Browser regression tests run on two independent runners, with whole test files distributed using recorded timings. CI verifies complete, non-overlapping coverage and requires both runners to pass; pull requests also verify the combined manual illustrations.
+- New pushes cancel obsolete validation and browser test jobs on the same branch; manual dispatches have separate concurrency groups. Deployments are queued and do not cancel an active deployment. Release artifacts expire after three days; browser failure evidence and manual illustrations expire after seven days.
 - The standalone artifact contains all traced production dependencies; servers do
   not run `npm install` or compile source.
 - Deployment atomically switches `current`, reloads PM2, checks

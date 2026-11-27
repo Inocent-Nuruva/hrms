@@ -6,7 +6,9 @@ import * as React from "react"
 import { RefreshCwIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
+import { DateInput } from "@/components/ui/date-input"
 import { PageHeader } from "@/components/ui/page-header"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
@@ -218,11 +220,11 @@ function ReconciliationTab({ canExecute }: { canExecute: boolean }) {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">From</span>
-          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-44" />
+          <DateInput value={from} onChange={(e) => setFrom(e.target.value)} className="w-44" />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">To</span>
-          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-44" />
+          <DateInput value={to} onChange={(e) => setTo(e.target.value)} className="w-44" />
         </label>
         <Button size="sm" onClick={() => void run()} disabled={loading || !from || !to}>
           {loading ? "Reconciling…" : "Reconcile"}
@@ -233,7 +235,7 @@ function ReconciliationTab({ canExecute }: { canExecute: boolean }) {
           </Button>
         ) : null}
         <label className="flex items-center gap-2 text-sm sm:ml-auto">
-          <input type="checkbox" className="size-4" checked={onlyIssues} onChange={(e) => setOnlyIssues(e.target.checked)} />
+          <Checkbox checked={onlyIssues} onCheckedChange={(checked) => setOnlyIssues(checked)} />
           Show only items needing attention
         </label>
       </div>
@@ -382,11 +384,11 @@ function BackfillTab({ canExecute }: { canExecute: boolean }) {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">From</span>
-          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-44" />
+          <DateInput value={from} onChange={(e) => setFrom(e.target.value)} className="w-44" />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">To</span>
-          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-44" />
+          <DateInput value={to} onChange={(e) => setTo(e.target.value)} className="w-44" />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Employee ID (optional)</span>

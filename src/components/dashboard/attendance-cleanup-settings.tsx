@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input";
 import * as React from "react";
 import {
   getAttendanceCleanupSettings,
@@ -132,12 +134,11 @@ export function AttendanceCleanupSettingsPanel({
                   key={item.key}
                   className="flex gap-3 rounded-lg border border-border p-3"
                 >
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     className="mt-1"
                     checked={settings[item.key]}
-                    onChange={(e) =>
-                      setSettings({ ...settings, [item.key]: e.target.checked })
+                    onCheckedChange={(checked) =>
+                      setSettings({ ...settings, [item.key]: checked })
                     }
                   />
                   <span>
@@ -151,12 +152,11 @@ export function AttendanceCleanupSettingsPanel({
             </div>
             <label className="flex flex-wrap items-center gap-2 font-medium">
               Keep completed queue entries for{" "}
-              <input
-                className="w-20 rounded border border-border bg-background p-1"
+              <Input
                 type="number"
                 min={7}
                 max={3650}
-                value={settings.queueRetentionDays}
+                value={String(settings.queueRetentionDays)}
                 onChange={(e) =>
                   setSettings({
                     ...settings,

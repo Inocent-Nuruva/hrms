@@ -4,6 +4,20 @@ import * as React from "react"
 import { updateNotificationRule, updateNotificationTemplate, type AdminRecord } from "@/lib/admin-api"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { primaryButtonClass, secondaryButtonClass } from "@/components/dashboard/talent-visuals"
+import { FormField } from "@/components/ui/form-field"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { FluentSelect } from "@/components/ui/fluent-select"
+import { Checkbox } from "@/components/ui/checkbox"
+
+function PrioritySelect({ initial, disabled }: { initial: string; disabled?: boolean }) {
+  const [value, setValue] = React.useState(initial)
+  return <>
+    <FluentSelect id="notification-priority" ariaLabel="Priority" value={value} onChange={setValue} disabled={disabled}
+      options={["LOW", "MEDIUM", "HIGH", "URGENT"].map(item => ({ value: item, label: item }))} />
+    <input type="hidden" name="priority" value={value} />
+  </>
+}
 
 const templateFields = [
   ["title", "title", "Title", 180],
@@ -26,7 +40,6 @@ export function NotificationSettingsEditor({ kind, id, row, onSaved }: {
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState("")
   const value = (key: string, alias: string) => String(row[key] ?? row[alias] ?? "")
-  const control = "mt-1 block w-full rounded-md border border-border bg-background px-3 py-2"
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (saving) return
@@ -56,17 +69,15 @@ export function NotificationSettingsEditor({ kind, id, row, onSaved }: {
   if (!editing) return <button className={secondaryButtonClass} type="button" onClick={() => { setError(""); setEditing(true) }}>Edit {kind}</button>
   return <form aria-label={`Edit ${kind}`} className="w-full rounded-lg border border-border p-3" onSubmit={submit}>
     <fieldset className="grid gap-3 text-sm sm:grid-cols-2" disabled={saving}>
-      {kind === "template" ? templateFields.map(([key, alias, label, length]) => <label key={key} className="sm:col-span-2">{label}
-        <textarea className={control} name={key} defaultValue={value(key, alias)} maxLength={length} rows={key.includes("message") || key === "email_body" ? 3 : 1} required={key === "title" || key === "system_message"} />
-      </label>) : <>
-        {timingFields.map(([key, alias, label]) => <label key={key}>{label}
-          <input className={control} type="number" min={0} max={2147483647} step={1} name={key} defaultValue={value(key, alias)} />
-        </label>)}
-        <label>Priority<select className={control} name="priority" defaultValue={value("priority", "priority") || "MEDIUM"}>
-          {["LOW", "MEDIUM", "HIGH", "URGENT"].map(item => <option key={item}>{item}</option>)}
-        </select></label>
+      {kind === "template" ? templateFields.map(([key, alias, label, length]) => <FormField key={key} className="sm:col-span-2" label={label} htmlFor={`notification-${key}`} required={key === "title" || key === "system_message"}>
+        <Textarea id={`notification-${key}`} formatting={false} name={key} defaultValue={value(key, alias)} maxLength={length} rows={key.includes("message") || key === "email_body" ? 3 : 1} required={key === "title" || key === "system_message"} />
+      </FormField>) : <>
+        {timingFields.map(([key, alias, label]) => <FormField key={key} label={label} htmlFor={`notification-${key}`}>
+          <Input id={`notification-${key}`} type="number" min={0} max={2147483647} step={1} name={key} defaultValue={value(key, alias)} />
+        </FormField>)}
+        <FormField label="Priority" htmlFor="notification-priority"><PrioritySelect initial={value("priority", "priority") || "MEDIUM"} disabled={saving} /></FormField>
         <fieldset><legend>Delivery channels</legend><p className="text-xs text-muted-foreground">Leave all channels clear to use the event’s default delivery channels.</p>
-          {["IN_APP", "EMAIL", "SMS", "PUSH"].map(channel => <label className="mr-3 inline-flex items-center gap-1" key={channel}><input type="checkbox" name="channels" value={channel} defaultChecked={Array.isArray(row.channels) && row.channels.includes(channel)} />{channel === "IN_APP" ? "In-app" : channel}</label>)}
+          {["IN_APP", "EMAIL", "SMS", "PUSH"].map(channel => <label className="mr-3 inline-flex items-center gap-1" key={channel}><Checkbox name="channels" value={channel} defaultChecked={Array.isArray(row.channels) && row.channels.includes(channel)} disabled={saving} />{channel === "IN_APP" ? "In-app" : channel}</label>)}
         </fieldset>
       </>}
       {error && <p className="sm:col-span-2" role="alert">{error}</p>}

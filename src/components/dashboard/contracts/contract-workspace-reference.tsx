@@ -1,5 +1,6 @@
 ﻿"use client";
 import * as React from "react";
+import { Input } from "@/components/ui/input";
 import {
   listBranches,
   listDepartments,
@@ -96,9 +97,8 @@ export function ContractReferencePicker({
       {searchable ? (
         <label className="grid gap-1">
           {m.search} {label}
-          <input
+          <Input
             disabled={disabled}
-            className="rounded border border-border bg-background p-2"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -149,9 +149,8 @@ export function ContractReferencePicker({
           </span>
           <label className="grid gap-1">
             {m.reason}
-            <input
+            <Input
               disabled={disabled}
-              className="rounded border border-border bg-background p-2"
               value={reason}
               aria-invalid={reason.trim().length < 3}
               aria-describedby={

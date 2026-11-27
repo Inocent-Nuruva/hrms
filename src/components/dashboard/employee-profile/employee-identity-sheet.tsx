@@ -5,9 +5,6 @@ import Link from "next/link"
 import { EyeIcon, EyeOffIcon } from "lucide-react"
 import {
   Button as FluentButton,
-  Field as FluentField,
-  Input as FluentInput,
-  Textarea as FluentTextarea,
 } from "@fluentui/react-components"
 import {
   Sheet,
@@ -46,6 +43,9 @@ import {
   resolveCompanyUserId,
   resolveCompanyUserRecord,
 } from "@/components/dashboard/employee-profile/profile-shared"
+import { FormField } from "@/components/ui/form-field"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 
 export function EmployeeIdentitySheet({
   open,
@@ -374,42 +374,37 @@ export function EmployeeIdentitySheet({
         </SheetHeader>
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth px-4 py-5 [scrollbar-gutter:stable] sm:px-6">
           <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 [&>*]:min-w-0">
-          <FluentField label="First name" className="min-w-0">
-            <FluentInput
+          <FormField label="First name" className="min-w-0">
+            <Input
               value={firstName}
-              onChange={(_event, data) => setFirstName(data.value)}
-              className="!w-full"
+              onChange={(event) => setFirstName(event.target.value)}
               placeholder="Enter first name"
             />
-          </FluentField>
-          <FluentField label="Last name" className="min-w-0">
-            <FluentInput
+          </FormField>
+          <FormField label="Last name" className="min-w-0">
+            <Input
               value={lastName}
-              onChange={(_event, data) => setLastName(data.value)}
-              className="!w-full"
+              onChange={(event) => setLastName(event.target.value)}
               placeholder="Enter last name"
             />
-          </FluentField>
-          <FluentField label="Username" className="min-w-0">
-            <FluentInput
+          </FormField>
+          <FormField label="Username" className="min-w-0">
+            <Input
               value={username}
-              onChange={(_event, data) => setUsername(data.value)}
-              className="!w-full"
+              onChange={(event) => setUsername(event.target.value)}
               placeholder="Enter username"
             />
-          </FluentField>
-          <FluentField label="Email" className="min-w-0">
-            <FluentInput
+          </FormField>
+          <FormField label="Email" className="min-w-0">
+            <Input
               type="email"
               value={email}
-              onChange={(_event, data) => setEmail(data.value)}
-              className="!w-full"
+              onChange={(event) => setEmail(event.target.value)}
               placeholder="Enter email"
             />
-          </FluentField>
+          </FormField>
           <div className="grid min-w-0 grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 [&>*]:min-w-0">
-            <label className="grid gap-1">
-              <span className="text-xs font-medium text-foreground">Branch</span>
+            <FormField label="Branch">
               <FluentSelect
                 ariaLabel="Branch"
                 className="w-full min-w-0"
@@ -433,9 +428,8 @@ export function EmployeeIdentitySheet({
                   }),
                 ]}
               />
-            </label>
-            <label className="grid gap-1">
-              <span className="text-xs font-medium text-foreground">Department</span>
+            </FormField>
+            <FormField label="Department">
               <FluentSelect
                 ariaLabel="Department"
                 className="w-full min-w-0"
@@ -458,9 +452,8 @@ export function EmployeeIdentitySheet({
                   }),
                 ]}
               />
-            </label>
-            <label className="grid gap-1">
-              <span className="text-xs font-medium text-foreground">Position</span>
+            </FormField>
+            <FormField label="Position">
               <FluentSelect
                 ariaLabel="Position"
                 className="w-full min-w-0"
@@ -495,10 +488,9 @@ export function EmployeeIdentitySheet({
                   .
                 </span>
               ) : null}
-            </label>
+            </FormField>
           </div>
-          <label className="grid gap-1">
-            <span className="text-xs font-medium text-foreground">Manager</span>
+          <FormField label="Manager">
             <FluentSelect
               ariaLabel="Manager"
               className="w-full min-w-0"
@@ -519,9 +511,8 @@ export function EmployeeIdentitySheet({
             <span className="text-[11px] font-normal normal-case tracking-normal text-muted-foreground">
               Shows all other employees in the selected department.
             </span>
-          </label>
-          <label className="grid gap-1">
-            <span className="text-xs font-medium text-foreground">Grade</span>
+          </FormField>
+          <FormField label="Grade">
             <FluentSelect
               ariaLabel="Grade"
               className="w-full min-w-0"
@@ -537,9 +528,8 @@ export function EmployeeIdentitySheet({
                 }),
               ]}
             />
-          </label>
-          <label className="grid gap-1">
-            <span className="text-xs font-medium text-foreground">Cost Center</span>
+          </FormField>
+          <FormField label="Cost center">
             <FluentSelect
               ariaLabel="Cost Center"
               className="w-full min-w-0"
@@ -555,24 +545,21 @@ export function EmployeeIdentitySheet({
                 }),
               ]}
             />
-          </label>
-          <label className="grid gap-1">
-            <span className="text-xs font-medium text-foreground">
-              Assignment Effective Date
-            </span>
+          </FormField>
+          <FormField label="Assignment effective date">
             <DatePickerPresets
               value={assignmentEffectiveDate}
               onChange={setAssignmentEffectiveDate}
             />
-          </label>
-          <FluentField label="New password (optional)" className="min-w-0">
+          </FormField>
+          <FormField label="New password (optional)" className="min-w-0">
             <div className="relative">
-              <FluentInput
+              <Input
                 type={showProfilePassword ? "text" : "password"}
                 value={profilePassword}
-                onChange={(_event, data) => setProfilePassword(data.value)}
+                onChange={(event) => setProfilePassword(event.target.value)}
                 minLength={6}
-                className="password-reveal-managed !w-full pr-10"
+                className="password-reveal-managed pr-10"
                 placeholder="Leave blank to keep current password"
               />
               <FluentButton
@@ -585,14 +572,14 @@ export function EmployeeIdentitySheet({
                 {showProfilePassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
               </FluentButton>
             </div>
-          </FluentField>
-          <FluentField label="Assignment reason (optional)" className="min-w-0 sm:col-span-2">
-            <FluentTextarea
+          </FormField>
+          <FormField label="Assignment reason (optional)" className="min-w-0 sm:col-span-2">
+            <Textarea
+              formatting={false}
               value={assignmentReason}
-              onChange={(_event, data) => setAssignmentReason(data.value)}
-              className="!w-full"
+              onChange={(event) => setAssignmentReason(event.target.value)}
             />
-          </FluentField>
+          </FormField>
           </div>
           {identityError ? <p role="alert" className="mt-3 text-sm text-rose-600">{identityError}</p> : null}
         </div>

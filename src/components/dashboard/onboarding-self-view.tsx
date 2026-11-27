@@ -46,6 +46,8 @@ import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { cn } from "@/lib/utils"
 import { API_BASE_URL } from "@/utils/constants"
+import { FormField } from "@/components/ui/form-field"
+import { FluentSelect } from "@/components/ui/fluent-select"
 
 const STEPS = ["DRAFT", "SUBMITTED", "IN_PROGRESS", "ACKNOWLEDGED", "COMPLETED"]
 
@@ -550,19 +552,20 @@ export function OnboardingSelfView() {
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
                   <p className="text-sm font-semibold text-foreground">Documents</p>
                   <div className="flex items-center gap-2">
-                  <select
-                    aria-label="Document type"
-                    className="h-9 rounded-md border border-border bg-background px-2 text-xs"
+                  <FluentSelect
+                    ariaLabel="Document type"
+                    className="w-52"
                     value={documentType}
-                    onChange={(event) => setDocumentType(event.target.value)}
-                  >
-                    <option value="other">Other document</option>
-                    <option value="identity_document">Identity document</option>
-                    <option value="academic_certificate">Academic certificate</option>
-                    <option value="professional_certificate">Professional certificate</option>
-                    <option value="bank_document">Bank document</option>
-                    <option value="medical_certificate">Medical certificate</option>
-                  </select>
+                    onChange={(value) => setDocumentType(value)}
+                    options={[
+                      { value: "other", label: "Other document" },
+                      { value: "identity_document", label: "Identity document" },
+                      { value: "academic_certificate", label: "Academic certificate" },
+                      { value: "professional_certificate", label: "Professional certificate" },
+                      { value: "bank_document", label: "Bank document" },
+                      { value: "medical_certificate", label: "Medical certificate" },
+                    ]}
+                  />
                   <button
                     type="button"
                     className={actionButtonClass}
@@ -618,13 +621,24 @@ export function OnboardingSelfView() {
                   {readString(selected, ["acknowledgement_required_version"]).trim() ? (
                     <p className="text-xs text-muted-foreground">You are acknowledging version {readString(selected, ["acknowledgement_required_version"])}</p>
                   ) : (
-                    <label className="grid gap-1 text-xs font-medium">
-                      Acknowledgement document version
-                      <select className="h-9 rounded border border-border bg-background px-2 text-sm" value={ackDocumentId} onChange={(event) => setAckDocumentId(event.target.value)}>
-                        <option value="">Select an approved document</option>
-                        {documents.filter((doc) => doc.is_verified === true && readString(doc, ["review_status"]).toLowerCase() === "approved").map((doc) => <option key={String(readNumber(doc, ["id"]))} value={String(readNumber(doc, ["id"]))}>{readString(doc, ["title"], "Acknowledgement document")} · {readString(doc, ["version", "updated_at"], "version unavailable")}</option>)}
-                      </select>
-                    </label>
+                    <FormField label="Acknowledgement document version">
+                      <FluentSelect
+                        ariaLabel="Acknowledgement document version"
+                        className="w-full"
+                        value={ackDocumentId}
+                        onChange={(value) => setAckDocumentId(value)}
+                        placeholder="Select an approved document"
+                        options={[
+                          { value: "", label: "Select an approved document" },
+                          ...documents
+                            .filter((doc) => doc.is_verified === true && readString(doc, ["review_status"]).toLowerCase() === "approved")
+                            .map((doc) => ({
+                              value: String(readNumber(doc, ["id"])),
+                              label: `${readString(doc, ["title"], "Acknowledgement document")} · ${readString(doc, ["version", "updated_at"], "version unavailable")}`,
+                            })),
+                        ]}
+                      />
+                    </FormField>
                   )}
                   {ackDocumentId ? <p className="text-xs text-muted-foreground">Selected document ID {ackDocumentId}; its exact stored version and hash will be recorded with your acknowledgement.</p> : null}
                   <Textarea

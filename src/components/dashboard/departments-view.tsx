@@ -1,5 +1,8 @@
 "use client"
 
+import { FormField } from "@/components/ui/form-field"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import * as React from "react"
 import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
@@ -963,12 +966,10 @@ export function DepartmentsView() {
           <div className="max-h-full w-full max-w-2xl overflow-y-auto rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
             <h3 className="text-lg font-semibold text-slate-900">{editingId === null ? "Add" : "Edit"} Department</h3>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Name</span>
-                <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Branch</span>
+              <FormField label="Name">
+                <Input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
+              </FormField>
+              <FormField label="Branch">
                 <FluentSelect
                   ariaLabel="Branch"
                   placeholder="Select branch"
@@ -982,13 +983,11 @@ export function DepartmentsView() {
                     }),
                   ]}
                 />
-              </label>
-              <label className="grid gap-1 md:col-span-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Description</span>
+              </FormField>
+              <FormField label="Description" className="md:col-span-2">
                 <Textarea className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm" value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>
+              </FormField>
+              <FormField label="Status">
                 <FluentSelect
                   ariaLabel="Status"
                   value={form.status}
@@ -998,9 +997,8 @@ export function DepartmentsView() {
                     { value: "inactive", label: "inactive" },
                   ]}
                 />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Parent Department</span>
+              </FormField>
+              <FormField label="Parent department">
                 <FluentSelect
                   ariaLabel="Parent department"
                   placeholder="No parent"
@@ -1015,14 +1013,14 @@ export function DepartmentsView() {
                     }),
                   ]}
                 />
-              </label>
+              </FormField>
               <div className="grid gap-2">
-                <label className="grid gap-1">Find a department manager<input value={managerSearch} onChange={event => setManagerSearch(event.target.value)} placeholder="Search name or employee number" className="rounded-md border border-border px-3 py-2" /></label>
-                <label className="grid gap-1"><span>Department manager</span><FluentSelect ariaLabel="Department manager" value={form.manager_employee_id} placeholder="No manager assigned"
+                <FormField label="Find a department manager"><Input value={managerSearch} onChange={event => setManagerSearch(event.target.value)} placeholder="Search name or employee number" /></FormField>
+                <FormField label="Department manager"><FluentSelect ariaLabel="Department manager" value={form.manager_employee_id} placeholder="No manager assigned"
                   onChange={value => {const selected=managerOptions.find(row=>String(row.id)===value); setSelectedManagerName(selected ? [selected.first_name,selected.last_name].filter(Boolean).join(" ") : ""); setForm(previous => ({...previous,manager_employee_id:value}))}}
                   options={[{value:"",label:"No manager assigned"},
                     ...(form.manager_employee_id && !managerOptions.some(row => String(row.id)===form.manager_employee_id) ? [{value:form.manager_employee_id,label:selectedManagerName || "Employee #"+form.manager_employee_id}] : []),
-                    ...managerOptions.map(row => ({value:String(row.id),label:[row.first_name,row.last_name].filter(Boolean).join(" ")+" ("+row.employee_no+")"}))]} /></label>
+                    ...managerOptions.map(row => ({value:String(row.id),label:[row.first_name,row.last_name].filter(Boolean).join(" ")+" ("+row.employee_no+")"}))]} /></FormField>
                 {managerError && <p role="alert">{managerError}</p>}
               </div>
               <fieldset className="grid gap-1 md:col-span-2">
@@ -1031,16 +1029,15 @@ export function DepartmentsView() {
                 </legend>
                 <div className="max-h-40 overflow-y-auto rounded-md border border-slate-300 bg-white p-2">
                   <label className="mb-1 flex items-center gap-2 rounded border-b border-slate-200 px-2 py-2 text-sm font-medium">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={allAvailablePositionsSelected}
                       disabled={availablePositionIds.length === 0}
-                      onChange={(event) =>
+                      onCheckedChange={(checked) =>
                         setForm((previous) => {
                           const availableIds = new Set(availablePositionIds)
                           return {
                             ...previous,
-                            position_ids: event.target.checked
+                            position_ids: checked
                               ? Array.from(new Set([...previous.position_ids, ...availablePositionIds]))
                               : previous.position_ids.filter((id) => !availableIds.has(id)),
                           }
@@ -1056,13 +1053,12 @@ export function DepartmentsView() {
                         const value = String(id)
                         return (
                           <label key={id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50">
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               checked={form.position_ids.includes(value)}
-                              onChange={(event) =>
+                              onCheckedChange={(checked) =>
                                 setForm((previous) => ({
                                   ...previous,
-                                  position_ids: event.target.checked
+                                  position_ids: checked
                                     ? Array.from(new Set([...previous.position_ids, value]))
                                     : previous.position_ids.filter((entry) => entry !== value),
                                 }))
@@ -1098,8 +1094,7 @@ export function DepartmentsView() {
               Department Access: {readString(accessDepartment, ["name", "code"])}
             </h3>
             <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-              <label className="grid min-w-0 gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">User</span>
+              <FormField label="User">
                 {accessUserIds.length > 0 ? (
                   <div className="flex flex-wrap gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
                     {accessUserIds.map((id) => {
@@ -1127,8 +1122,7 @@ export function DepartmentsView() {
                   </div>
                 ) : null}
                 <div className="relative">
-                  <input
-                    className="h-10 w-full rounded-md border border-slate-300 px-4 text-sm"
+                  <Input
                     value={accessUserQuery}
                     onFocus={() => setAccessPickerOpen(true)}
                     onBlur={() => {
@@ -1179,7 +1173,7 @@ export function DepartmentsView() {
                     </div>
                   ) : null}
                 </div>
-              </label>
+              </FormField>
               <button
                 type="button"
                 className="h-10 rounded-md bg-primary px-3 text-sm font-medium !text-white transition hover:brightness-95 md:whitespace-nowrap"

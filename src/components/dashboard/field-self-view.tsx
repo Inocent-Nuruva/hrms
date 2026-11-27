@@ -3,6 +3,11 @@
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
+import { FormField } from "@/components/ui/form-field"
+import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import { DateTimeInput } from "@/components/ui/date-time-input"
+import { FileDropzone } from "@/components/ui/file-dropzone"
 import { EmployeeProfileRequiredState } from "@/components/dashboard/employee-profile-required-state"
 import * as React from "react"
 import Link from "next/link"
@@ -765,22 +770,22 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
             <DialogDescription>Add or update this field visit.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
-            {createMode === "repeat-plan" ? <><label className="grid gap-1.5 text-sm">Number of future weeks<input type="number" min="1" max="12" className={inputClass} value={form.weeks ?? "4"} onChange={(event) => setForm((current) => ({ ...current, weeks: event.target.value }))} /></label><p className="text-xs text-muted-foreground">Creates separate draft plans on the same weekday. Existing plans are skipped and reported. Times are copied as elapsed weekly intervals.</p></> : null}
-            {createMode === "checkin-exception" ? <><label className="grid gap-1.5 text-sm">Why is location accuracy poor?<Textarea className={textareaClass} value={form.gps_reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, gps_reason: event.target.value }))} /></label><p className="text-xs text-muted-foreground">The device still captures location. If the accuracy is outside the policy limit, the visit and any attendance punch require review.</p></> : null}
-            {createMode === "revise-outcome" ? <><p className="text-sm">Manager comments: {form.manager_comments || "-"}</p><label className="grid gap-1.5 text-sm">Discussion notes<Textarea className={textareaClass} value={form.discussion_notes ?? ""} onChange={(event) => setForm((current) => ({ ...current, discussion_notes: event.target.value }))} /></label><label className="grid gap-1.5 text-sm">Outcome<Textarea className={textareaClass} value={form.outcome ?? ""} onChange={(event) => setForm((current) => ({ ...current, outcome: event.target.value }))} /></label></> : null}
+            {createMode === "repeat-plan" ? <><FormField label="Number of future weeks"><Input type="number" min="1" max="12" value={form.weeks ?? "4"} onChange={(event) => setForm((current) => ({ ...current, weeks: event.target.value }))} /></FormField><p className="text-xs text-muted-foreground">Creates separate draft plans on the same weekday. Existing plans are skipped and reported. Times are copied as elapsed weekly intervals.</p></> : null}
+            {createMode === "checkin-exception" ? <><FormField label="Why is location accuracy poor?"><Textarea className={textareaClass} value={form.gps_reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, gps_reason: event.target.value }))} /></FormField><p className="text-xs text-muted-foreground">The device still captures location. If the accuracy is outside the policy limit, the visit and any attendance punch require review.</p></> : null}
+            {createMode === "revise-outcome" ? <><p className="text-sm">Manager comments: {form.manager_comments || "-"}</p><FormField label="Discussion notes"><Textarea className={textareaClass} value={form.discussion_notes ?? ""} onChange={(event) => setForm((current) => ({ ...current, discussion_notes: event.target.value }))} /></FormField><FormField label="Outcome"><Textarea className={textareaClass} value={form.outcome ?? ""} onChange={(event) => setForm((current) => ({ ...current, outcome: event.target.value }))} /></FormField></> : null}
             {createMode === "checkout-correction" ? <>
-              <label className="grid gap-1.5 text-sm">Actual checkout date and time<input type="datetime-local" className={inputClass} value={form.checkout_at ?? ""} onChange={(event) => setForm((current) => ({ ...current, checkout_at: event.target.value }))} /></label>
-              <label className="grid gap-1.5 text-sm">Reason<Textarea className={textareaClass} value={form.reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} /></label>
-              <label className="grid gap-1.5 text-sm">Discussion notes<Textarea className={textareaClass} value={form.discussion_notes ?? ""} onChange={(event) => setForm((current) => ({ ...current, discussion_notes: event.target.value }))} /></label>
-              <label className="grid gap-1.5 text-sm">Outcome<Textarea className={textareaClass} value={form.outcome ?? ""} onChange={(event) => setForm((current) => ({ ...current, outcome: event.target.value }))} /></label>
+              <FormField label="Actual checkout date and time"><DateTimeInput value={form.checkout_at ?? ""} onChange={(event) => setForm((current) => ({ ...current, checkout_at: event.target.value }))} /></FormField>
+              <FormField label="Reason"><Textarea className={textareaClass} value={form.reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} /></FormField>
+              <FormField label="Discussion notes"><Textarea className={textareaClass} value={form.discussion_notes ?? ""} onChange={(event) => setForm((current) => ({ ...current, discussion_notes: event.target.value }))} /></FormField>
+              <FormField label="Outcome"><Textarea className={textareaClass} value={form.outcome ?? ""} onChange={(event) => setForm((current) => ({ ...current, outcome: event.target.value }))} /></FormField>
               <p className="text-xs text-muted-foreground">Your manager must review this request. It does not alter attendance; request an attendance correction separately if needed.</p>
             </> : null}
             {createMode === "plan" || createMode === "unplanned" ? (
               <>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Visit name</span><input maxLength={200} className={inputClass} value={form.visit_name ?? ""} onChange={(event) => setForm((current) => ({ ...current, visit_name: event.target.value }))} placeholder="e.g. Renewal meeting with ABC Company" /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Priority</span><FluentSelect ariaLabel="Visit priority" value={form.priority ?? "NORMAL"} onChange={(value) => setForm((current) => ({ ...current, priority: value }))} options={["LOW", "NORMAL", "HIGH", "URGENT"].map((value) => ({ value, label: prettify(value) }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Visit date</span><DateInput className={inputClass} value={form.visit_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, visit_date: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Type</span>
+                <FormField label="Visit name"><Input maxLength={200} value={form.visit_name ?? ""} onChange={(event) => setForm((current) => ({ ...current, visit_name: event.target.value }))} placeholder="e.g. Renewal meeting with ABC Company" /></FormField>
+                <FormField label="Priority"><FluentSelect ariaLabel="Visit priority" value={form.priority ?? "NORMAL"} onChange={(value) => setForm((current) => ({ ...current, priority: value }))} options={["LOW", "NORMAL", "HIGH", "URGENT"].map((value) => ({ value, label: prettify(value) }))} /></FormField>
+                <FormField label="Visit date"><DateInput className={inputClass} value={form.visit_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, visit_date: event.target.value }))} /></FormField>
+                <FormField label="Type">
                   <FluentSelect
                     ariaLabel="Type"
                     className="w-full"
@@ -788,8 +793,8 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
                     onChange={(value) => setForm((current) => ({ ...current, visit_type: value }))}
                     options={VISIT_TYPES.map((item) => ({ value: item, label: prettify(item) }))}
                   />
-                </label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Party</span>
+                </FormField>
+                <FormField label="Party">
                   <FluentSelect
                     ariaLabel="Party"
                     className="w-full"
@@ -801,32 +806,32 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
                       ...parties.map((party) => ({ value: rowId(party), label: optionLabel(party) })),
                     ]}
                   />
-                </label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Purpose</span><Textarea className={textareaClass} value={form.purpose ?? ""} onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))} /></label>
+                </FormField>
+                <FormField label="Purpose"><Textarea className={textareaClass} value={form.purpose ?? ""} onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))} /></FormField>
               </>
             ) : null}
             {createMode === "plan" ? (
               <>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Start time</span><input type="time" className={inputClass} value={form.start_time ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_time: event.target.value }))} /></label>
-                  <label className="grid gap-1.5 text-sm"><span className="font-medium">End time</span><input type="time" className={inputClass} value={form.end_time ?? ""} onChange={(event) => setForm((current) => ({ ...current, end_time: event.target.value }))} /></label>
+                  <FormField label="Start time"><Input type="time" value={form.start_time ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_time: event.target.value }))} /></FormField>
+                  <FormField label="End time"><Input type="time" value={form.end_time ?? ""} onChange={(event) => setForm((current) => ({ ...current, end_time: event.target.value }))} /></FormField>
                 </div>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Expected outcome</span><Textarea className={textareaClass} value={form.expected_outcome ?? ""} onChange={(event) => setForm((current) => ({ ...current, expected_outcome: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Planned address (optional)</span><input className={inputClass} value={form.planned_address ?? ""} onChange={(event) => setForm((current) => ({ ...current, planned_address: event.target.value }))} /></label>
-                <div className="grid grid-cols-2 gap-3">{(["latitude", "longitude"] as const).map((key) => <label key={key} className="grid gap-1.5 text-sm">{prettify(key)} (optional)<input type="number" step="any" className={inputClass} value={form[key] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} /></label>)}</div>
+                <FormField label="Expected outcome"><Textarea className={textareaClass} value={form.expected_outcome ?? ""} onChange={(event) => setForm((current) => ({ ...current, expected_outcome: event.target.value }))} /></FormField>
+                <FormField label="Planned address (optional)"><Input value={form.planned_address ?? ""} onChange={(event) => setForm((current) => ({ ...current, planned_address: event.target.value }))} /></FormField>
+                <div className="grid grid-cols-2 gap-3">{(["latitude", "longitude"] as const).map((key) => <FormField key={key} label={`${prettify(key)} (optional)`}><Input type="number" step="any" value={form[key] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} /></FormField>)}</div>
                 {planHasOverlap ? <p role="status" className="text-sm text-amber-700">Some planned visit times overlap. Review the itinerary before submitting.</p> : null}
                 {additionalVisits.map((entry, index) => (
                   <fieldset key={index} className="grid gap-3 rounded-lg border p-3">
                     <legend className="px-1 text-sm font-semibold">Visit {index + 2}</legend>
-                    <label className="grid gap-1.5 text-sm">Visit name<input maxLength={200} className={inputClass} value={entry.visit_name ?? ""} onChange={(event) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, visit_name: event.target.value } : item))} /></label>
-                    <label className="grid gap-1.5 text-sm">Priority<FluentSelect ariaLabel={`Visit ${index + 2} priority`} value={entry.priority ?? "NORMAL"} onChange={(value) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, priority: value } : item))} options={["LOW", "NORMAL", "HIGH", "URGENT"].map((value) => ({ value, label: prettify(value) }))} /></label>
-                    <label className="grid gap-1.5 text-sm">Type<FluentSelect ariaLabel={`Visit ${index + 2} type`} value={entry.visit_type ?? "CUSTOMER_VISIT"} onChange={(value) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, visit_type: value } : item))} options={VISIT_TYPES.map((item) => ({ value: item, label: prettify(item) }))} /></label>
-                    <label className="grid gap-1.5 text-sm">Party<FluentSelect ariaLabel={`Visit ${index + 2} party`} value={entry.field_party_id ?? ""} onChange={(value) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, field_party_id: value } : item))} options={[{ value: "", label: "None" }, ...parties.map((party) => ({ value: rowId(party), label: optionLabel(party) }))]} /></label>
-                    <label className="grid gap-1.5 text-sm">Purpose<Textarea className={textareaClass} value={entry.purpose ?? ""} onChange={(event) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, purpose: event.target.value } : item))} /></label>
-                    <div className="grid grid-cols-2 gap-3">{(["start_time", "end_time"] as const).map((key) => <label key={key} className="grid gap-1.5 text-sm">{key === "start_time" ? "Start time" : "End time"}<input type="time" className={inputClass} value={entry[key] ?? ""} onChange={(event) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, [key]: event.target.value } : item))} /></label>)}</div>
-                    <label className="grid gap-1.5 text-sm">Expected outcome<Textarea className={textareaClass} value={entry.expected_outcome ?? ""} onChange={(event) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, expected_outcome: event.target.value } : item))} /></label>
-                    <label className="grid gap-1.5 text-sm">Planned address (optional)<input className={inputClass} value={entry.planned_address ?? ""} onChange={(event) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, planned_address: event.target.value } : item))} /></label>
-                    <div className="grid grid-cols-2 gap-3">{(["latitude", "longitude"] as const).map((key) => <label key={key} className="grid gap-1.5 text-sm">{prettify(key)} (optional)<input type="number" step="any" className={inputClass} value={entry[key] ?? ""} onChange={(event) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, [key]: event.target.value } : item))} /></label>)}</div>
+                    <FormField label="Visit name"><Input maxLength={200} value={entry.visit_name ?? ""} onChange={(event) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, visit_name: event.target.value } : item))} /></FormField>
+                    <FormField label="Priority"><FluentSelect ariaLabel={`Visit ${index + 2} priority`} value={entry.priority ?? "NORMAL"} onChange={(value) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, priority: value } : item))} options={["LOW", "NORMAL", "HIGH", "URGENT"].map((value) => ({ value, label: prettify(value) }))} /></FormField>
+                    <FormField label="Type"><FluentSelect ariaLabel={`Visit ${index + 2} type`} value={entry.visit_type ?? "CUSTOMER_VISIT"} onChange={(value) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, visit_type: value } : item))} options={VISIT_TYPES.map((item) => ({ value: item, label: prettify(item) }))} /></FormField>
+                    <FormField label="Party"><FluentSelect ariaLabel={`Visit ${index + 2} party`} value={entry.field_party_id ?? ""} onChange={(value) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, field_party_id: value } : item))} options={[{ value: "", label: "None" }, ...parties.map((party) => ({ value: rowId(party), label: optionLabel(party) }))]} /></FormField>
+                    <FormField label="Purpose"><Textarea className={textareaClass} value={entry.purpose ?? ""} onChange={(event) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, purpose: event.target.value } : item))} /></FormField>
+                    <div className="grid grid-cols-2 gap-3">{(["start_time", "end_time"] as const).map((key) => <FormField key={key} label={key === "start_time" ? "Start time" : "End time"}><Input type="time" value={entry[key] ?? ""} onChange={(event) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, [key]: event.target.value } : item))} /></FormField>)}</div>
+                    <FormField label="Expected outcome"><Textarea className={textareaClass} value={entry.expected_outcome ?? ""} onChange={(event) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, expected_outcome: event.target.value } : item))} /></FormField>
+                    <FormField label="Planned address (optional)"><Input value={entry.planned_address ?? ""} onChange={(event) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, planned_address: event.target.value } : item))} /></FormField>
+                    <div className="grid grid-cols-2 gap-3">{(["latitude", "longitude"] as const).map((key) => <FormField key={key} label={`${prettify(key)} (optional)`}><Input type="number" step="any" value={entry[key] ?? ""} onChange={(event) => setAdditionalVisits((current) => current.map((item, i) => i === index ? { ...item, [key]: event.target.value } : item))} /></FormField>)}</div>
                     <button type="button" className={secondaryButtonClass} onClick={() => setAdditionalVisits((current) => current.filter((_, i) => i !== index))}>Remove visit</button>
                   </fieldset>
                 ))}
@@ -834,57 +839,56 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
               </>
             ) : null}
             {createMode === "unplanned" ? (
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Why unplanned</span><Textarea className={textareaClass} value={form.unplanned_reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, unplanned_reason: event.target.value }))} /></label>
+              <FormField label="Why unplanned"><Textarea className={textareaClass} value={form.unplanned_reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, unplanned_reason: event.target.value }))} /></FormField>
             ) : null}
             {createMode === "disposition" ? <>
-              <label className="grid gap-1.5 text-sm">Status<FluentSelect ariaLabel="Visit status" value={form.status ?? "DEFERRED"} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[{ value: "MISSED", label: "Missed" }, { value: "DEFERRED", label: "Deferred" }, { value: "CANCELLED", label: "Cancelled" }]} /></label>
-              <label className="grid gap-1.5 text-sm">Reason<Textarea className={textareaClass} value={form.reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} /></label>
-              {form.status === "DEFERRED" ? <label className="grid gap-1.5 text-sm">Proposed new date<DateInput className={inputClass} value={form.reschedule_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, reschedule_date: event.target.value }))} /><span className="text-xs text-muted-foreground">Create a new plan for the proposed date to schedule the visit.</span></label> : null}
+              <FormField label="Status"><FluentSelect ariaLabel="Visit status" value={form.status ?? "DEFERRED"} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[{ value: "MISSED", label: "Missed" }, { value: "DEFERRED", label: "Deferred" }, { value: "CANCELLED", label: "Cancelled" }]} /></FormField>
+              <FormField label="Reason"><Textarea className={textareaClass} value={form.reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} /></FormField>
+              {form.status === "DEFERRED" ? <FormField label="Proposed new date"><DateInput className={inputClass} value={form.reschedule_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, reschedule_date: event.target.value }))} /><span className="text-xs text-muted-foreground">Create a new plan for the proposed date to schedule the visit.</span></FormField> : null}
             </> : null}
             {createMode === "expense" ? (
               <>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Expense type</span><FluentSelect ariaLabel="Expense type" value={form.expense_type ?? "TRANSPORT"} onChange={(value) => setForm((current) => ({ ...current, expense_type: value }))} options={["TRANSPORT", "FUEL", "PARKING", "TOLL", "MEALS", "ACCOMMODATION", "COMMUNICATION", "OTHER"].map((value) => ({ value, label: prettify(value) }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Amount</span><input type="number" min="0.01" step="0.01" className={inputClass} value={form.amount ?? ""} onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Currency</span><input maxLength={3} className={inputClass} value={form.currency ?? "TZS"} onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><input className={inputClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
+                <FormField label="Expense type"><FluentSelect ariaLabel="Expense type" value={form.expense_type ?? "TRANSPORT"} onChange={(value) => setForm((current) => ({ ...current, expense_type: value }))} options={["TRANSPORT", "FUEL", "PARKING", "TOLL", "MEALS", "ACCOMMODATION", "COMMUNICATION", "OTHER"].map((value) => ({ value, label: prettify(value) }))} /></FormField>
+                <FormField label="Amount"><Input type="number" min="0.01" step="0.01" value={form.amount ?? ""} onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))} /></FormField>
+                <FormField label="Currency"><Input maxLength={3} value={form.currency ?? "TZS"} onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} /></FormField>
+                <FormField label="Description"><Input value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></FormField>
               </>
             ) : null}
             {createMode === "opportunity" ? (
               <>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Type</span><FluentSelect ariaLabel="Opportunity type" className="w-full" value={form.opportunity_type ?? "LEAD"} onChange={(value) => setForm((current) => ({ ...current, opportunity_type: value }))} options={["LEAD", "QUOTATION", "NEW_BUSINESS", "RENEWAL", "COLLECTION", "CROSS_SELL", "DORMANT_ACCOUNT_REVIVAL", "OTHER"].map((item) => ({ value: item, label: prettify(item) }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Title</span><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Details</span><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
-                <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5 text-sm"><span className="font-medium">Potential sales value</span><input type="number" min="0" step="0.01" className={inputClass} value={form.potential_value ?? ""} onChange={(event) => setForm((current) => ({ ...current, potential_value: event.target.value }))} /></label><label className="grid gap-1.5 text-sm"><span className="font-medium">Sales currency</span><FluentSelect ariaLabel="Sales currency" className="w-full" value={form.currency ?? readString(commercialPolicy ?? {}, ["defaultCurrency", "default_currency"], "TZS")} onChange={(value) => setForm((current) => ({ ...current, currency: value }))} options={Array.isArray(commercialPolicy?.supportedCurrencies ?? commercialPolicy?.supported_currencies) ? ((commercialPolicy?.supportedCurrencies ?? commercialPolicy?.supported_currencies) as string[]).map((currency) => ({ value: currency, label: currency })) : [{ value: "TZS", label: "TZS" }]} /></label></div>
-                <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5 text-sm"><span className="font-medium">Premium value (if applicable)</span><input type="number" min="0" step="0.01" className={inputClass} value={form.premium_value ?? ""} onChange={(event) => setForm((current) => ({ ...current, premium_value: event.target.value }))} /></label><label className="grid gap-1.5 text-sm"><span className="font-medium">Premium currency</span><FluentSelect ariaLabel="Premium currency" className="w-full" value={form.premium_currency ?? readString(commercialPolicy ?? {}, ["defaultCurrency", "default_currency"], "TZS")} onChange={(value) => setForm((current) => ({ ...current, premium_currency: value }))} options={Array.isArray(commercialPolicy?.supportedCurrencies ?? commercialPolicy?.supported_currencies) ? ((commercialPolicy?.supportedCurrencies ?? commercialPolicy?.supported_currencies) as string[]).map((currency) => ({ value: currency, label: currency })) : [{ value: "TZS", label: "TZS" }]} /></label></div>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Expected close</span><DateInput className={inputClass} value={form.expected_close_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, expected_close_date: event.target.value }))} /></label>
-                <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5 text-sm"><span className="font-medium">Source system (optional)</span><input className={inputClass} value={form.source_system ?? ""} onChange={(event) => setForm((current) => ({ ...current, source_system: event.target.value }))} /></label><label className="grid gap-1.5 text-sm"><span className="font-medium">External reference</span><input className={inputClass} value={form.external_reference ?? ""} onChange={(event) => setForm((current) => ({ ...current, external_reference: event.target.value }))} /></label></div>
+                <FormField label="Type"><FluentSelect ariaLabel="Opportunity type" className="w-full" value={form.opportunity_type ?? "LEAD"} onChange={(value) => setForm((current) => ({ ...current, opportunity_type: value }))} options={["LEAD", "QUOTATION", "NEW_BUSINESS", "RENEWAL", "COLLECTION", "CROSS_SELL", "DORMANT_ACCOUNT_REVIVAL", "OTHER"].map((item) => ({ value: item, label: prettify(item) }))} /></FormField>
+                <FormField label="Title"><Input value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></FormField>
+                <FormField label="Details"><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></FormField>
+                <div className="grid gap-3 sm:grid-cols-2"><FormField label="Potential sales value"><Input type="number" min="0" step="0.01" value={form.potential_value ?? ""} onChange={(event) => setForm((current) => ({ ...current, potential_value: event.target.value }))} /></FormField><FormField label="Sales currency"><FluentSelect ariaLabel="Sales currency" className="w-full" value={form.currency ?? readString(commercialPolicy ?? {}, ["defaultCurrency", "default_currency"], "TZS")} onChange={(value) => setForm((current) => ({ ...current, currency: value }))} options={Array.isArray(commercialPolicy?.supportedCurrencies ?? commercialPolicy?.supported_currencies) ? ((commercialPolicy?.supportedCurrencies ?? commercialPolicy?.supported_currencies) as string[]).map((currency) => ({ value: currency, label: currency })) : [{ value: "TZS", label: "TZS" }]} /></FormField></div>
+                <div className="grid gap-3 sm:grid-cols-2"><FormField label="Premium value (if applicable)"><Input type="number" min="0" step="0.01" value={form.premium_value ?? ""} onChange={(event) => setForm((current) => ({ ...current, premium_value: event.target.value }))} /></FormField><FormField label="Premium currency"><FluentSelect ariaLabel="Premium currency" className="w-full" value={form.premium_currency ?? readString(commercialPolicy ?? {}, ["defaultCurrency", "default_currency"], "TZS")} onChange={(value) => setForm((current) => ({ ...current, premium_currency: value }))} options={Array.isArray(commercialPolicy?.supportedCurrencies ?? commercialPolicy?.supported_currencies) ? ((commercialPolicy?.supportedCurrencies ?? commercialPolicy?.supported_currencies) as string[]).map((currency) => ({ value: currency, label: currency })) : [{ value: "TZS", label: "TZS" }]} /></FormField></div>
+                <FormField label="Expected close"><DateInput className={inputClass} value={form.expected_close_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, expected_close_date: event.target.value }))} /></FormField>
+                <div className="grid gap-3 sm:grid-cols-2"><FormField label="Source system (optional)"><Input value={form.source_system ?? ""} onChange={(event) => setForm((current) => ({ ...current, source_system: event.target.value }))} /></FormField><FormField label="External reference"><Input value={form.external_reference ?? ""} onChange={(event) => setForm((current) => ({ ...current, external_reference: event.target.value }))} /></FormField></div>
               </>
             ) : null}
             {createMode === "evidence" ? (
               <>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Photo or document</span><input type="file" accept="image/jpeg,image/png,application/pdf" onChange={(event) => setEvidenceFile(event.target.files?.[0] ?? null)} /><span className="text-xs text-muted-foreground">JPEG, PNG or PDF; maximum 10 MB.</span></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
+                <FormField label="Photo or document"><FileDropzone file={evidenceFile} onFileChange={setEvidenceFile} accept="image/jpeg,image/png,application/pdf" hint="JPEG, PNG or PDF; maximum 10 MB." /></FormField>
+                <FormField label="Description"><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></FormField>
               </>
             ) : null}
             {createMode === "checkout" ? (
               <>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Discussion notes</span><Textarea className={textareaClass} value={form.discussion_notes ?? ""} onChange={(event) => setForm((current) => ({ ...current, discussion_notes: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Outcome</span><input className={inputClass} value={form.outcome ?? ""} onChange={(event) => setForm((current) => ({ ...current, outcome: event.target.value }))} /></label>
+                <FormField label="Discussion notes"><Textarea className={textareaClass} value={form.discussion_notes ?? ""} onChange={(event) => setForm((current) => ({ ...current, discussion_notes: event.target.value }))} /></FormField>
+                <FormField label="Outcome"><Input value={form.outcome ?? ""} onChange={(event) => setForm((current) => ({ ...current, outcome: event.target.value }))} /></FormField>
                 <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" className="size-4 accent-sky-700" checked={form.follow_up_required === "true"} onChange={(event) => setForm((current) => ({ ...current, follow_up_required: event.target.checked ? "true" : "false" }))} />
+                  <Checkbox checked={form.follow_up_required === "true"} onCheckedChange={(checked) => setForm((current) => ({ ...current, follow_up_required: checked ? "true" : "false" }))} />
                   <span>Create a follow-up from this visit</span>
                 </label>
                 {form.follow_up_required === "true" ? (
-                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Follow-up due date</span><DateInput className={inputClass} value={form.next_follow_up_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, next_follow_up_date: event.target.value }))} /></label>
+                  <FormField label="Follow-up due date"><DateInput className={inputClass} value={form.next_follow_up_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, next_follow_up_date: event.target.value }))} /></FormField>
                 ) : null}
-                {readString(attendancePolicy ?? {}, ["field_attendance_mode"], "NONE") === "START_AND_END" ? <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.end_workday === "true"} onChange={(event) => setForm((current) => ({ ...current, end_workday: String(event.target.checked) }))} /><span>Also end my attendance workday</span></label> : null}
-                {attendancePolicy?.allow_gps_exception === true ? <label className="grid gap-1.5 text-sm">Reason if GPS accuracy is poor (optional)<Textarea className={textareaClass} value={form.gps_reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, gps_reason: event.target.value }))} /></label> : null}
+                {readString(attendancePolicy ?? {}, ["field_attendance_mode"], "NONE") === "START_AND_END" ? <label className="flex items-center gap-2 text-sm"><Checkbox checked={form.end_workday === "true"} onCheckedChange={(checked) => setForm((current) => ({ ...current, end_workday: String(checked) }))} /><span>Also end my attendance workday</span></label> : null}
+                {attendancePolicy?.allow_gps_exception === true ? <FormField label="Reason if GPS accuracy is poor (optional)"><Textarea className={textareaClass} value={form.gps_reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, gps_reason: event.target.value }))} /></FormField> : null}
               </>
             ) : null}
             {createMode === "follow-up" ? (
               <>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Linked visit</span>
+                <FormField label="Linked visit">
                   <FluentSelect
                     ariaLabel="Linked visit"
                     className="w-full"
@@ -900,16 +904,16 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
                       })),
                     ]}
                   />
-                </label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Due date</span><DateInput className={inputClass} value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Due time (optional)</span><input type="time" className={inputClass} value={form.due_time ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_time: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Action type</span><FluentSelect ariaLabel="Action type" value={form.action_type ?? "OTHER"} onChange={(value) => setForm((current) => ({ ...current, action_type: value }))} options={["CALL", "EMAIL", "QUOTATION", "DOCUMENT", "REVISIT", "OTHER"].map((value) => ({ value, label: prettify(value) }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Priority</span><FluentSelect ariaLabel="Priority" value={form.priority ?? "NORMAL"} onChange={(value) => setForm((current) => ({ ...current, priority: value }))} options={["LOW", "NORMAL", "HIGH", "URGENT"].map((value) => ({ value, label: prettify(value) }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Action</span><Textarea className={textareaClass} value={form.action ?? ""} onChange={(event) => setForm((current) => ({ ...current, action: event.target.value }))} placeholder="What needs to happen next?" /></label>
+                </FormField>
+                <FormField label="Due date"><DateInput className={inputClass} value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></FormField>
+                <FormField label="Due time (optional)"><Input type="time" value={form.due_time ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_time: event.target.value }))} /></FormField>
+                <FormField label="Action type"><FluentSelect ariaLabel="Action type" value={form.action_type ?? "OTHER"} onChange={(value) => setForm((current) => ({ ...current, action_type: value }))} options={["CALL", "EMAIL", "QUOTATION", "DOCUMENT", "REVISIT", "OTHER"].map((value) => ({ value, label: prettify(value) }))} /></FormField>
+                <FormField label="Priority"><FluentSelect ariaLabel="Priority" value={form.priority ?? "NORMAL"} onChange={(value) => setForm((current) => ({ ...current, priority: value }))} options={["LOW", "NORMAL", "HIGH", "URGENT"].map((value) => ({ value, label: prettify(value) }))} /></FormField>
+                <FormField label="Action"><Textarea className={textareaClass} value={form.action ?? ""} onChange={(event) => setForm((current) => ({ ...current, action: event.target.value }))} placeholder="What needs to happen next?" /></FormField>
               </>
             ) : null}
             {createMode === "complete-follow-up" ? (
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Completion note</span><Textarea className={textareaClass} value={form.completion_note ?? ""} onChange={(event) => setForm((current) => ({ ...current, completion_note: event.target.value }))} placeholder="What was done?" /></label>
+              <FormField label="Completion note"><Textarea className={textareaClass} value={form.completion_note ?? ""} onChange={(event) => setForm((current) => ({ ...current, completion_note: event.target.value }))} placeholder="What was done?" /></FormField>
             ) : null}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
           </div>

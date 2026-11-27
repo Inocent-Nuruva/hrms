@@ -5,6 +5,10 @@ import { ArrowDown, ArrowUp, Loader2, Plus, Search, Trash2 } from "lucide-react"
 
 import { Checkbox } from "@/components/ui/checkbox"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import { FormField } from "@/components/ui/form-field"
+import { Input } from "@/components/ui/input"
+import { PhoneInput } from "@/components/ui/phone-input"
+import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/fluent-toast-store"
 import { listEmployeeGrades, listEmployees, listPositions, type AdminRecord } from "@/lib/admin-api"
 import {
@@ -35,17 +39,14 @@ import { cn } from "@/lib/utils"
 import { useContractDialogs } from "./contract-dialogs"
 import { CONTRACT_TYPE_LABELS, formatDate } from "./contract-ui"
 
-const input = "h-9 w-full rounded-md border border-border px-2.5 text-sm"
 const primary =
   "inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
 
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
-    <label className="grid gap-1 text-sm">
-      <span className="font-medium text-slate-700">{label}</span>
+    <FormField label={label} hint={hint}>
       {children}
-      {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
-    </label>
+    </FormField>
   )
 }
 
@@ -152,8 +153,7 @@ export function CompanyLegalForm({ token, canEdit }: { token: string; canEdit: b
           </div>
         </Field>
         <Field label="Tagline" hint="Optional. Printed in italics under the company name.">
-          <input
-            className={input}
+          <Input
             maxLength={150}
             value={branding.tagline ?? ""}
             onChange={(event) => setBranding({ ...branding, tagline: event.target.value })}
@@ -161,22 +161,22 @@ export function CompanyLegalForm({ token, canEdit }: { token: string; canEdit: b
           />
         </Field>
         <Field label="Registered (legal) name">
-          <input className={input} value={legal.legal_name ?? ""} onChange={set("legal_name")} disabled={!canEdit} />
+          <Input value={legal.legal_name ?? ""} onChange={set("legal_name")} disabled={!canEdit} />
         </Field>
         <Field label="Registration number">
-          <input className={input} value={legal.registration_number ?? ""} onChange={set("registration_number")} disabled={!canEdit} />
+          <Input value={legal.registration_number ?? ""} onChange={set("registration_number")} disabled={!canEdit} />
         </Field>
         <Field label="TIN">
-          <input className={input} value={legal.tin ?? ""} onChange={set("tin")} disabled={!canEdit} />
+          <Input value={legal.tin ?? ""} onChange={set("tin")} disabled={!canEdit} />
         </Field>
         <Field label="Phone">
-          <input className={input} value={legal.phone ?? ""} onChange={set("phone")} disabled={!canEdit} />
+          <PhoneInput value={legal.phone ?? ""} onChange={(value) => setLegal({ ...legal, phone: value })} disabled={!canEdit} aria-label="Phone" />
         </Field>
         <Field label="Email">
-          <input className={input} type="email" value={legal.email ?? ""} onChange={set("email")} disabled={!canEdit} />
+          <Input type="email" value={legal.email ?? ""} onChange={set("email")} disabled={!canEdit} />
         </Field>
         <Field label="Address">
-          <textarea className="min-h-16 rounded-md border border-border px-2.5 py-1.5 text-sm" value={legal.address ?? ""} onChange={set("address")} disabled={!canEdit} />
+          <Textarea formatting={false} value={legal.address ?? ""} onChange={set("address")} disabled={!canEdit} />
         </Field>
       </div>
       {canEdit ? (
@@ -209,8 +209,7 @@ export function EmployeePicker({ token, onPick }: { token: string; onPick: (row:
   }, [search, token])
   return (
     <div className="relative">
-      <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-slate-400" />
-      <input className={cn(input, "pl-8")} placeholder="Add signatory: search an active employee" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search employees" />
+      <Input contentBefore={<Search className="size-4 text-slate-400" />} placeholder="Add signatory: search an active employee" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search employees" />
       {rows.length ? (
         <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md">
           {rows.map((row) => (
@@ -412,13 +411,13 @@ export function SigningSettingsForm({ token, canEdit }: { token: string; canEdit
         </label>
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Annual leave days">
-            <input className={input} type="number" min={1} max={365} value={settings.annual_leave_days} disabled={!canEdit} onChange={(event) => setSettings({ ...settings, annual_leave_days: Number(event.target.value) })} />
+            <Input type="number" min={1} max={365} value={String(settings.annual_leave_days)} disabled={!canEdit} onChange={(event) => setSettings({ ...settings, annual_leave_days: Number(event.target.value) })} />
           </Field>
           <Field label="Notice period wording">
-            <input className={input} value={settings.notice_period} disabled={!canEdit} onChange={(event) => setSettings({ ...settings, notice_period: event.target.value })} />
+            <Input value={settings.notice_period} disabled={!canEdit} onChange={(event) => setSettings({ ...settings, notice_period: event.target.value })} />
           </Field>
           <Field label="Governing law">
-            <input className={input} value={settings.governing_law} disabled={!canEdit} onChange={(event) => setSettings({ ...settings, governing_law: event.target.value })} />
+            <Input value={settings.governing_law} disabled={!canEdit} onChange={(event) => setSettings({ ...settings, governing_law: event.target.value })} />
           </Field>
         </div>
         {canEdit ? (
@@ -520,8 +519,7 @@ export function ClausesEditor({
             <li key={section.id} className={cn("grid gap-2 rounded-md border border-border p-3", switchedOff && "bg-slate-50 opacity-70")}>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-slate-500">{index + 1}.</span>
-                <input
-                  className={input}
+                <Input
                   aria-label={`Clause ${index + 1} heading`}
                   value={section.heading}
                   disabled={textDisabled}
@@ -601,12 +599,12 @@ export function ClausesEditor({
                 </div>
               ) : null}
 
-              <textarea
+              <Textarea
+                formatting={false}
                 ref={(element) => {
                   refs.current[index] = element
                 }}
                 aria-label={`Clause ${index + 1} text`}
-                className="min-h-24 rounded-md border border-border px-2.5 py-1.5 text-sm"
                 value={section.body}
                 disabled={textDisabled}
                 onFocus={() => setFocused(index)}
@@ -681,7 +679,7 @@ export function ContractTemplatesEditor({ token, canEdit }: { token: string; can
             {draft.is_default ? "Built-in starting template (not saved yet)." : `Version ${draft.version}, saved ${formatDate(draft.updated_at)}.`}
           </p>
           <Field label="Title">
-            <input className={input} value={draft.title} disabled={!canEdit} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
+            <Input value={draft.title} disabled={!canEdit} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
           </Field>
           <ClausesEditor mode="template" sections={draft.sections} disabled={!canEdit} onChange={(sections) => setDraft({ ...draft, sections })} />
           {canEdit ? (

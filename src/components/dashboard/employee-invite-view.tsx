@@ -3,10 +3,9 @@
 import { PageHeader } from "@/components/ui/page-header"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import { InfoIcon, MailIcon, PhoneIcon, RotateCcwIcon, UserPlus2Icon } from "lucide-react";
+import { InfoIcon, MailIcon, RotateCcwIcon, UserPlus2Icon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 import {
-  Label as FluentLabel,
 } from "@fluentui/react-components"
 
 import {
@@ -26,7 +25,6 @@ import { positionCapacityWarning } from "@/lib/position-capacity"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
-import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Dropdown, Option } from "@/components/ui/dropdown"
 import { Input as FluentInput } from "@/components/ui/input"
@@ -44,6 +42,9 @@ import {
 } from "@/components/ui/tooltip"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
+import { FormField } from "@/components/ui/form-field"
+import { PhoneInput, isValidPhone } from "@/components/ui/phone-input"
+import { Checkbox } from "@/components/ui/checkbox"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const INVITE_DRAFT_STORAGE_KEY = "hrms.employee.invite.draft.v1"
@@ -322,7 +323,7 @@ function normalizeInvitationPhone(value: string) {
 }
 
 function isValidE164Phone(value: string) {
-  return /^\+[1-9]\d{7,14}$/.test(value)
+  return /^\+[1-9]\d{7,14}$/.test(value) && isValidPhone(value)
 }
 
 function toLookupOptions(
@@ -359,18 +360,14 @@ function FieldShell({
   className?: string
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-col gap-0.5", className)}>
-      <FluentLabel
-        id={htmlFor ? `${htmlFor}-label` : undefined}
-        htmlFor={htmlFor}
-        size="small"
-        className="text-sm font-medium text-foreground"
-      >
-        {label}
-        {required ? <span className="text-destructive"> *</span> : null}
-      </FluentLabel>
+    <FormField
+      label={<span id={htmlFor ? `${htmlFor}-label` : undefined}>{label}</span>}
+      htmlFor={htmlFor}
+      required={required}
+      className={className}
+    >
       {children}
-    </div>
+    </FormField>
   )
 }
 
@@ -1098,16 +1095,12 @@ export function EmployeeInviteView() {
                 />
               </FieldShell>
               <FieldShell label="Phone number" htmlFor="phone" required>
-                <FluentInput
+                <PhoneInput
                   id="phone"
-                  type="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+255 7XX XXX XXX"
-                  autoComplete="tel"
-                  contentBefore={<PhoneIcon className="size-4 text-muted-foreground" />}
+                  onChange={(value) => setPhone(value)}
+                  placeholder="712 345 678"
                   className="w-full"
-                  required
                 />
               </FieldShell>
               <FieldShell label="Gender" htmlFor="gender" required>
@@ -1300,11 +1293,9 @@ export function EmployeeInviteView() {
 
         <div className="flex flex-wrap items-center justify-end gap-2">
           <label className="mr-auto inline-flex cursor-pointer items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="size-4 accent-primary"
+            <Checkbox
               checked={sendSmsReminder}
-              onChange={(event) => setSendSmsReminder(event.target.checked)}
+              onCheckedChange={(checked) => setSendSmsReminder(Boolean(checked))}
               disabled={submitting}
             />
             Also send an SMS reminder

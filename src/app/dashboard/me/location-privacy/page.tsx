@@ -10,6 +10,9 @@ import {
   publishLocationPrivacyNotice,
 } from "@/lib/admin-api";
 import { Textarea } from "@/components/ui/textarea";
+import { FormField } from "@/components/ui/form-field";
+import { FluentSelect } from "@/components/ui/fluent-select";
+import { Input } from "@/components/ui/input";
 
 type Notice = {
   id: number;
@@ -251,53 +254,49 @@ export default function LocationPrivacyPage() {
               company approval reference.
             </p>
           </div>
-          <label className="block text-sm font-medium">
-            Approval mode
-            <select
+          <FormField label="Approval mode">
+            <FluentSelect
+              ariaLabel="Approval mode"
+              className="w-full"
               value={approvalStatus}
-              onChange={(event) =>
-                setApprovalStatus(event.target.value as typeof approvalStatus)
+              onChange={(value) =>
+                setApprovalStatus(value as typeof approvalStatus)
               }
-              className="mt-1 block w-full rounded-md border p-2"
-            >
-              <option value="DEMO_APPROVED">UAT demo approval</option>
-              <option value="COMPANY_APPROVED">Company approved</option>
-            </select>
-          </label>
+              options={[
+                { value: "DEMO_APPROVED", label: "UAT demo approval" },
+                { value: "COMPANY_APPROVED", label: "Company approved" },
+              ]}
+            />
+          </FormField>
           {approvalStatus === "COMPANY_APPROVED" ? (
-            <label className="block text-sm font-medium">
-              Approval reference
-              <input
+            <FormField label="Approval reference" required>
+              <Input
                 value={approvalReference}
                 onChange={(event) => setApprovalReference(event.target.value)}
-                className="mt-1 block w-full rounded-md border p-2"
                 placeholder="Policy approval reference"
               />
-            </label>
+            </FormField>
           ) : (
             <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-900">
               The API accepts this mode only when APP_ENV=uat and the configured
               database name is an isolated UAT database.
             </p>
           )}
-          <label className="block text-sm font-medium">
-            Notice title
-            <input
+          <FormField label="Notice title" required>
+            <Input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               maxLength={160}
-              className="mt-1 block w-full rounded-md border p-2"
             />
-          </label>
-          <label className="block text-sm font-medium">
-            Notice text
+          </FormField>
+          <FormField label="Notice text" required>
             <Textarea
               value={body}
               onChange={(event) => setBody(event.target.value)}
               rows={7}
-              className="mt-1 min-h-40"
+              className="min-h-40"
             />
-          </label>
+          </FormField>
           <button
             type="button"
             disabled={

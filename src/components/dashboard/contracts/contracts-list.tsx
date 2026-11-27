@@ -4,7 +4,7 @@ import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ExternalLink, Plus, RefreshCw, Search } from "lucide-react"
+import { ExternalLink, Plus, RefreshCw } from "lucide-react"
 
 import {
   ProfileAddButton,
@@ -17,6 +17,7 @@ import {
   useProfileRecordView,
 } from "@/components/dashboard/employee-profile/profile-record-views"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import { Input } from "@/components/ui/input"
 import { errorMessage, listContracts, type ContractRow } from "@/lib/contracts-api"
 import { cn } from "@/lib/utils"
 
@@ -202,9 +203,8 @@ export function ContractsList({
           <div className="flex flex-1 flex-wrap items-end gap-2">
             {!employeeId ? (
               <div className="relative min-w-[220px] flex-1 sm:max-w-xs">
-                <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-slate-400" />
-                <input
-                  className="h-9 w-full rounded-md border border-border bg-background pl-8 pr-3 text-sm"
+                <Input
+                  type="search"
                   placeholder="Reference, name or employee no."
                   value={q}
                   onChange={(event) => {

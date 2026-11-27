@@ -1,11 +1,11 @@
 "use client"
 
+import { Input } from "@/components/ui/input"
 import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
 import { ArrowLeftIcon, DownloadIcon, PlusIcon, RefreshCwIcon, Trash2Icon, UploadIcon } from "lucide-react";
-import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 
 import {
   Dialog,
@@ -683,13 +683,7 @@ export function AccessOrganizationDetailView({ organizationId }: { organizationI
             </div>
 
             <div className="relative">
-              <SearchIcon
-                className={`pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 transition ${
-                  employeeSearchActive ? "animate-pulse text-slate-700" : ""
-                }`}
-              />
-              <input
-                className="w-full rounded-md border border-slate-300 py-2 pl-10 pr-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/20"
+              <Input
                 placeholder="Search employees by number, name, organization, or status"
                 value={employeeSearch}
                 onChange={(event) => setEmployeeSearch(event.target.value)}
@@ -816,9 +810,7 @@ export function AccessOrganizationDetailView({ organizationId }: { organizationI
                 {assignEmployeePickerOpen ? (
                   <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
                     <div className="relative">
-                      <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <input
-                        className="w-full rounded-md border border-slate-300 py-2 pl-10 pr-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/20"
+                      <Input
                         placeholder="Search employees by number or name"
                         value={assignEmployeeSearch}
                         onChange={(event) => setAssignEmployeeSearch(event.target.value)}

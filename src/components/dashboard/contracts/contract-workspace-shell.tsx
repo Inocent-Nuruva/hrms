@@ -43,6 +43,9 @@ import {
 import { useContractDialogs } from "./contract-dialogs";
 import { sendReadyContract } from "./contract-workspace-send";
 import { Dialog, DialogSurface, DialogTitle } from "@fluentui/react-components";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { readStatusFieldErrors } from "@/lib/admin-api";
 import {
   getContractFields,
@@ -1188,10 +1191,9 @@ export function ContractWorkspaceShell({
           <div className="flex items-center gap-3 px-2 py-1.5">
             {draft ? (
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={showUnused}
-                  onChange={(event) => setShowUnused(event.target.checked)}
+                  onCheckedChange={(checked) => setShowUnused(checked)}
                 />
                 {m.showUnusedFields}
               </label>
@@ -1360,8 +1362,8 @@ export function ContractWorkspaceShell({
               {group === "Terms" && draft && direct.state ? (
                 <label className="mb-3 grid gap-1 rounded border border-border p-3">
                   {m.contractTitle}
-                  <input
-                    className="rounded border border-border bg-background p-2"
+                  <Input
+                    aria-label={m.contractTitle}
                     value={
                       legacy
                         ? direct.state.legacyValues.title
@@ -1709,7 +1711,8 @@ export function ContractWorkspaceShell({
                                     })()}
                                   </select>
                                 ) : item.inputKind === "longtext" ? (
-                                  <textarea
+                                  <Textarea
+                                    formatting={false}
                                     aria-label={m.label(item.key)}
                                     aria-invalid={!!fieldError}
                                     aria-describedby={
@@ -1717,7 +1720,6 @@ export function ContractWorkspaceShell({
                                         ? "error-" + item.key
                                         : undefined
                                     }
-                                    className="w-full rounded border border-border bg-background p-2"
                                     value={
                                       direct.state.legacyValues[item.key] ?? ""
                                     }
@@ -1804,7 +1806,8 @@ export function ContractWorkspaceShell({
                                     )}
                                   </select>
                                 ) : item.inputKind === "longtext" ? (
-                                  <textarea
+                                  <Textarea
+                                    formatting={false}
                                     aria-label={m.label(item.key)}
                                     aria-invalid={!!fieldError}
                                     aria-describedby={
@@ -1815,7 +1818,6 @@ export function ContractWorkspaceShell({
                                     disabled={
                                       !!direct.state.overrides[item.key]
                                     }
-                                    className="w-full rounded border border-border bg-background p-2"
                                     value={
                                       direct.state.values[
                                         item.key as DirectField
@@ -1972,8 +1974,8 @@ export function ContractWorkspaceShell({
                               undefined ? (
                               <label className="grid gap-1 text-sm">
                                 {m.reasonLabel}
-                                <input
-                                  className="rounded border border-border bg-background p-2"
+                                <Input
+                                  aria-label={m.reasonLabel}
                                   value={direct.state.probationReason}
                                   onChange={(event) =>
                                     direct.updateReason(event.target.value)

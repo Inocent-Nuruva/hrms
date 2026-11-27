@@ -2,7 +2,7 @@
 
 import { SharedDashboardHeroBackground } from "@/components/dashboard/welcome-card-background"
 import * as React from "react";
-import { Button, Card, Input, Field, Textarea as FluentTextarea, Table, TableHeader, TableBody, TableRow, TableHeaderCell, TableCell, TeachingPopover, TeachingPopoverTrigger, TeachingPopoverSurface, TeachingPopoverHeader, TeachingPopoverBody, TeachingPopoverTitle, TeachingPopoverFooter } from "@fluentui/react-components";
+import { Button, Card, Table, TableHeader, TableBody, TableRow, TableHeaderCell, TableCell, TeachingPopover, TeachingPopoverTrigger, TeachingPopoverSurface, TeachingPopoverHeader, TeachingPopoverBody, TeachingPopoverTitle, TeachingPopoverFooter } from "@fluentui/react-components";
 import { Info20Regular, ArrowClockwise20Regular, ReceiptMoney24Regular } from "@fluentui/react-icons";
 
 function PayrollGuide({ title, children, inverse = false }: { title: string; children: React.ReactNode; inverse?: boolean }) {
@@ -26,6 +26,9 @@ function PayrollGuide({ title, children, inverse = false }: { title: string; chi
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { FormField as Field } from "@/components/ui/form-field";
 import { toast } from "@/components/ui/fluent-toast-store";
 import {
   pageBleedClass,
@@ -34,13 +37,11 @@ import {
   TalentDoodleSprites,
   actionButtonClass,
   asRecord,
-  inputClass,
   prettify,
   primaryButtonClass,
   readString,
   rowId,
   secondaryButtonClass,
-  textareaClass,
 } from "@/components/dashboard/talent-visuals";
 import {
   Dialog,
@@ -895,8 +896,7 @@ export function FinanceServicingView({
               <div className="grid gap-3">
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Letterhead</span>
-                  <input
-                    className={inputClass}
+                  <Input
                     value={template.letterhead ?? ""}
                     onChange={(event) => setTemplate((current) => ({ ...current, letterhead: event.target.value }))}
                   />
@@ -904,7 +904,7 @@ export function FinanceServicingView({
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Letter body</span>
                   <Textarea
-                    className={`${textareaClass} min-h-64 font-mono text-xs`}
+                    className="min-h-64 font-mono text-xs"
                     value={template.body ?? ""}
                     onChange={(event) => setTemplate((current) => ({ ...current, body: event.target.value }))}
                   />
@@ -912,16 +912,14 @@ export function FinanceServicingView({
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">Signatory name</span>
-                    <input
-                      className={inputClass}
+                    <Input
                       value={template.signatory_name ?? ""}
                       onChange={(event) => setTemplate((current) => ({ ...current, signatory_name: event.target.value }))}
                     />
                   </label>
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">Signatory title</span>
-                    <input
-                      className={inputClass}
+                    <Input
                       value={template.signatory_title ?? ""}
                       onChange={(event) => setTemplate((current) => ({ ...current, signatory_title: event.target.value }))}
                     />
@@ -950,8 +948,7 @@ export function FinanceServicingView({
               <div className="grid gap-3">
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Delegate (company user ID)</span>
-                  <input
-                    className={inputClass}
+                  <Input
                     value={delegationForm.delegate_company_user_id ?? ""}
                     onChange={(event) =>
                       setDelegationForm((current) => ({ ...current, delegate_company_user_id: event.target.value }))
@@ -963,12 +960,11 @@ export function FinanceServicingView({
                   <div className="flex flex-wrap gap-3">
                     {APPROVAL_STAGES.map((stage) => (
                       <label key={stage} className="flex items-center gap-1.5">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={delegationStages.includes(stage)}
-                          onChange={(event) =>
+                          onCheckedChange={(checked) =>
                             setDelegationStages((current) =>
-                              event.target.checked
+                              checked
                                 ? [...current, stage]
                                 : current.filter((item) => item !== stage),
                             )
@@ -983,7 +979,6 @@ export function FinanceServicingView({
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">From</span>
                     <DateInput
-                      className={inputClass}
                       value={delegationForm.starts_on ?? ""}
                       onChange={(event) => setDelegationForm((current) => ({ ...current, starts_on: event.target.value }))}
                     />
@@ -991,7 +986,6 @@ export function FinanceServicingView({
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">To</span>
                     <DateInput
-                      className={inputClass}
                       value={delegationForm.ends_on ?? ""}
                       onChange={(event) => setDelegationForm((current) => ({ ...current, ends_on: event.target.value }))}
                     />
@@ -999,8 +993,7 @@ export function FinanceServicingView({
                 </div>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Reason</span>
-                  <input
-                    className={inputClass}
+                  <Input
                     value={delegationForm.reason ?? ""}
                     onChange={(event) => setDelegationForm((current) => ({ ...current, reason: event.target.value }))}
                   />
@@ -1090,7 +1083,6 @@ export function FinanceServicingView({
           <label className="grid gap-1.5 text-sm">
             <span className="font-medium">Comments</span>
             <Textarea
-              className={textareaClass}
               value={decisionComments}
               onChange={(event) => setDecisionComments(event.target.value)}
             />
@@ -1117,16 +1109,14 @@ export function FinanceServicingView({
           <div className="grid gap-3">
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">Amount recovered</span>
-              <input
-                className={inputClass}
+              <Input
                 value={recoveryForm.amount ?? ""}
                 onChange={(event) => setRecoveryForm((current) => ({ ...current, amount: event.target.value }))}
               />
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">Reference</span>
-              <input
-                className={inputClass}
+              <Input
                 value={recoveryForm.payment_reference ?? ""}
                 onChange={(event) => setRecoveryForm((current) => ({ ...current, payment_reference: event.target.value }))}
               />
@@ -1134,7 +1124,6 @@ export function FinanceServicingView({
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">Date</span>
               <DateInput
-                className={inputClass}
                 value={recoveryForm.payment_date ?? ""}
                 onChange={(event) => setRecoveryForm((current) => ({ ...current, payment_date: event.target.value }))}
               />
@@ -1206,7 +1195,7 @@ export function FinanceServicingView({
               </Field>
             ) : null}
             <Field label="Comments">
-              <FluentTextarea
+              <Textarea
                 className="w-full"
                 value={shortfallForm.comments ?? ""}
                 onChange={(event) => setShortfallForm((current) => ({ ...current, comments: event.target.value }))}

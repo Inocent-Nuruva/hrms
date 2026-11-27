@@ -3,12 +3,13 @@
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
+import { FormField } from "@/components/ui/form-field";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import * as React from "react";
 import {
   Button as FluentButton,
   DialogActions as FluentDialogActions,
-  Field as FluentField,
-  Input as FluentInput,
 } from "@fluentui/react-components";
 import { useSearchParams } from "next/navigation";
 import { PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
@@ -1189,7 +1190,7 @@ export function MovementOperationsView({
             <div className="grid items-start gap-x-5 gap-y-4 md:grid-cols-2">
               {createMode === "create" || createMode === "edit" ? (
                 <>
-                  <FluentField label="Employee">
+                  <FormField label="Employee">
                     <FluentSelect
                       ariaLabel="Employee"
                       className="w-full"
@@ -1209,8 +1210,8 @@ export function MovementOperationsView({
                         })),
                       ]}
                     />
-                  </FluentField>
-                  <FluentField label="Type">
+                  </FormField>
+                  <FormField label="Type">
                     <FluentSelect
                       ariaLabel="Type"
                       className="w-full"
@@ -1226,20 +1227,20 @@ export function MovementOperationsView({
                         label: prettify(type),
                       }))}
                     />
-                  </FluentField>
-                  <FluentField label="Title" className="md:col-span-2">
-                    <FluentInput
+                  </FormField>
+                  <FormField label="Title" className="md:col-span-2">
+                    <Input
                       className="w-full"
                       value={form.title ?? ""}
-                      onChange={(_event, data) =>
+                      onChange={(event) =>
                         setForm((current) => ({
                           ...current,
-                          title: data.value,
+                          title: event.target.value,
                         }))
                       }
                     />
-                  </FluentField>
-                  <FluentField
+                  </FormField>
+                  <FormField
                     label="Reason"
                     hint={
                       ["SALARY_REVISION", "COMPOSITE"].includes(
@@ -1263,8 +1264,8 @@ export function MovementOperationsView({
                         }))
                       }
                     />
-                  </FluentField>
-                  <FluentField label="Effective date">
+                  </FormField>
+                  <FormField label="Effective date">
                     <DateInput
                       className="max-w-none"
                       value={form.effective_date ?? ""}
@@ -1275,15 +1276,14 @@ export function MovementOperationsView({
                         }))
                       }
                     />
-                  </FluentField>
+                  </FormField>
                   <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={form.employee_acknowledgement_required === "true"}
-                      onChange={(event) =>
+                      onCheckedChange={(checked) =>
                         setForm((current) => ({
                           ...current,
-                          employee_acknowledgement_required: String(event.target.checked),
+                          employee_acknowledgement_required: String(checked),
                         }))
                       }
                     />
@@ -1292,8 +1292,7 @@ export function MovementOperationsView({
                   {showTarget &&
                   (form.movement_type === "BRANCH_TRANSFER" ||
                     form.movement_type === "COMPOSITE") ? (
-                    <label className="grid gap-1.5 text-sm">
-                      <span className="font-medium">New branch</span>
+                    <FormField label="New branch">
                       <FluentSelect
                         ariaLabel="New branch"
                         className="w-full"
@@ -1313,13 +1312,12 @@ export function MovementOperationsView({
                           })),
                         ]}
                       />
-                    </label>
+                    </FormField>
                   ) : null}
                   {showTarget &&
                   (form.movement_type === "DEPARTMENT_TRANSFER" ||
                     form.movement_type === "COMPOSITE") ? (
-                    <label className="grid gap-1.5 text-sm">
-                      <span className="font-medium">New department</span>
+                    <FormField label="New department">
                       <FluentSelect
                         ariaLabel="New department"
                         className="w-full"
@@ -1339,7 +1337,7 @@ export function MovementOperationsView({
                           })),
                         ]}
                       />
-                    </label>
+                    </FormField>
                   ) : null}
                   {showTarget &&
                   [
@@ -1348,8 +1346,7 @@ export function MovementOperationsView({
                     "DEMOTION",
                     "COMPOSITE",
                   ].includes(form.movement_type ?? "") ? (
-                    <label className="grid gap-1.5 text-sm">
-                      <span className="font-medium">New position</span>
+                    <FormField label="New position">
                       <FluentSelect
                         ariaLabel="New position"
                         className="w-full"
@@ -1369,13 +1366,12 @@ export function MovementOperationsView({
                           })),
                         ]}
                       />
-                    </label>
+                    </FormField>
                   ) : null}
                   {showTarget &&
                   (form.movement_type === "GRADE_CHANGE" ||
                     form.movement_type === "COMPOSITE") ? (
-                    <label className="grid gap-1.5 text-sm">
-                      <span className="font-medium">New grade</span>
+                    <FormField label="New grade">
                       <FluentSelect
                         ariaLabel="New grade"
                         className="w-full"
@@ -1395,13 +1391,12 @@ export function MovementOperationsView({
                           })),
                         ]}
                       />
-                    </label>
+                    </FormField>
                   ) : null}
                   {showTarget &&
                   (form.movement_type === "COST_CENTER_CHANGE" ||
                     form.movement_type === "COMPOSITE") ? (
-                    <label className="grid gap-1.5 text-sm">
-                      <span className="font-medium">New cost center</span>
+                    <FormField label="New cost center">
                       <FluentSelect
                         ariaLabel="New cost center"
                         className="w-full"
@@ -1421,13 +1416,12 @@ export function MovementOperationsView({
                           })),
                         ]}
                       />
-                    </label>
+                    </FormField>
                   ) : null}
                   {showTarget &&
                   (form.movement_type === "REPORTING_MANAGER_CHANGE" ||
                     form.movement_type === "COMPOSITE") ? (
-                    <label className="grid gap-1.5 text-sm">
-                      <span className="font-medium">New manager</span>
+                    <FormField label="New manager">
                       <FluentSelect
                         ariaLabel="New manager"
                         className="w-full"
@@ -1447,13 +1441,12 @@ export function MovementOperationsView({
                           })),
                         ]}
                       />
-                    </label>
+                    </FormField>
                   ) : null}
                   {showTarget &&
                   (form.movement_type === "EMPLOYMENT_TYPE_CHANGE" ||
                     form.movement_type === "COMPOSITE") ? (
-                    <label className="grid gap-1.5 text-sm">
-                      <span className="font-medium">New employment type</span>
+                    <FormField label="New employment type">
                       <FluentSelect
                         ariaLabel="New employment type"
                         className="w-full"
@@ -1473,38 +1466,38 @@ export function MovementOperationsView({
                           })),
                         ]}
                       />
-                    </label>
+                    </FormField>
                   ) : null}
                   {["SALARY_REVISION", "COMPOSITE"].includes(
                     form.movement_type,
                   ) ? (
                     <>
-                      <FluentField label="Base salary">
-                        <FluentInput
+                      <FormField label="Base salary">
+                        <Input
                           className="w-full"
                           inputMode="decimal"
                           value={form.base_salary ?? ""}
-                          onChange={(_event, data) =>
+                          onChange={(event) =>
                             setForm((current) => ({
                               ...current,
-                              base_salary: data.value,
+                              base_salary: event.target.value,
                             }))
                           }
                         />
-                      </FluentField>
-                      <FluentField label="Currency">
-                        <FluentInput
+                      </FormField>
+                      <FormField label="Currency">
+                        <Input
                           className="w-full"
                           value={form.currency ?? "TZS"}
-                          onChange={(_event, data) =>
+                          onChange={(event) =>
                             setForm((current) => ({
                               ...current,
-                              currency: data.value,
+                              currency: event.target.value,
                             }))
                           }
                         />
-                      </FluentField>
-                      <FluentField label="Salary structure">
+                      </FormField>
+                      <FormField label="Salary structure">
                         {salaryStructureCodes.length > 0 ? (
                           <FluentSelect
                             ariaLabel="Salary structure"
@@ -1526,19 +1519,19 @@ export function MovementOperationsView({
                             ]}
                           />
                         ) : (
-                          <FluentInput
+                          <Input
                             className="w-full"
                             placeholder="Leave blank to keep current structure"
                             value={form.salary_structure_code ?? ""}
-                            onChange={(_event, data) =>
+                            onChange={(event) =>
                               setForm((current) => ({
                                 ...current,
-                                salary_structure_code: data.value,
+                                salary_structure_code: event.target.value,
                               }))
                             }
                           />
                         )}
-                      </FluentField>
+                      </FormField>
                       <MovementSalaryOverridesEditor
                         employeeId={form.employee_id ?? ""}
                         targetStructureCode={form.salary_structure_code ?? ""}
@@ -1557,8 +1550,7 @@ export function MovementOperationsView({
                 </>
               ) : (
                 <>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Decision</span>
+                  <FormField label="Decision">
                     <FluentSelect
                       ariaLabel="Decision"
                       className="w-full"
@@ -1575,9 +1567,8 @@ export function MovementOperationsView({
                         { value: "REJECT", label: "Reject" },
                       ]}
                     />
-                  </label>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Comments</span>
+                  </FormField>
+                  <FormField label="Comments">
                     <Textarea
                       className={textareaClass}
                       value={form.comments ?? ""}
@@ -1588,7 +1579,7 @@ export function MovementOperationsView({
                         }))
                       }
                     />
-                  </label>
+                  </FormField>
                 </>
               )}
               {formError ? (

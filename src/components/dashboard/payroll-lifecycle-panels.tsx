@@ -3,6 +3,9 @@
 import * as React from "react";
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DateInput } from "@/components/ui/date-input";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { FluentSelect } from "@/components/ui/fluent-select";
 import { toast } from "@/components/ui/fluent-toast-store";
@@ -33,10 +36,6 @@ import {
 import { readStoredSessionTokens } from "@/lib/session-client";
 import { cn } from "@/lib/utils";
 
-const inputClass =
-  "h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background";
-const textareaClass =
-  "min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background";
 const actionButtonClass =
   "inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted";
 const primaryButtonClass =
@@ -461,8 +460,7 @@ export function PayrollRecoveriesPanel({
           {error ? <p className="text-sm text-rose-600">{error}</p> : null}
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="Employee ID">
-              <input
-                className={inputClass}
+              <Input
                 inputMode="numeric"
                 value={form.employeeId}
                 onChange={(e) =>
@@ -471,8 +469,7 @@ export function PayrollRecoveriesPanel({
               />
             </Field>
             <Field label="Original payroll run ID">
-              <input
-                className={inputClass}
+              <Input
                 inputMode="numeric"
                 value={form.originalRunId}
                 onChange={(e) =>
@@ -481,8 +478,7 @@ export function PayrollRecoveriesPanel({
               />
             </Field>
             <Field label="Overpaid amount">
-              <input
-                className={inputClass}
+              <Input
                 inputMode="decimal"
                 value={form.amount}
                 onChange={(e) =>
@@ -504,8 +500,7 @@ export function PayrollRecoveriesPanel({
             </Field>
             {form.method === "INSTALLMENTS" ? (
               <Field label="Instalment per payroll">
-                <input
-                  className={inputClass}
+                <Input
                   inputMode="decimal"
                   value={form.installment}
                   onChange={(e) =>
@@ -539,8 +534,7 @@ export function PayrollRecoveriesPanel({
               label="Consent / agreement / order reference"
               className="md:col-span-2"
             >
-              <input
-                className={inputClass}
+              <Input
                 value={form.consentReference}
                 onChange={(e) =>
                   setForm((c) => ({ ...c, consentReference: e.target.value }))
@@ -549,7 +543,6 @@ export function PayrollRecoveriesPanel({
             </Field>
             <Field label="Reason" className="md:col-span-2">
               <Textarea
-                className={textareaClass}
                 value={form.reason}
                 onChange={(e) =>
                   setForm((c) => ({ ...c, reason: e.target.value }))
@@ -598,8 +591,7 @@ export function PayrollRecoveriesPanel({
           action?.kind === "accounting-adjustments" ? (
             <div className="grid gap-3">
               <Field label="Amount">
-                <input
-                  className={inputClass}
+                <Input
                   inputMode="decimal"
                   value={settlement.amount}
                   onChange={(e) =>
@@ -608,8 +600,7 @@ export function PayrollRecoveriesPanel({
                 />
               </Field>
               <Field label="Reference (receipt / journal no.)">
-                <input
-                  className={inputClass}
+                <Input
                   value={settlement.reference}
                   onChange={(e) =>
                     setSettlement((c) => ({ ...c, reference: e.target.value }))
@@ -618,7 +609,6 @@ export function PayrollRecoveriesPanel({
               </Field>
               <Field label="Evidence">
                 <Textarea
-                  className={textareaClass}
                   value={settlement.evidence}
                   onChange={(e) =>
                     setSettlement((c) => ({ ...c, evidence: e.target.value }))
@@ -631,7 +621,6 @@ export function PayrollRecoveriesPanel({
               label={action?.kind === "approve" ? "Note (optional)" : "Reason"}
             >
               <Textarea
-                className={textareaClass}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
               />
@@ -829,8 +818,7 @@ export function PayrollApprovalWorkflowsPanel({
           {error ? <p className="text-sm text-rose-600">{error}</p> : null}
           <div className="grid gap-3 md:grid-cols-3">
             <Field label="Name">
-              <input
-                className={inputClass}
+              <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
@@ -852,8 +840,7 @@ export function PayrollApprovalWorkflowsPanel({
               <Field
                 label={scope === "BRANCH" ? "Branch ID" : "Payroll group ID"}
               >
-                <input
-                  className={inputClass}
+                <Input
                   inputMode="numeric"
                   value={scopeId}
                   onChange={(e) => setScopeId(e.target.value)}
@@ -868,14 +855,13 @@ export function PayrollApprovalWorkflowsPanel({
                 className="grid gap-2 rounded-lg border border-border p-2 md:grid-cols-[auto_1fr_1fr_auto] md:items-end"
               >
                 <label className="flex items-center gap-2 text-sm font-medium">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={item.enabled}
-                    onChange={(e) =>
+                    onCheckedChange={(checked) =>
                       setStages((current) =>
                         current.map((stage, i) =>
                           i === index
-                            ? { ...stage, enabled: e.target.checked }
+                            ? { ...stage, enabled: checked }
                             : stage,
                         ),
                       )
@@ -884,8 +870,7 @@ export function PayrollApprovalWorkflowsPanel({
                   {index + 1}. {pretty(item.stage)}
                 </label>
                 <Field label="Approver user IDs (comma separated)">
-                  <input
-                    className={inputClass}
+                  <Input
                     value={item.approvers}
                     onChange={(e) =>
                       setStages((current) =>
@@ -899,8 +884,7 @@ export function PayrollApprovalWorkflowsPanel({
                   />
                 </Field>
                 <Field label="Net pay limit (optional)">
-                  <input
-                    className={inputClass}
+                  <Input
                     inputMode="decimal"
                     value={item.limit}
                     onChange={(e) =>
@@ -1212,31 +1196,25 @@ export function PayrollAttendanceDeductionPoliciesPanel({
           {error ? <p className="text-sm text-rose-600">{error}</p> : null}
           <div className="grid gap-3 md:grid-cols-3">
             <Field label="Name" className="md:col-span-3">
-              <input
-                className={inputClass}
+              <Input
                 value={form.name}
                 onChange={(e) => set({ name: e.target.value })}
               />
             </Field>
             <Field label="Effective from">
-              <input
-                type="date"
-                className={inputClass}
+              <DateInput
                 value={form.effectiveFrom}
                 onChange={(e) => set({ effectiveFrom: e.target.value })}
               />
             </Field>
             <Field label="Effective to (optional)">
-              <input
-                type="date"
-                className={inputClass}
+              <DateInput
                 value={form.effectiveTo}
                 onChange={(e) => set({ effectiveTo: e.target.value })}
               />
             </Field>
             <Field label="Standard minutes per day">
-              <input
-                className={inputClass}
+              <Input
                 inputMode="numeric"
                 value={form.standardMinutes}
                 onChange={(e) => set({ standardMinutes: e.target.value })}
@@ -1245,42 +1223,37 @@ export function PayrollAttendanceDeductionPoliciesPanel({
           </div>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={form.absence}
-                onChange={(e) => set({ absence: e.target.checked })}
+                onCheckedChange={(checked) => set({ absence: checked })}
               />{" "}
               Deduct unauthorised absence days
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={form.halfDay}
-                onChange={(e) => set({ halfDay: e.target.checked })}
+                onCheckedChange={(checked) => set({ halfDay: checked })}
               />{" "}
               Deduct half days
             </label>
             <div className="space-y-2 rounded-lg border border-border p-2">
               <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={form.lateness}
-                  onChange={(e) => set({ lateness: e.target.checked })}
+                  onCheckedChange={(checked) => set({ lateness: checked })}
                 />{" "}
                 Deduct lateness
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Grace min/day">
-                  <input
-                    className={inputClass}
+                  <Input
                     inputMode="numeric"
                     value={form.lateGrace}
                     onChange={(e) => set({ lateGrace: e.target.value })}
                   />
                 </Field>
                 <Field label="Free min/month">
-                  <input
-                    className={inputClass}
+                  <Input
                     inputMode="numeric"
                     value={form.lateThreshold}
                     onChange={(e) => set({ lateThreshold: e.target.value })}
@@ -1290,25 +1263,22 @@ export function PayrollAttendanceDeductionPoliciesPanel({
             </div>
             <div className="space-y-2 rounded-lg border border-border p-2">
               <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={form.early}
-                  onChange={(e) => set({ early: e.target.checked })}
+                  onCheckedChange={(checked) => set({ early: checked })}
                 />{" "}
                 Deduct early departure
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Grace min/day">
-                  <input
-                    className={inputClass}
+                  <Input
                     inputMode="numeric"
                     value={form.earlyGrace}
                     onChange={(e) => set({ earlyGrace: e.target.value })}
                   />
                 </Field>
                 <Field label="Free min/month">
-                  <input
-                    className={inputClass}
+                  <Input
                     inputMode="numeric"
                     value={form.earlyThreshold}
                     onChange={(e) => set({ earlyThreshold: e.target.value })}
@@ -1317,16 +1287,14 @@ export function PayrollAttendanceDeductionPoliciesPanel({
               </div>
             </div>
             <Field label="Monthly cap (% of basic, optional)">
-              <input
-                className={inputClass}
+              <Input
                 inputMode="decimal"
                 value={form.cap}
                 onChange={(e) => set({ cap: e.target.value })}
               />
             </Field>
             <Field label="Exempt employee IDs (comma separated)">
-              <input
-                className={inputClass}
+              <Input
                 value={form.exempt}
                 onChange={(e) => set({ exempt: e.target.value })}
               />
@@ -1367,8 +1335,7 @@ export function PayrollAttendanceDeductionPoliciesPanel({
           </DialogHeader>
           {error ? <p className="text-sm text-rose-600">{error}</p> : null}
           <Field label="HR / legal review reference">
-            <input
-              className={inputClass}
+            <Input
               value={legalReference}
               onChange={(e) => setLegalReference(e.target.value)}
             />
@@ -1537,8 +1504,7 @@ export function PayrollPaymentProgressDialog({
                 label="Retry reason"
                 hint="Import the statement for the previous file first. The retry contains only outstanding amounts, with new references."
               >
-                <input
-                  className={inputClass}
+                <Input
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                 />

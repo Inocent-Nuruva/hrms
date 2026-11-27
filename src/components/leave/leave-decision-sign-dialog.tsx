@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
@@ -154,7 +155,7 @@ function LeaveDecisionSignDialog({
         </div>
 
         <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" className="mt-0.5 size-4" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} />
+          <Checkbox className="mt-0.5" checked={agreed} onCheckedChange={(checked) => setAgreed(checked)} />
           <span>I confirm this decision and sign it electronically.</span>
         </label>
 

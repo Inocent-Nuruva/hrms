@@ -2,6 +2,8 @@
 
 import { useEffect, useState, type FormEvent } from "react"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { FormField } from "@/components/ui/form-field"
 import { Input } from "@/components/ui/input"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
@@ -116,14 +118,14 @@ export function MovementSettingsView() {
           </p>
           <fieldset disabled={busy} className="space-y-5">
             <label className="flex items-start gap-3">
-              <input
+              <Checkbox
                 className="mt-1"
-                type="checkbox"
                 checked={policy.require_management_approval}
-                onChange={(e) =>
+                disabled={busy}
+                onCheckedChange={(checked) =>
                   setPolicy({
                     ...policy,
-                    require_management_approval: e.target.checked,
+                    require_management_approval: checked,
                   })
                 }
               />
@@ -133,19 +135,19 @@ export function MovementSettingsView() {
               Approval changes take effect when a movement is submitted.
             </p>
             <label className="flex items-start gap-3">
-              <input
+              <Checkbox
                 className="mt-1"
-                type="checkbox"
                 checked={policy.allow_backdating}
-                onChange={(e) =>
-                  setPolicy({ ...policy, allow_backdating: e.target.checked })
+                disabled={busy}
+                onCheckedChange={(checked) =>
+                  setPolicy({ ...policy, allow_backdating: checked })
                 }
               />
               Allow backdating for users with backdate permission
             </label>
-            <label className="grid max-w-xs gap-2">
-              Maximum backdate days
+            <FormField className="max-w-xs" label="Maximum backdate days" htmlFor="movement-backdate-days" required>
               <Input
+                id="movement-backdate-days"
                 required
                 type="number"
                 min={0}
@@ -154,7 +156,7 @@ export function MovementSettingsView() {
                 value={days}
                 onChange={(e) => setDays(e.target.value)}
               />
-            </label>
+            </FormField>
             <div className="flex flex-wrap gap-3">
               <Button type="submit">Save settings</Button>
               {policy.source === "company" && (

@@ -41,6 +41,7 @@ import { canAccessDashboardRoute } from "@/lib/dashboard-permissions";
 import { readStoredSessionTokens } from "@/lib/session-client";
 import { FluentSelect } from "@/components/ui/fluent-select";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
+import { Checkbox } from "@/components/ui/checkbox"
 
 export type ManagerSelfTab =
   "overview" | "members" | "attendance" | "actions" | "activity-summary";
@@ -573,10 +574,9 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
             ) : null}
             {activeTab === "members" ? (
               <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={directOnly}
-                  onChange={(event) => setDirectOnly(event.target.checked)}
+                  onCheckedChange={(next) => setDirectOnly(Boolean(next))}
                 />
                 Direct reports only
               </label>

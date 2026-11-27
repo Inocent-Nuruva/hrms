@@ -1,5 +1,8 @@
 "use client"
 
+import { FormField } from "@/components/ui/form-field"
+import { CountrySelect } from "@/components/ui/country-select"
+import { Input } from "@/components/ui/input"
 import * as React from "react"
 import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { BuildingRegular } from "@fluentui/react-icons"
@@ -22,7 +25,6 @@ import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
-import { countries as countryCodes } from "country-flag-icons"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 
 import {
@@ -71,28 +73,6 @@ type BranchForm = {
   address: string
   status: string
 }
-
-type CountryOption = { code: string; name: string }
-
-const regionDisplayNames =
-  typeof Intl !== "undefined" && typeof Intl.DisplayNames !== "undefined"
-    ? new Intl.DisplayNames(["en"], { type: "region" })
-    : null
-
-function safeCountryName(code: string) {
-  try {
-    return regionDisplayNames?.of(code) ?? code
-  } catch {
-    return code
-  }
-}
-
-const COUNTRY_OPTIONS: CountryOption[] = (countryCodes as string[])
-  .map((code) => ({
-    code,
-    name: safeCountryName(code),
-  }))
-  .sort((first, second) => first.name.localeCompare(second.name))
 
 const CITY_OPTIONS_BY_COUNTRY: Record<string, string[]> = {
   Tanzania: ["Dar es Salaam", "Arusha", "Moshi", "Mwanza", "Zanzibar", "Dodoma", "Mbeya", "Morogoro"],
@@ -829,18 +809,15 @@ export function BranchesView() {
           <div className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
             <h3 className="text-lg font-semibold text-slate-900">{editingId === null ? "Add" : "Edit"} Branch</h3>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Name</span>
-                <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Country</span>
-                <input
-                  list="branch-country-options"
-                  className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+              <FormField label="Name">
+                <Input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
+              </FormField>
+              <FormField label="Country">
+                <CountrySelect
+                  aria-label="Country"
+                  valueType="name"
                   value={form.country}
-                  onChange={(event) => {
-                    const nextCountry = event.target.value
+                  onChange={(nextCountry) => {
                     setForm((prev) => {
                       const selectedChanged = prev.country.trim().toLowerCase() !== nextCountry.trim().toLowerCase()
                       return {
@@ -852,17 +829,10 @@ export function BranchesView() {
                   }}
                   placeholder="Select country"
                 />
-                <datalist id="branch-country-options">
-                  {COUNTRY_OPTIONS.map((option) => (
-                    <option key={option.code} value={option.name} />
-                  ))}
-                </datalist>
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">City</span>
-                <input
+              </FormField>
+              <FormField label="City">
+                <Input
                   list="branch-city-options"
-                  className="h-10 rounded-md border border-slate-300 px-3 text-sm"
                   value={form.city}
                   onChange={(event) => setForm((prev) => ({ ...prev, city: event.target.value }))}
                   placeholder={form.country ? "Select city" : "Select country first"}
@@ -872,13 +842,11 @@ export function BranchesView() {
                     <option key={city} value={city} />
                   ))}
                 </datalist>
-              </label>
-              <label className="grid gap-1 md:col-span-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Address</span>
-                <Textarea className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm" value={form.address} onChange={(event) => setForm((prev) => ({ ...prev, address: event.target.value }))} />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>
+              </FormField>
+              <FormField label="Address" className="md:col-span-2">
+                <Textarea value={form.address} onChange={(event) => setForm((prev) => ({ ...prev, address: event.target.value }))} />
+              </FormField>
+              <FormField label="Status">
                 <FluentSelect
                   id="branch-status"
                   value={form.status}
@@ -888,7 +856,7 @@ export function BranchesView() {
                     { value: "inactive", label: "inactive" },
                   ]}
                 />
-              </label>
+              </FormField>
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" className="rounded-md border border-slate-300 px-3 py-2 text-sm" onClick={() => setOpenForm(false)}>
@@ -907,8 +875,7 @@ export function BranchesView() {
           <div className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
             <h3 className="text-lg font-semibold text-slate-900">Branch Access: {readString(accessBranch, ["name", "code"])}</h3>
             <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-              <label className="grid min-w-0 gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">User</span>
+              <FormField label="User">
                 {accessUserIds.length > 0 ? (
                   <div className="flex flex-wrap gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
                     {accessUserIds.map((id) => {
@@ -936,8 +903,7 @@ export function BranchesView() {
                   </div>
                 ) : null}
                 <div className="relative">
-                  <input
-                    className="h-10 w-full rounded-md border border-slate-300 px-4 text-sm"
+                  <Input
                     value={accessUserQuery}
                     onFocus={() => setAccessPickerOpen(true)}
                     onBlur={() => {
@@ -988,7 +954,7 @@ export function BranchesView() {
                     </div>
                   ) : null}
                 </div>
-              </label>
+              </FormField>
               <button
                 type="button"
                 className="h-10 rounded-md bg-[var(--primary)] px-3 text-sm font-medium !text-white transition hover:brightness-95 md:whitespace-nowrap"

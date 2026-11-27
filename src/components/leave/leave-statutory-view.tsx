@@ -7,6 +7,9 @@ import { PlusIcon, RefreshCwIcon, TrashIcon } from "lucide-react"
 import { fluentForm } from "@/components/ui/fluent-dialog-service"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DateInput } from "@/components/ui/date-input"
+import { Checkbox } from "@/components/ui/checkbox"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { PageHeader } from "@/components/ui/page-header"
 import { Textarea } from "@/components/ui/textarea"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
@@ -389,7 +392,7 @@ export function LeaveStatutoryView() {
               <Input value={draft.legal_authority} onChange={(event) => setDraft({ ...draft, legal_authority: event.target.value })} placeholder="Act, chapter and revision" />
             </label>
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
-              <input type="checkbox" checked={draft.is_test_configuration} onChange={(event) => setDraft({ ...draft, is_test_configuration: event.target.checked })} />
+              <Checkbox checked={draft.is_test_configuration} onCheckedChange={(checked) => setDraft({ ...draft, is_test_configuration: checked })} />
               Test configuration (development/test only; can never be activated in production)
             </label>
           </div>
@@ -437,25 +440,21 @@ export function LeaveStatutoryView() {
                   {LINKED_TYPES.includes(rule.rule_type) ? (
                     <label className="flex flex-col gap-1 text-xs">
                       <span>Company leave type</span>
-                      <select
-                        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                        value={rule.leave_type_id ?? ""}
-                        onChange={(event) => updateRule(index, { leave_type_id: event.target.value ? Number(event.target.value) : null })}
-                      >
-                        <option value="">Choose…</option>
-                        {leaveTypes.map((type) => (
-                          <option key={String(type.id)} value={String(type.id)}>{String(type.name)}</option>
-                        ))}
-                      </select>
+                      <FluentSelect
+                        ariaLabel="Company leave type"
+                        placeholder="Choose…"
+                        value={rule.leave_type_id != null ? String(rule.leave_type_id) : ""}
+                        onChange={(value) => updateRule(index, { leave_type_id: value ? Number(value) : null })}
+                        options={leaveTypes.map((type) => ({ value: String(type.id), label: String(type.name) }))}
+                      />
                     </label>
                   ) : null}
                   {RULE_FIELDS[rule.rule_type].map((field) => (
                     <label key={field.key} className={cn("flex gap-1 text-xs", field.kind === "boolean" ? "items-center" : "flex-col")}>
                       {field.kind === "boolean" ? (
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={rule.settings[field.key] === true}
-                          onChange={(event) => updateRule(index, { settings: { ...rule.settings, [field.key]: event.target.checked } })}
+                          onCheckedChange={(checked) => updateRule(index, { settings: { ...rule.settings, [field.key]: checked } })}
                         />
                       ) : null}
                       <span>{field.label}</span>
@@ -561,8 +560,8 @@ export function LeaveStatutoryView() {
             Calculated from attendance (hours worked on public holidays) and the active public-holiday rule. Posting creates draft payroll inputs for payroll to approve, once Finance has confirmed the PUBLIC_HOLIDAY_WORK component.
           </p>
           <div className="grid gap-2 sm:grid-cols-4">
-            <Input type="date" aria-label="From" value={holiday.from_date} onChange={(event) => setHoliday({ ...holiday, from_date: event.target.value })} />
-            <Input type="date" aria-label="To" value={holiday.to_date} onChange={(event) => setHoliday({ ...holiday, to_date: event.target.value })} />
+            <DateInput aria-label="From" value={holiday.from_date} onChange={(event) => setHoliday({ ...holiday, from_date: event.target.value })} />
+            <DateInput aria-label="To" value={holiday.to_date} onChange={(event) => setHoliday({ ...holiday, to_date: event.target.value })} />
             <Input placeholder="Payroll period code (to post)" value={holiday.payroll_period_code} onChange={(event) => setHoliday({ ...holiday, payroll_period_code: event.target.value })} />
             <div className="flex gap-2">
               <Button

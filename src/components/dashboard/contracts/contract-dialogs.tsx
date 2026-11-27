@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { FormField } from "@/components/ui/form-field"
+import { Textarea } from "@/components/ui/textarea"
 import { Dialog as FluentDialog, DialogSurface, DialogTitle } from "@fluentui/react-components"
 
 import { cn } from "@/lib/utils"
@@ -59,17 +61,18 @@ export function useContractDialogs() {
           </DialogTitle>
           <div className="text-sm text-slate-700">{options?.message}</div>
           {pending?.kind === "reason" ? (
-            <label className="grid gap-1 text-sm">
-              <span className="font-medium">{pending.options.label ?? "Reason"}</span>
-              <textarea
+            <FormField
+              label={pending.options.label ?? "Reason"}
+              hint={minLength ? `At least ${minLength} characters.` : undefined}
+            >
+              <Textarea
                 autoFocus
-                className="min-h-20 rounded-md border border-border px-2.5 py-1.5 text-sm"
+                formatting={false}
                 placeholder={pending.options.placeholder}
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
               />
-              {minLength ? <span className="text-xs text-muted-foreground">At least {minLength} characters.</span> : null}
-            </label>
+            </FormField>
           ) : null}
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-5 py-3">

@@ -1,5 +1,6 @@
 "use client"
 
+import { Checkbox } from "@/components/ui/checkbox"
 import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
@@ -741,15 +742,15 @@ function AttendanceReportDialog({
         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="md:col-span-2 flex flex-wrap gap-x-6 gap-y-3 rounded-md border p-3">
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={lateOnly} onChange={(event) => setLateOnly(event.target.checked)} />
+              <Checkbox checked={lateOnly} onCheckedChange={(checked) => setLateOnly(checked)} />
               Late only
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={earlyDepartureOnly} onChange={(event) => setEarlyDepartureOnly(event.target.checked)} />
+              <Checkbox checked={earlyDepartureOnly} onCheckedChange={(checked) => setEarlyDepartureOnly(checked)} />
               Early departure only
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={overtimeOnly} onChange={(event) => setOvertimeOnly(event.target.checked)} />
+              <Checkbox checked={overtimeOnly} onCheckedChange={(checked) => setOvertimeOnly(checked)} />
               Overtime only
             </label>
             <p className="basis-full text-xs text-muted-foreground">Select multiple options to include records that meet every selected condition.</p>

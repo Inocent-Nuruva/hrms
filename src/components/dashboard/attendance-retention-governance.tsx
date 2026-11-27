@@ -1,5 +1,7 @@
 "use client";
 
+import { FluentSelect } from "@/components/ui/fluent-select";
+import { Input } from "@/components/ui/input";
 import * as React from "react";
 import {
   ArrowClockwise20Regular,
@@ -257,28 +259,23 @@ export function AttendanceRetentionGovernance({
             }}
           >
             <h4 className="text-xs font-semibold">Place a legal hold</h4>
-            <select
-              aria-label="Retention hold category"
+            <FluentSelect
+              ariaLabel="Retention hold category"
               value={category}
-              onChange={(event) => setCategory(event.target.value as Category)}
-              className="h-9 rounded-md border border-input bg-background px-2 text-xs"
-            >
-              <option value="RAW_HIKVISION_LOG">Raw Hikvision log</option>
-              <option value="MOBILE_SELFIE">Mobile punch selfie</option>
-              <option value="ATTENDANCE_LOCATION">
-                Attendance location data
-              </option>
-              <option value="FIELD_VISIT_LOCATION">
-                Field visit location data
-              </option>
-            </select>
-            <input
+              onChange={(value) => setCategory(value as Category)}
+              options={[
+                { value: "RAW_HIKVISION_LOG", label: "Raw Hikvision log" },
+                { value: "MOBILE_SELFIE", label: "Mobile punch selfie" },
+                { value: "ATTENDANCE_LOCATION", label: "Attendance location data" },
+                { value: "FIELD_VISIT_LOCATION", label: "Field visit location data" },
+              ]}
+            />
+            <Input
               type="number"
               min={1}
               value={recordId}
               onChange={(event) => setRecordId(event.target.value)}
               placeholder="Source record ID"
-              className="h-9 rounded-md border border-input bg-background px-2 text-xs"
             />
             <Textarea
               value={holdReason}
@@ -322,30 +319,23 @@ export function AttendanceRetentionGovernance({
             <h4 className="text-xs font-semibold">
               Request one approved purge run
             </h4>
-            <select
-              aria-label="Purge category"
+            <FluentSelect
+              ariaLabel="Purge category"
               value={purgeCategory}
-              onChange={(event) =>
-                setPurgeCategory(event.target.value as Category)
-              }
-              className="h-9 rounded-md border border-input bg-background px-2 text-xs"
-            >
-              <option value="RAW_HIKVISION_LOG">Raw Hikvision logs</option>
-              <option value="MOBILE_SELFIE">Mobile selfies</option>
-              <option value="ATTENDANCE_LOCATION">
-                Attendance location data
-              </option>
-              <option value="FIELD_VISIT_LOCATION">
-                Field visit location data
-              </option>
-            </select>
-            <input
+              onChange={(value) => setPurgeCategory(value as Category)}
+              options={[
+                { value: "RAW_HIKVISION_LOG", label: "Raw Hikvision logs" },
+                { value: "MOBILE_SELFIE", label: "Mobile selfies" },
+                { value: "ATTENDANCE_LOCATION", label: "Attendance location data" },
+                { value: "FIELD_VISIT_LOCATION", label: "Field visit location data" },
+              ]}
+            />
+            <Input
               type="number"
               min={1}
               max={3650}
               value={retentionDays}
               onChange={(event) => setRetentionDays(event.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-2 text-xs"
               aria-label="Approved retention period in days"
             />
             <Textarea
@@ -395,7 +385,7 @@ export function AttendanceRetentionGovernance({
                     </p>
                     {active && canManage ? (
                       <div className="flex flex-wrap gap-2">
-                        <input
+                        <Input
                           value={reasonById[id] ?? ""}
                           onChange={(event) =>
                             setReasonById((previous) => ({
@@ -404,7 +394,6 @@ export function AttendanceRetentionGovernance({
                             }))
                           }
                           placeholder="Release reason"
-                          className="h-8 rounded-md border border-input bg-background px-2"
                         />
                         <button
                           type="button"
@@ -490,7 +479,7 @@ export function AttendanceRetentionGovernance({
                     </p>
                     {pending && canReview ? (
                       <div className="flex flex-wrap gap-2">
-                        <input
+                        <Input
                           value={reasonById[`approval-${id}`] ?? ""}
                           onChange={(event) =>
                             setReasonById((previous) => ({
@@ -499,7 +488,7 @@ export function AttendanceRetentionGovernance({
                             }))
                           }
                           placeholder="Review note (required)"
-                          className="h-8 min-w-56 flex-1 rounded-md border border-input bg-background px-2"
+                          className="min-w-56 flex-1"
                         />
                         <button
                           type="button"

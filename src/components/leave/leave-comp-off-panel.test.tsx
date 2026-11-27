@@ -76,8 +76,13 @@ describe("LeaveCompOffPanel", () => {
     await render(<LeaveCompOffPanel token="t" mode="self" />)
     expect(host.textContent).toContain("2026-12-30")
     expect(host.textContent).toContain("Waiting for approval")
-    expect(host.querySelector('[aria-label="Approved overtime"]')).not.toBeNull()
-    expect(host.textContent).toContain("2026-11-07 · 8.00 h")
+    const overtime = host.querySelector<HTMLElement>('[aria-label="Approved overtime"]')
+    expect(overtime).not.toBeNull()
+    // The dropdown lists its options once it is opened.
+    await act(async () => {
+      overtime!.click()
+    })
+    expect(document.body.textContent).toContain("2026-11-07 · 8.00 h")
   })
 
   it("HR view lists pending credits with approve/reject and blocks earning without a policy", async () => {

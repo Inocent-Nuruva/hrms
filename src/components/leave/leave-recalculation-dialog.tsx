@@ -5,6 +5,9 @@ import * as React from "react"
 import { RefreshCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import { DateInput } from "@/components/ui/date-input"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Dialog,
@@ -312,21 +315,26 @@ function LeaveRecalculationDialog({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <label htmlFor={`${id}-scope`} className="text-xs font-medium">Scope</label>
-              <select
+              <FluentSelect
                 id={`${id}-scope`}
-                className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                ariaLabel="Scope"
                 value={scope}
                 disabled={!!employeeId && !canBulk}
-                onChange={(e) => {
-                  setScope(e.target.value as Scope)
-                  setScopeId(e.target.value === "employee" && employeeId ? String(employeeId) : "")
+                onChange={(value) => {
+                  setScope(value as Scope)
+                  setScopeId(value === "employee" && employeeId ? String(employeeId) : "")
                 }}
-              >
-                <option value="employee">One employee</option>
-                {canBulk ? <option value="department">Department</option> : null}
-                {canBulk ? <option value="branch">Branch</option> : null}
-                {canBulk ? <option value="company">All employees in the company</option> : null}
-              </select>
+                options={[
+                  { value: "employee", label: "One employee" },
+                  ...(canBulk
+                    ? [
+                        { value: "department", label: "Department" },
+                        { value: "branch", label: "Branch" },
+                        { value: "company", label: "All employees in the company" },
+                      ]
+                    : []),
+                ]}
+              />
             </div>
             <div className="space-y-1.5">
               <label htmlFor={`${id}-target`} className="text-xs font-medium">
@@ -343,24 +351,30 @@ function LeaveRecalculationDialog({
               ) : scope === "company" ? (
                 <p id={`${id}-target`} className="flex h-9 items-center text-sm text-muted-foreground">Every active employee</p>
               ) : (
-                <select id={`${id}-target`} className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm" value={scopeId} onChange={(e) => setScopeId(e.target.value)}>
-                  <option value="">Choose…</option>
-                  {(scope === "department" ? departments : branches).map((o) => (
-                    <option key={o.id} value={o.id}>{o.name}</option>
-                  ))}
-                </select>
+                <FluentSelect
+                  id={`${id}-target`}
+                  ariaLabel={scope === "department" ? "Department" : "Branch"}
+                  placeholder="Choose…"
+                  value={scopeId}
+                  onChange={setScopeId}
+                  options={(scope === "department" ? departments : branches).map((o) => ({ value: String(o.id), label: o.name }))}
+                />
               )}
             </div>
             <div className="space-y-1.5">
               <label htmlFor={`${id}-type`} className="text-xs font-medium">Leave type</label>
-              <select id={`${id}-type`} className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm" value={leaveTypeId} onChange={(e) => setLeaveTypeId(e.target.value)}>
-                <option value="">All leave types</option>
-                {types.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-              </select>
+              <FluentSelect
+                id={`${id}-type`}
+                ariaLabel="Leave type"
+                placeholder="All leave types"
+                value={leaveTypeId}
+                onChange={setLeaveTypeId}
+                options={[{ value: "", label: "All leave types" }, ...types.map((o) => ({ value: String(o.id), label: o.name }))]}
+              />
             </div>
             <div className="space-y-1.5">
               <label htmlFor={`${id}-asof`} className="text-xs font-medium">Cutoff date</label>
-              <Input id={`${id}-asof`} type="date" max={today()} value={asOf} onChange={(e) => setAsOf(e.target.value)} />
+              <DateInput id={`${id}-asof`} aria-label="Cutoff date" max={today()} value={asOf} onChange={(e) => setAsOf(e.target.value)} />
               <p className="text-[11px] text-muted-foreground">Defaults to today. A past cutoff is for review only; corrections are applied as at today.</p>
             </div>
             <div className="sm:col-span-2">
@@ -396,7 +410,7 @@ function LeaveRecalculationDialog({
 
             <div className="flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={onlyChanged} onChange={(e) => setOnlyChanged(e.target.checked)} />
+                <Checkbox checked={onlyChanged} onCheckedChange={(checked) => setOnlyChanged(checked)} />
                 Only show differences
               </label>
               <Button size="sm" variant="outline" onClick={download} disabled={busy}>Download report (CSV)</Button>

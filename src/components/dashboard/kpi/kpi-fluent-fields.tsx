@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Button, Dropdown, Input, Option, Textarea } from "@fluentui/react-components";
+import { Button, Dropdown, Option } from "@fluentui/react-components";
 import { DateInput } from "@/components/ui/date-input";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { fluentControlClass } from "./kpi-fluent-class";
 
 export function KpiFluentInput({ type = "text", onChange, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
@@ -12,7 +14,7 @@ export function KpiFluentInput({ type = "text", onChange, ...props }: React.Inpu
   if (type === "file") {
     return <FluentFilePicker {...props} className={props.className} onChange={onChange} />;
   }
-  return <Input type={type as React.ComponentProps<typeof Input>["type"]} onChange={onChange as React.ComponentProps<typeof Input>["onChange"]} {...props as React.ComponentProps<typeof Input>} className={fluentControlClass(props.className)} />;
+  return <Input type={type} onChange={onChange as React.ComponentProps<typeof Input>["onChange"]} {...props as React.ComponentProps<typeof Input>} className={fluentControlClass(props.className)} />;
 }
 
 function FluentFilePicker({
@@ -130,5 +132,5 @@ export function KpiFluentSelect({ children, value, onChange, className, appearan
 }
 
 export function KpiFluentTextarea(props: React.ComponentProps<typeof Textarea>) {
-  return <Textarea {...props} className={fluentControlClass(props.className)} />;
+  return <Textarea formatting={false} {...props} className={fluentControlClass(props.className)} />;
 }

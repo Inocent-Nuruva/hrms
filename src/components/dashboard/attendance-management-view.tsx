@@ -2,6 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element -- This view renders authenticated blob selfies and generated QR data URLs. */
 
+import { Input } from "@/components/ui/input"
 import * as React from "react"
 import Link from "next/link"
 import dynamic from "next/dynamic"
@@ -41,7 +42,6 @@ import {
   Badge,
   Field,
   InfoLabel,
-  Input,
   MessageBar,
   MessageBarBody,
   MessageBarTitle,
@@ -3409,7 +3409,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
             </DropdownMenuLabel>
             <Input
               size="small"
-              className="!h-8 w-full"
+              className="w-full"
               value={deviceSearch}
               onChange={(event) => setDeviceSearch(event.target.value)}
               placeholder="Search code, serial, model…"
@@ -3799,8 +3799,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                   <>
                     <label className="grid gap-1 text-sm">
                       <span>SSID</span>
-                      <input
-                        className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                      <Input
                         value={validateValues.ssid ?? ""}
                         onChange={(event) =>
                           setValidateValues((current) => ({ ...current, ssid: event.target.value }))
@@ -3809,8 +3808,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                     </label>
                     <label className="grid gap-1 text-sm">
                       <span>BSSID</span>
-                      <input
-                        className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                      <Input
                         value={validateValues.bssid ?? ""}
                         onChange={(event) =>
                           setValidateValues((current) => ({ ...current, bssid: event.target.value }))
@@ -3819,8 +3817,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                     </label>
                     <label className="grid gap-1 text-sm">
                       <span>IP address</span>
-                      <input
-                        className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                      <Input
                         value={validateValues.ipAddress ?? ""}
                         onChange={(event) =>
                           setValidateValues((current) => ({ ...current, ipAddress: event.target.value }))
@@ -3832,8 +3829,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                   <>
                     <label className="grid gap-1 text-sm">
                       <span>Latitude</span>
-                      <input
-                        className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                      <Input
                         value={validateValues.latitude ?? ""}
                         onChange={(event) =>
                           setValidateValues((current) => ({ ...current, latitude: event.target.value }))
@@ -3842,8 +3838,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                     </label>
                     <label className="grid gap-1 text-sm">
                       <span>Longitude</span>
-                      <input
-                        className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                      <Input
                         value={validateValues.longitude ?? ""}
                         onChange={(event) =>
                           setValidateValues((current) => ({ ...current, longitude: event.target.value }))
@@ -3852,8 +3847,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                     </label>
                     <label className="grid gap-1 text-sm">
                       <span>Accuracy meters</span>
-                      <input
-                        className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                      <Input
                         value={validateValues.accuracyMeters ?? ""}
                         onChange={(event) =>
                           setValidateValues((current) => ({ ...current, accuracyMeters: event.target.value }))
@@ -4358,7 +4352,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                 type="button"
                 appearance="primary"
                 size="small"
-                className="!h-8 !min-h-8"
+                className="!min-h-8"
                 icon={<Add16Regular />}
                 onClick={() => setCreateOpen(true)}
                 aria-label={`Create ${activeSection.replaceAll("-", " ")}`}

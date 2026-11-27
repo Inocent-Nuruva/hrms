@@ -1,5 +1,7 @@
 "use client"
 
+import { FormField } from "@/components/ui/form-field"
+import { Input } from "@/components/ui/input"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { Textarea } from "@/components/ui/textarea"
@@ -14,7 +16,6 @@ import {
   StatusChip,
   TalentDoodleSprites,
   actionButtonClass,
-  inputClass,
   optionLabel,
   primaryButtonClass,
   readString,
@@ -371,41 +372,32 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Short code</span>
-              <input
-                className={inputClass}
+            <FormField label="Short code" hint="Used in reports and employee records. Keep it short.">
+              <Input
                 value={form.code ?? ""}
                 onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
                 placeholder={activeTab === "grades" ? "e.g. G4" : "e.g. CC-OPS"}
               />
-              <span className="text-xs text-muted-foreground">Used in reports and employee records. Keep it short.</span>
-            </label>
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">{activeTab === "grades" ? "Grade name" : "Cost center name"}</span>
-              <input
-                className={inputClass}
+            </FormField>
+            <FormField label={activeTab === "grades" ? "Grade name" : "Cost center name"}>
+              <Input
                 value={form.name ?? ""}
                 onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
                 placeholder={activeTab === "grades" ? "e.g. Senior Officer" : "e.g. Operations"}
               />
-            </label>
+            </FormField>
             {activeTab === "grades" ? (
-              <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Rank (optional)</span>
-                <input
+              <FormField label="Rank (optional)" hint="Lower numbers are usually more junior.">
+                <Input
                   type="number"
-                  className={inputClass}
                   value={form.level ?? ""}
                   onChange={(event) => setForm((current) => ({ ...current, level: event.target.value }))}
                   placeholder="e.g. 4"
                 />
-                <span className="text-xs text-muted-foreground">Lower numbers are usually more junior.</span>
-              </label>
+              </FormField>
             ) : (
               <>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Branch (optional)</span>
+                <FormField label="Branch (optional)">
                   <FluentSelect
                     ariaLabel="Branch"
                     placeholder="All branches"
@@ -416,9 +408,8 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
                       ...branches.map((row) => ({ value: String(rowId(row)), label: optionLabel(row) })),
                     ]}
                   />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Department (optional)</span>
+                </FormField>
+                <FormField label="Department (optional)">
                   <FluentSelect
                     ariaLabel="Department"
                     placeholder="All departments"
@@ -429,11 +420,10 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
                       ...departments.map((row) => ({ value: String(rowId(row)), label: optionLabel(row) })),
                     ]}
                   />
-                </label>
+                </FormField>
               </>
             )}
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">In use</span>
+            <FormField label="In use">
               <FluentSelect
                 ariaLabel="In use"
                 value={form.status ?? "active"}
@@ -443,9 +433,8 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
                   { value: "inactive", label: "No, keep it on file only" },
                 ]}
               />
-            </label>
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Notes (optional)</span>
+            </FormField>
+            <FormField label="Notes (optional)">
               <Textarea
                 className={textareaClass}
                 value={form.description ?? ""}
@@ -456,7 +445,7 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
                     : "Anything finance should remember about this cost center"
                 }
               />
-            </label>
+            </FormField>
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
           </div>
           <DialogFooter>

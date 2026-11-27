@@ -3,6 +3,7 @@
 import * as React from "react"
 import { InfoIcon, XIcon } from "lucide-react"
 
+import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 
 type HorizontalScrollContainerProps = React.ComponentProps<"div">
@@ -131,12 +132,9 @@ export function HorizontalScrollContainer({
                   Use your mouse wheel or trackpad over this table to scroll sideways.
                 </p>
                 <label className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                  <input
-                    type="checkbox"
-                    className="h-3.5 w-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900/20"
+                  <Checkbox
                     checked={dismissPermanently}
-                    onChange={(event) => {
-                      const checked = event.target.checked
+                    onCheckedChange={(checked) => {
                       setDismissPermanently(checked)
                       if (typeof window !== "undefined") {
                         if (checked) {

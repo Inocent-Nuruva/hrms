@@ -6,7 +6,11 @@ import { useRouter } from "next/navigation"
 import { AlertTriangle, ArrowLeft, Check, ExternalLink, Loader2, RefreshCw, Search, Send } from "lucide-react"
 
 import { Checkbox } from "@/components/ui/checkbox"
+import { DateInput } from "@/components/ui/date-input"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import { FormField } from "@/components/ui/form-field"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/fluent-toast-store"
 import {
   getEmployeeById,
@@ -54,7 +58,6 @@ import { useContractDialogs } from "./contract-dialogs"
 import { ClausesEditor } from "./contract-settings"
 import { CONTRACT_TYPE_LABELS, ContractStatusBadge, formatDate } from "./contract-ui"
 
-const input = "h-9 w-full rounded-md border border-border px-2.5 text-sm"
 const btn = "inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
 const AUTOSAVE_MS = 2000
 const PREVIEW_MS = 1000
@@ -78,12 +81,9 @@ function nameOf(row: AdminRecord | null | undefined) {
 
 function Field({ label, hint, error, children }: { label: string; hint?: React.ReactNode; error?: string; children: React.ReactNode }) {
   return (
-    <div className="grid gap-1 text-sm">
-      <span className="font-medium text-slate-700">{label}</span>
+    <FormField label={label} hint={hint} error={error}>
       {children}
-      {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
-      {error ? <span className="text-xs text-rose-600">{error}</span> : null}
-    </div>
+    </FormField>
   )
 }
 
@@ -116,8 +116,7 @@ function EmployeePicker({
   }, [search, token, activeOnly])
   return (
     <div className="relative">
-      <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-slate-400" />
-      <input className={cn(input, "pl-8")} placeholder={value || placeholder} value={search} onChange={(event) => setSearch(event.target.value)} aria-label={placeholder} />
+      <Input contentBefore={<Search className="size-4 text-slate-400" />} placeholder={value || placeholder} value={search} onChange={(event) => setSearch(event.target.value)} aria-label={placeholder} />
       {rows.length ? (
         <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-white shadow-md">
           {rows.map((row) => (
@@ -255,11 +254,11 @@ function CreateStep({ token, presetEmployeeId, fromContractId }: { token: string
       </Field>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Start date" error={errors.start_date} hint="Defaults to the hire date, or the day after the previous contract ends.">
-          <input type="date" className={input} value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+          <DateInput value={startDate} onValueChange={(value) => setStartDate(value)} />
         </Field>
         {needsEnd ? (
           <Field label={contractType === "SPECIFIC_TASK" ? "Expected end date" : "End date"} error={errors.end_date}>
-            <input type="date" className={input} value={endDate} min={startDate} onChange={(event) => setEndDate(event.target.value)} />
+            <DateInput value={endDate} min={startDate} onValueChange={(value) => setEndDate(value)} />
             {startDate ? (
               <span className="flex gap-1">
                 {[6, 12, 24].map((months) => (
@@ -336,11 +335,11 @@ function SourcedField({
       </div>
       {overridden ? (
         <>
-          <input className={input} type={inputType} value={override} onChange={(event) => onOverride(event.target.value)} aria-label={fieldLabel(field.key)} />
+          <Input type={inputType} value={override} onChange={(event) => onOverride(event.target.value)} aria-label={fieldLabel(field.key)} />
           <span className="w-fit rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-800">
             Differs from HR record: {field.automatic || "empty"}
           </span>
-          <input className={input} placeholder="Reason for this contract (required)" value={reason} onChange={(event) => onReason(event.target.value)} aria-label="Reason" />
+          <Input placeholder="Reason for this contract (required)" value={reason} onChange={(event) => onReason(event.target.value)} aria-label="Reason" />
         </>
       ) : (
         <span className={cn("text-sm", field.automatic ? "text-slate-900" : "text-amber-700")}>{field.automatic || "Not available in HR records"}</span>
@@ -395,7 +394,7 @@ function RefSelect({
           <span className="w-fit rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-800">
             Differs from HR record: {currentName || "not set"}
           </span>
-          <input className={input} placeholder="Reason for this contract (required)" value={reason} onChange={(event) => onReason(event.target.value)} aria-label={`${label} reason`} />
+          <Input placeholder="Reason for this contract (required)" value={reason} onChange={(event) => onReason(event.target.value)} aria-label={`${label} reason`} />
         </>
       ) : (
         <span className="text-xs text-muted-foreground">{hint ?? "Follows the employee's current assignment until the contract is sent."}</span>
@@ -797,11 +796,11 @@ function EditWizard({ token, contractId, initialStep }: { token: string; contrac
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Start date" error={errors.start_date}>
-              <input type="date" className={input} value={form.start_date} onChange={(event) => change("start_date", event.target.value)} />
+              <DateInput value={form.start_date} onValueChange={(value) => change("start_date", value)} />
             </Field>
             {form.contract_type !== "UNSPECIFIED" ? (
               <Field label="End date" error={errors.end_date}>
-                <input type="date" className={input} value={form.end_date} min={form.start_date} onChange={(event) => change("end_date", event.target.value)} />
+                <DateInput value={form.end_date} min={form.start_date} onValueChange={(value) => change("end_date", value)} />
                 <span className="flex gap-1">
                   {[6, 12, 24].map((months) => (
                     <button key={months} type="button" className="rounded border border-border px-2 py-0.5 text-xs hover:bg-slate-50" onClick={() => change("end_date", addMonths(form.start_date, months))}>
@@ -848,17 +847,17 @@ function EditWizard({ token, contractId, initialStep }: { token: string; contrac
                     use HR value
                   </button>
                 </span>
-                <input className={input} placeholder="Reason for this contract (required)" value={reasons.reporting_manager ?? ""} onChange={(event) => setReason("reporting_manager", event.target.value)} aria-label="Reports to reason" />
+                <Input placeholder="Reason for this contract (required)" value={reasons.reporting_manager ?? ""} onChange={(event) => setReason("reporting_manager", event.target.value)} aria-label="Reports to reason" />
               </>
             ) : (
               <span className="text-xs text-muted-foreground">Current: {field("reporting_manager")?.automatic || "not set"}</span>
             )}
           </div>
           <Field label="Place of recruitment" hint="Where the employee was recruited.">
-            <input className={input} value={form.place_of_recruitment} onChange={(event) => change("place_of_recruitment", event.target.value)} />
+            <Input value={form.place_of_recruitment} onChange={(event) => change("place_of_recruitment", event.target.value)} />
           </Field>
           <Field label="Job description" hint="Positions have no description in HRMS, so it is typed here.">
-            <textarea className="min-h-20 rounded-md border border-border px-2.5 py-1.5 text-sm" value={form.job_description} onChange={(event) => change("job_description", event.target.value)} />
+            <Textarea formatting={false} value={form.job_description} onChange={(event) => change("job_description", event.target.value)} />
           </Field>
         </section>
       ) : null}
@@ -871,7 +870,7 @@ function EditWizard({ token, contractId, initialStep }: { token: string; contrac
             {PAY_TOKENS.map((key) => sourced(key, key === "salary" || key === "probation_months" || key === "annual_leave_days" ? "number" : "text"))}
           </div>
           <Field label="Allowances and other benefits">
-            <textarea className="min-h-16 rounded-md border border-border px-2.5 py-1.5 text-sm" value={form.benefits} onChange={(event) => change("benefits", event.target.value)} />
+            <Textarea formatting={false} value={form.benefits} onChange={(event) => change("benefits", event.target.value)} />
           </Field>
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
             <dt className="text-muted-foreground">Notice period</dt>
@@ -957,7 +956,7 @@ function EditWizard({ token, contractId, initialStep }: { token: string; contrac
             <summary className="cursor-pointer font-medium">Advanced</summary>
             <div className="mt-2">
               <Field label="Document title">
-                <input className={input} value={form.title} onChange={(event) => change("title", event.target.value)} />
+                <Input value={form.title} onChange={(event) => change("title", event.target.value)} />
               </Field>
             </div>
           </details>

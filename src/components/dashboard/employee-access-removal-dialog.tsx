@@ -30,6 +30,7 @@ import { showSuccessAlert } from "@/lib/success-alert"
 import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { initialRemovalChoices } from "./employee-access-removal-defaults"
+import { Checkbox } from "@/components/ui/checkbox"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -534,16 +535,14 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
                       <li key={device.id}>
                         <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-slate-800">
                           <span className="min-w-0 truncate">{device.label}</span>
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 accent-[var(--primary)]"
+                          <Checkbox
                             checked={Boolean(choices.devices[device.id])}
-                            onChange={(event) =>
+                            onCheckedChange={(next) =>
                               setChoices((prev) => ({
                                 ...prev,
                                 devices: {
                                   ...prev.devices,
-                                  [device.id]: event.target.checked,
+                                  [device.id]: Boolean(next),
                                 },
                               }))
                             }
@@ -556,14 +555,12 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
                 {devices.length > 0 ? (
                   <label className="flex cursor-pointer items-center justify-between gap-3 border-t border-slate-100 pt-2 text-sm text-slate-700">
                     <span>Also disable fingerprints on selected devices</span>
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-[var(--primary)]"
+                    <Checkbox
                       checked={choices.disableFingerprintsOnSelectedDevices}
-                      onChange={(event) =>
+                      onCheckedChange={(next) =>
                         setChoices((prev) => ({
                           ...prev,
-                          disableFingerprintsOnSelectedDevices: event.target.checked,
+                          disableFingerprintsOnSelectedDevices: Boolean(next),
                         }))
                       }
                     />
@@ -583,16 +580,14 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
                       <li key={group.id}>
                         <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-slate-800">
                           <span className="min-w-0 truncate">{group.label}</span>
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 accent-[var(--primary)]"
+                          <Checkbox
                             checked={Boolean(choices.groups[group.id])}
-                            onChange={(event) =>
+                            onCheckedChange={(next) =>
                               setChoices((prev) => ({
                                 ...prev,
                                 groups: {
                                   ...prev.groups,
-                                  [group.id]: event.target.checked,
+                                  [group.id]: Boolean(next),
                                 },
                               }))
                             }
@@ -614,14 +609,12 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
                   </p>
                   <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-slate-800">
                     <span>End shift assignment(s) ({shifts.length})</span>
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-[var(--primary)]"
+                    <Checkbox
                       checked={choices.endShiftAssignments}
-                      onChange={(event) =>
+                      onCheckedChange={(next) =>
                         setChoices((prev) => ({
                           ...prev,
-                          endShiftAssignments: event.target.checked,
+                          endShiftAssignments: Boolean(next),
                         }))
                       }
                     />
@@ -635,16 +628,14 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
                 </p>
                 <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-slate-800">
                   <span>Archive employee profile</span>
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-[var(--primary)]"
+                  <Checkbox
                     checked={choices.archiveEmployee}
-                    onChange={(event) =>
+                    onCheckedChange={(next) =>
                       setChoices((prev) => ({
                         ...prev,
-                        archiveEmployee: event.target.checked,
-                        suspendEmployee: event.target.checked ? false : prev.suspendEmployee,
-                        terminateEmployee: event.target.checked ? false : prev.terminateEmployee,
+                        archiveEmployee: Boolean(next),
+                        suspendEmployee: Boolean(next) ? false : prev.suspendEmployee,
+                        terminateEmployee: Boolean(next) ? false : prev.terminateEmployee,
                       }))
                     }
                   />
@@ -660,34 +651,30 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
                 </p>
                 <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-slate-800">
                   <span>Suspend employee</span>
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-[var(--primary)]"
+                  <Checkbox
                     disabled={choices.archiveEmployee}
                     checked={choices.suspendEmployee}
-                    onChange={(event) =>
+                    onCheckedChange={(next) =>
                       setChoices((prev) => ({
                         ...prev,
-                        suspendEmployee: event.target.checked,
-                        archiveEmployee: event.target.checked ? false : prev.archiveEmployee,
-                        terminateEmployee: event.target.checked ? false : prev.terminateEmployee,
+                        suspendEmployee: Boolean(next),
+                        archiveEmployee: Boolean(next) ? false : prev.archiveEmployee,
+                        terminateEmployee: Boolean(next) ? false : prev.terminateEmployee,
                       }))
                     }
                   />
                 </label>
                 <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-slate-800">
                   <span>Terminate / exit employee</span>
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-[var(--primary)]"
+                  <Checkbox
                     disabled={choices.archiveEmployee}
                     checked={choices.terminateEmployee}
-                    onChange={(event) =>
+                    onCheckedChange={(next) =>
                       setChoices((prev) => ({
                         ...prev,
-                        terminateEmployee: event.target.checked,
-                        archiveEmployee: event.target.checked ? false : prev.archiveEmployee,
-                        suspendEmployee: event.target.checked ? false : prev.suspendEmployee,
+                        terminateEmployee: Boolean(next),
+                        archiveEmployee: Boolean(next) ? false : prev.archiveEmployee,
+                        suspendEmployee: Boolean(next) ? false : prev.suspendEmployee,
                       }))
                     }
                   />

@@ -107,6 +107,9 @@ import { DateTimeInput } from "@/components/ui/date-time-input";
 import { FluentSelect } from "@/components/ui/fluent-select";
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications";
 import { pageBleedClass } from "@/components/dashboard/talent-visuals";
+import { FileDropzone } from "@/components/ui/file-dropzone";
+import { FormField } from "@/components/ui/form-field";
+import { Input } from "@/components/ui/input";
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken";
 
@@ -2616,10 +2619,7 @@ export function OffboardingView() {
             </SheetHeader>
             <div className="grid gap-2 px-4 py-3">
               {canManage && !isEmployeeMode ? (
-                <label className="grid gap-0.5 text-[11px]">
-                  <span className="font-medium text-muted-foreground">
-                    Employee
-                  </span>
+                <FormField label="Employee">
                   <FluentSelect
                     ariaLabel="Employee"
                     value={requestForm.employee_id}
@@ -2645,7 +2645,7 @@ export function OffboardingView() {
                       }),
                     ]}
                   />
-                </label>
+                </FormField>
               ) : (
                 <div className="rounded-md border border-border/70 bg-muted/20 px-2.5 py-1.5 text-[11px]">
                   <p className="font-medium text-muted-foreground">Employee</p>
@@ -2658,10 +2658,7 @@ export function OffboardingView() {
               )}
 
               <div className="grid grid-cols-2 gap-2">
-                <label className="grid gap-0.5 text-[11px]">
-                  <span className="font-medium text-muted-foreground">
-                    Type
-                  </span>
+                <FormField label="Type">
                   <FluentSelect
                     ariaLabel="Type"
                     value={requestForm.offboarding_type}
@@ -2682,11 +2679,8 @@ export function OffboardingView() {
                       { value: "other", label: "Other" },
                     ]}
                   />
-                </label>
-                <label className="grid gap-0.5 text-[11px]">
-                  <span className="font-medium text-muted-foreground">
-                    Save mode
-                  </span>
+                </FormField>
+                <FormField label="Save mode">
                   <FluentSelect
                     ariaLabel="Save mode"
                     value={requestForm.submit}
@@ -2698,13 +2692,11 @@ export function OffboardingView() {
                       { value: "true", label: "Submit now" },
                     ]}
                   />
-                </label>
+                </FormField>
               </div>
 
-              <label className="grid gap-0.5 text-[11px]">
-                <span className="font-medium text-muted-foreground">Title</span>
-                <input
-                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+              <FormField label="Title">
+                <Input
                   placeholder="e.g. Resignation - IT Officer"
                   value={requestForm.title}
                   onChange={(event) =>
@@ -2714,13 +2706,10 @@ export function OffboardingView() {
                     }))
                   }
                 />
-              </label>
+              </FormField>
 
               <div className="grid grid-cols-2 gap-2">
-                <label className="grid gap-0.5 text-[11px]">
-                  <span className="font-medium text-muted-foreground">
-                    Notice date
-                  </span>
+                <FormField label="Notice date">
                   <DatePickerPresets
                     value={requestForm.notice_date}
                     onChange={(value) =>
@@ -2732,11 +2721,8 @@ export function OffboardingView() {
                     placeholder="Notice date"
                     className="h-8 text-xs"
                   />
-                </label>
-                <label className="grid gap-0.5 text-[11px]">
-                  <span className="font-medium text-muted-foreground">
-                    Last working date (optional)
-                  </span>
+                </FormField>
+                <FormField label="Last working date (optional)">
                   <DatePickerPresets
                     value={requestForm.last_working_date}
                     onChange={(value) =>
@@ -2748,7 +2734,7 @@ export function OffboardingView() {
                     placeholder="Use notice policy"
                     className="h-8 text-xs"
                   />
-                </label>
+                </FormField>
               </div>
               <p className="text-[11px] text-muted-foreground">
                 Leave blank to calculate it from the effective notice policy.
@@ -2756,10 +2742,7 @@ export function OffboardingView() {
 
               {canManage ? (
                 <>
-                  <label className="grid gap-0.5 text-[11px]">
-                    <span className="font-medium text-muted-foreground">
-                      Notice period
-                    </span>
+                  <FormField label="Notice period">
                     <FluentSelect
                       ariaLabel="Notice period"
                       value={requestForm.notice_period_waived}
@@ -2778,14 +2761,11 @@ export function OffboardingView() {
                         { value: "true", label: "Waive notice period" },
                       ]}
                     />
-                  </label>
+                  </FormField>
                   {requestForm.notice_period_waived === "true" ? (
-                    <label className="grid gap-0.5 text-[11px]">
-                      <span className="font-medium text-muted-foreground">
-                        Waiver reason (required)
-                      </span>
+                    <FormField label="Waiver reason (required)">
                       <Textarea
-                        className="min-h-14 rounded-md border border-input px-2 py-1.5 text-xs"
+                        className="min-h-14"
                         value={requestForm.notice_period_waiver_reason}
                         onChange={(event) =>
                           setRequestForm((prev) => ({
@@ -2794,7 +2774,7 @@ export function OffboardingView() {
                           }))
                         }
                       />
-                    </label>
+                    </FormField>
                   ) : null}
                 </>
               ) : null}
@@ -2810,10 +2790,7 @@ export function OffboardingView() {
                   </p>
                 </div>
               ) : (
-                <label className="grid gap-0.5 text-[11px]">
-                  <span className="font-medium text-muted-foreground">
-                    Workflow
-                  </span>
+                <FormField label="Workflow">
                   <FluentSelect
                     ariaLabel="Workflow"
                     value={requestForm.workflow_id}
@@ -2838,15 +2815,12 @@ export function OffboardingView() {
                       }),
                     ]}
                   />
-                </label>
+                </FormField>
               )}
 
-              <label className="grid gap-0.5 text-[11px]">
-                <span className="font-medium text-muted-foreground">
-                  Reason
-                </span>
+              <FormField label="Reason">
                 <Textarea
-                  className="min-h-14 rounded-md border border-input px-2 py-1.5 text-xs"
+                  className="min-h-14"
                   placeholder="Reason for leaving"
                   value={requestForm.reason}
                   onInput={autoResizeTextarea}
@@ -2857,14 +2831,11 @@ export function OffboardingView() {
                     }))
                   }
                 />
-              </label>
+              </FormField>
 
-              <label className="grid gap-0.5 text-[11px]">
-                <span className="font-medium text-muted-foreground">
-                  Description
-                </span>
+              <FormField label="Description">
                 <Textarea
-                  className="min-h-12 rounded-md border border-input px-2 py-1.5 text-xs"
+                  className="min-h-12"
                   placeholder="Optional notes"
                   value={requestForm.description}
                   onChange={(event) =>
@@ -2874,7 +2845,7 @@ export function OffboardingView() {
                     }))
                   }
                 />
-              </label>
+              </FormField>
             </div>
             <SheetFooter className="border-t border-border/60 px-4 py-2.5 sm:flex-row sm:justify-end">
               <Button
@@ -3503,10 +3474,8 @@ export function OffboardingView() {
               </SheetDescription>
             </SheetHeader>
             <div className="mt-4 grid gap-3 px-4 pb-4">
-              <label className="grid gap-1 text-xs">
-                <span className="font-medium text-muted-foreground">Name</span>
-                <input
-                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              <FormField label="Name">
+                <Input
                   placeholder="e.g. Standard employee exit"
                   value={workflowForm.name}
                   onChange={(event) =>
@@ -3516,13 +3485,10 @@ export function OffboardingView() {
                     }))
                   }
                 />
-              </label>
-              <label className="grid gap-1 text-xs">
-                <span className="font-medium text-muted-foreground">
-                  Description
-                </span>
+              </FormField>
+              <FormField label="Description">
                 <Textarea
-                  className="min-h-20 rounded-md border border-input px-3 py-2 text-sm"
+                  className="min-h-20"
                   placeholder="What this exit path covers"
                   value={workflowForm.description}
                   onChange={(event) =>
@@ -3532,12 +3498,9 @@ export function OffboardingView() {
                     }))
                   }
                 />
-              </label>
+              </FormField>
               <div className="grid grid-cols-2 gap-3">
-                <label className="grid gap-1 text-xs">
-                  <span className="font-medium text-muted-foreground">
-                    Status
-                  </span>
+                <FormField label="Status">
                   <FluentSelect
                     ariaLabel="Status"
                     value={workflowForm.status}
@@ -3549,11 +3512,8 @@ export function OffboardingView() {
                       { value: "inactive", label: "Inactive" },
                     ]}
                   />
-                </label>
-                <label className="grid gap-1 text-xs">
-                  <span className="font-medium text-muted-foreground">
-                    Default
-                  </span>
+                </FormField>
+                <FormField label="Default">
                   <FluentSelect
                     ariaLabel="Default"
                     value={workflowForm.is_default}
@@ -3568,7 +3528,7 @@ export function OffboardingView() {
                       { value: "true", label: "Yes" },
                     ]}
                   />
-                </label>
+                </FormField>
               </div>
             </div>
             <SheetFooter>
@@ -3602,14 +3562,10 @@ export function OffboardingView() {
             </DialogHeader>
             <div className="grid gap-3 py-2">
               <div className="grid grid-cols-2 gap-3">
-                <label className="grid gap-1 text-xs">
-                  <span className="font-medium text-muted-foreground">
-                    Level
-                  </span>
-                  <input
+                <FormField label="Level">
+                  <Input
                     type="number"
                     min={1}
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
                     value={stepForm.approval_level}
                     onChange={(event) =>
                       setStepForm((prev) => ({
@@ -3618,15 +3574,11 @@ export function OffboardingView() {
                       }))
                     }
                   />
-                </label>
-                <label className="grid gap-1 text-xs">
-                  <span className="font-medium text-muted-foreground">
-                    Duration (days)
-                  </span>
-                  <input
+                </FormField>
+                <FormField label="Duration (days)">
+                  <Input
                     type="number"
                     min={1}
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
                     value={stepForm.expected_duration_days}
                     onChange={(event) =>
                       setStepForm((prev) => ({
@@ -3635,14 +3587,10 @@ export function OffboardingView() {
                       }))
                     }
                   />
-                </label>
+                </FormField>
               </div>
-              <label className="grid gap-1 text-xs">
-                <span className="font-medium text-muted-foreground">
-                  Step name
-                </span>
-                <input
-                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              <FormField label="Step name">
+                <Input
                   placeholder="e.g. IT access revocation"
                   value={stepForm.step_name}
                   onChange={(event) =>
@@ -3652,13 +3600,9 @@ export function OffboardingView() {
                     }))
                   }
                 />
-              </label>
-              <label className="grid gap-1 text-xs">
-                <span className="font-medium text-muted-foreground">
-                  Task title
-                </span>
-                <input
-                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              </FormField>
+              <FormField label="Task title">
+                <Input
                   placeholder="What the assignee must do"
                   value={stepForm.task_title}
                   onChange={(event) =>
@@ -3668,13 +3612,10 @@ export function OffboardingView() {
                     }))
                   }
                 />
-              </label>
-              <label className="grid gap-1 text-xs">
-                <span className="font-medium text-muted-foreground">
-                  Task description
-                </span>
+              </FormField>
+              <FormField label="Task description">
                 <Textarea
-                  className="min-h-20 rounded-md border border-input px-3 py-2 text-sm"
+                  className="min-h-20"
                   placeholder="Optional details"
                   value={stepForm.task_description}
                   onChange={(event) =>
@@ -3684,12 +3625,9 @@ export function OffboardingView() {
                     }))
                   }
                 />
-              </label>
+              </FormField>
               <div className="grid grid-cols-2 gap-3">
-                <label className="grid gap-1 text-xs">
-                  <span className="font-medium text-muted-foreground">
-                    Team / type
-                  </span>
+                <FormField label="Team / type">
                   <FluentSelect
                     ariaLabel="Team / type"
                     value={stepForm.task_type}
@@ -3704,11 +3642,8 @@ export function OffboardingView() {
                       { value: "other", label: "Other" },
                     ]}
                   />
-                </label>
-                <label className="grid gap-1 text-xs">
-                  <span className="font-medium text-muted-foreground">
-                    Action
-                  </span>
+                </FormField>
+                <FormField label="Action">
                   <FluentSelect
                     ariaLabel="Action"
                     value={stepForm.action_type}
@@ -3722,7 +3657,7 @@ export function OffboardingView() {
                       { value: "complete", label: "Complete" },
                     ]}
                   />
-                </label>
+                </FormField>
               </div>
               <FluentSelect
                 label="Assign step to"
@@ -3772,10 +3707,7 @@ export function OffboardingView() {
                   }),
                 )}
               />
-              <label className="grid gap-1 text-xs">
-                <span className="font-medium text-muted-foreground">
-                  Required?
-                </span>
+              <FormField label="Required?">
                 <FluentSelect
                   ariaLabel="Required?"
                   value={stepForm.is_required}
@@ -3787,7 +3719,7 @@ export function OffboardingView() {
                     { value: "false", label: "Optional" },
                   ]}
                 />
-              </label>
+              </FormField>
             </div>
             <DialogFooter>
               <Button
@@ -3911,12 +3843,8 @@ export function OffboardingView() {
 
                   {showDocumentComposer ? (
                     <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3">
-                      <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">
-                          Title
-                        </span>
-                        <input
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      <FormField label="Title">
+                        <Input
                           value={documentForm.title}
                           onChange={(event) =>
                             setDocumentForm((prev) => ({
@@ -3926,13 +3854,9 @@ export function OffboardingView() {
                           }
                           placeholder="Document title"
                         />
-                      </label>
-                      <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">
-                          Document type
-                        </span>
-                        <input
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      </FormField>
+                      <FormField label="Document type">
+                        <Input
                           value={documentForm.document_type}
                           onChange={(event) =>
                             setDocumentForm((prev) => ({
@@ -3942,11 +3866,8 @@ export function OffboardingView() {
                           }
                           placeholder="e.g. clearance_form"
                         />
-                      </label>
-                      <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">
-                          Expiry date
-                        </span>
+                      </FormField>
+                      <FormField label="Expiry date">
                         <DatePickerPresets
                           value={documentForm.expiry_date}
                           onChange={(value) =>
@@ -3958,27 +3879,16 @@ export function OffboardingView() {
                           placeholder="Expiry date"
                           className="h-8 text-xs"
                         />
-                      </label>
-                      <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">
-                          File
-                        </span>
-                        <input
-                          type="file"
-                          className="block h-8 rounded-md border border-input bg-background px-2 py-1 text-xs file:mr-2 file:border-0 file:bg-transparent file:text-xs"
-                          onChange={(event) =>
-                            setDocumentUploadFile(
-                              event.target.files?.[0] ?? null,
-                            )
-                          }
+                      </FormField>
+                      <FormField label="File">
+                        <FileDropzone
+                          file={documentUploadFile}
+                          onFileChange={(file) => setDocumentUploadFile(file)}
                         />
-                      </label>
-                      <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">
-                          Description
-                        </span>
+                      </FormField>
+                      <FormField label="Description">
                         <Textarea
-                          className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
+                          className="min-h-20"
                           value={documentForm.description}
                           onChange={(event) =>
                             setDocumentForm((prev) => ({
@@ -3988,7 +3898,7 @@ export function OffboardingView() {
                           }
                           placeholder="Optional document notes"
                         />
-                      </label>
+                      </FormField>
                       <div className="flex justify-end gap-2">
                         <Button
                           type="button"
@@ -4148,12 +4058,8 @@ export function OffboardingView() {
 
                   {showTaskComposer ? (
                     <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3">
-                      <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">
-                          Title
-                        </span>
-                        <input
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      <FormField label="Title">
+                        <Input
                           value={taskForm.title}
                           onChange={(event) =>
                             setTaskForm((prev) => ({
@@ -4163,12 +4069,9 @@ export function OffboardingView() {
                           }
                           placeholder="Task title"
                         />
-                      </label>
+                      </FormField>
                       <div className="grid gap-2 md:grid-cols-2">
-                        <label className="grid gap-1 text-xs">
-                          <span className="font-medium text-muted-foreground">
-                            Task type
-                          </span>
+                        <FormField label="Task type">
                           <FluentSelect
                             ariaLabel="Task type"
                             value={taskForm.task_type}
@@ -4185,11 +4088,8 @@ export function OffboardingView() {
                               }),
                             )}
                           />
-                        </label>
-                        <label className="grid gap-1 text-xs">
-                          <span className="font-medium text-muted-foreground">
-                            Priority
-                          </span>
+                        </FormField>
+                        <FormField label="Priority">
                           <FluentSelect
                             ariaLabel="Priority"
                             value={taskForm.priority}
@@ -4206,12 +4106,9 @@ export function OffboardingView() {
                               }),
                             )}
                           />
-                        </label>
+                        </FormField>
                       </div>
-                      <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">
-                          Assigned user
-                        </span>
+                      <FormField label="Assigned user">
                         <FluentSelect
                           ariaLabel="Assigned user"
                           value={taskForm.assigned_to_company_user_id}
@@ -4230,11 +4127,8 @@ export function OffboardingView() {
                             })),
                           ]}
                         />
-                      </label>
-                      <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">
-                          Due date
-                        </span>
+                      </FormField>
+                      <FormField label="Due date">
                         <DateTimeInput
                           aria-label="Task due date"
                           value={taskForm.due_date}
@@ -4245,13 +4139,10 @@ export function OffboardingView() {
                             }))
                           }
                         />
-                      </label>
-                      <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">
-                          Description
-                        </span>
+                      </FormField>
+                      <FormField label="Description">
                         <Textarea
-                          className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
+                          className="min-h-20"
                           value={taskForm.description}
                           onChange={(event) =>
                             setTaskForm((prev) => ({
@@ -4261,7 +4152,7 @@ export function OffboardingView() {
                           }
                           placeholder="Optional instructions"
                         />
-                      </label>
+                      </FormField>
                       <div className="flex justify-end gap-2">
                         <Button
                           type="button"
@@ -4472,10 +4363,7 @@ export function OffboardingView() {
 
                   {showClearanceComposer ? (
                     <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3">
-                      <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">
-                          Clearance type
-                        </span>
+                      <FormField label="Clearance type">
                         <FluentSelect
                           ariaLabel="Clearance type"
                           value={clearanceForm.clearance_type}
@@ -4492,12 +4380,9 @@ export function OffboardingView() {
                             }),
                           )}
                         />
-                      </label>
+                      </FormField>
                       <div className="grid gap-2 md:grid-cols-2">
-                        <label className="grid gap-1 text-xs">
-                          <span className="font-medium text-muted-foreground">
-                            Initial status
-                          </span>
+                        <FormField label="Initial status">
                           <FluentSelect
                             ariaLabel="Initial status"
                             value={clearanceForm.status}
@@ -4513,11 +4398,8 @@ export function OffboardingView() {
                               { value: "not_cleared", label: "Not cleared" },
                             ]}
                           />
-                        </label>
-                        <label className="grid gap-1 text-xs">
-                          <span className="font-medium text-muted-foreground">
-                            Owner
-                          </span>
+                        </FormField>
+                        <FormField label="Owner">
                           <FluentSelect
                             ariaLabel="Owner"
                             value={clearanceForm.owner_company_user_id}
@@ -4536,12 +4418,9 @@ export function OffboardingView() {
                               })),
                             ]}
                           />
-                        </label>
+                        </FormField>
                       </div>
-                      <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">
-                          Due date
-                        </span>
+                      <FormField label="Due date">
                         <DateTimeInput
                           aria-label="Clearance due date"
                           value={clearanceForm.due_date}
@@ -4552,13 +4431,10 @@ export function OffboardingView() {
                             }))
                           }
                         />
-                      </label>
-                      <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">
-                          Remarks
-                        </span>
+                      </FormField>
+                      <FormField label="Remarks">
                         <Textarea
-                          className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
+                          className="min-h-20"
                           value={clearanceForm.remarks}
                           onChange={(event) =>
                             setClearanceForm((prev) => ({
@@ -4568,7 +4444,7 @@ export function OffboardingView() {
                           }
                           placeholder="Optional instructions"
                         />
-                      </label>
+                      </FormField>
                       <div className="flex justify-end gap-2">
                         <Button
                           type="button"
@@ -4959,10 +4835,7 @@ export function OffboardingView() {
 
                   <div className="grid gap-2 text-xs">
                     <div className="grid gap-2 md:grid-cols-2">
-                      <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">
-                          Status
-                        </span>
+                      <FormField label="Status">
                         <FluentSelect
                           ariaLabel="Status"
                           value={exitInterviewForm.status}
@@ -4980,11 +4853,8 @@ export function OffboardingView() {
                             }),
                           )}
                         />
-                      </label>
-                      <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">
-                          Knowledge transfer
-                        </span>
+                      </FormField>
+                      <FormField label="Knowledge transfer">
                         <FluentSelect
                           ariaLabel="Knowledge transfer"
                           value={exitInterviewForm.knowledge_transfer_status}
@@ -5002,14 +4872,10 @@ export function OffboardingView() {
                             }),
                           )}
                         />
-                      </label>
+                      </FormField>
                     </div>
-                    <label className="grid gap-1">
-                      <span className="font-medium text-muted-foreground">
-                        Exit reason category
-                      </span>
-                      <input
-                        className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                    <FormField label="Exit reason category">
+                      <Input
                         value={exitInterviewForm.exit_reason_category}
                         disabled={!canManage && !canActOnSelected}
                         onChange={(event) =>
@@ -5020,11 +4886,8 @@ export function OffboardingView() {
                         }
                         placeholder="Optional category"
                       />
-                    </label>
-                    <label className="grid gap-1">
-                      <span className="font-medium text-muted-foreground">
-                        Rehire eligible
-                      </span>
+                    </FormField>
+                    <FormField label="Rehire eligible">
                       <FluentSelect
                         ariaLabel="Rehire eligible"
                         value={exitInterviewForm.rehire_eligible}
@@ -5041,13 +4904,10 @@ export function OffboardingView() {
                           { value: "false", label: "No" },
                         ]}
                       />
-                    </label>
-                    <label className="grid gap-1">
-                      <span className="font-medium text-muted-foreground">
-                        Employee feedback
-                      </span>
+                    </FormField>
+                    <FormField label="Employee feedback">
                       <Textarea
-                        className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
+                        className="min-h-20"
                         value={exitInterviewForm.employee_feedback}
                         disabled={!canManage && !canActOnSelected}
                         onChange={(event) =>
@@ -5057,13 +4917,10 @@ export function OffboardingView() {
                           }))
                         }
                       />
-                    </label>
-                    <label className="grid gap-1">
-                      <span className="font-medium text-muted-foreground">
-                        Manager feedback
-                      </span>
+                    </FormField>
+                    <FormField label="Manager feedback">
                       <Textarea
-                        className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
+                        className="min-h-20"
                         value={exitInterviewForm.manager_feedback}
                         disabled={!canManage && !canActOnSelected}
                         onChange={(event) =>
@@ -5073,13 +4930,10 @@ export function OffboardingView() {
                           }))
                         }
                       />
-                    </label>
-                    <label className="grid gap-1">
-                      <span className="font-medium text-muted-foreground">
-                        Handover notes
-                      </span>
+                    </FormField>
+                    <FormField label="Handover notes">
                       <Textarea
-                        className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
+                        className="min-h-20"
                         value={exitInterviewForm.handover_notes}
                         disabled={!canManage && !canActOnSelected}
                         onChange={(event) =>
@@ -5089,13 +4943,10 @@ export function OffboardingView() {
                           }))
                         }
                       />
-                    </label>
-                    <label className="grid gap-1">
-                      <span className="font-medium text-muted-foreground">
-                        Final notes
-                      </span>
+                    </FormField>
+                    <FormField label="Final notes">
                       <Textarea
-                        className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
+                        className="min-h-20"
                         value={exitInterviewForm.final_notes}
                         disabled={!canManage && !canActOnSelected}
                         onChange={(event) =>
@@ -5105,7 +4956,7 @@ export function OffboardingView() {
                           }))
                         }
                       />
-                    </label>
+                    </FormField>
                   </div>
                 </div>
 
@@ -5138,10 +4989,7 @@ export function OffboardingView() {
                   {showActionComposer ? (
                     <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3 text-xs">
                       <div className="grid gap-2 md:grid-cols-2">
-                        <label className="grid gap-1">
-                          <span className="font-medium text-muted-foreground">
-                            Action type
-                          </span>
+                        <FormField label="Action type">
                           <FluentSelect
                             ariaLabel="Action type"
                             value={actionForm.action_type}
@@ -5158,11 +5006,8 @@ export function OffboardingView() {
                               }),
                             )}
                           />
-                        </label>
-                        <label className="grid gap-1">
-                          <span className="font-medium text-muted-foreground">
-                            Status
-                          </span>
+                        </FormField>
+                        <FormField label="Status">
                           <FluentSelect
                             ariaLabel="Status"
                             value={actionForm.status}
@@ -5179,14 +5024,10 @@ export function OffboardingView() {
                               }),
                             )}
                           />
-                        </label>
+                        </FormField>
                       </div>
-                      <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">
-                          System name
-                        </span>
-                        <input
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      <FormField label="System name">
+                        <Input
                           value={actionForm.system_name}
                           onChange={(event) =>
                             setActionForm((prev) => ({
@@ -5196,11 +5037,8 @@ export function OffboardingView() {
                           }
                           placeholder="e.g. Microsoft 365"
                         />
-                      </label>
-                      <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">
-                          Owner
-                        </span>
+                      </FormField>
+                      <FormField label="Owner">
                         <FluentSelect
                           ariaLabel="Owner"
                           value={actionForm.owner_company_user_id}
@@ -5219,11 +5057,8 @@ export function OffboardingView() {
                             })),
                           ]}
                         />
-                      </label>
-                      <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">
-                          Due date
-                        </span>
+                      </FormField>
+                      <FormField label="Due date">
                         <DateTimeInput
                           aria-label="Action due date"
                           value={actionForm.due_date}
@@ -5234,13 +5069,10 @@ export function OffboardingView() {
                             }))
                           }
                         />
-                      </label>
-                      <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">
-                          Notes
-                        </span>
+                      </FormField>
+                      <FormField label="Notes">
                         <Textarea
-                          className="min-h-16 rounded-md border border-input px-2 py-1.5 text-xs"
+                          className="min-h-16"
                           value={actionForm.notes}
                           onChange={(event) =>
                             setActionForm((prev) => ({
@@ -5249,7 +5081,7 @@ export function OffboardingView() {
                             }))
                           }
                         />
-                      </label>
+                      </FormField>
                       <div className="flex justify-end gap-2">
                         <Button
                           type="button"
@@ -5380,10 +5212,7 @@ export function OffboardingView() {
                   {showAssetComposer ? (
                     <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3 text-xs">
                       <div className="grid gap-2 md:grid-cols-2">
-                        <label className="grid gap-1">
-                          <span className="font-medium text-muted-foreground">
-                            Asset type
-                          </span>
+                        <FormField label="Asset type">
                           <FluentSelect
                             ariaLabel="Asset type"
                             value={assetForm.asset_type}
@@ -5400,11 +5229,8 @@ export function OffboardingView() {
                               }),
                             )}
                           />
-                        </label>
-                        <label className="grid gap-1">
-                          <span className="font-medium text-muted-foreground">
-                            Status
-                          </span>
+                        </FormField>
+                        <FormField label="Status">
                           <FluentSelect
                             ariaLabel="Status"
                             value={assetForm.status}
@@ -5421,14 +5247,10 @@ export function OffboardingView() {
                               }),
                             )}
                           />
-                        </label>
+                        </FormField>
                       </div>
-                      <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">
-                          Asset label
-                        </span>
-                        <input
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      <FormField label="Asset label">
+                        <Input
                           value={assetForm.asset_label}
                           onChange={(event) =>
                             setAssetForm((prev) => ({
@@ -5438,13 +5260,9 @@ export function OffboardingView() {
                           }
                           placeholder="e.g. Dell Latitude 5440"
                         />
-                      </label>
-                      <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">
-                          Asset identifier
-                        </span>
-                        <input
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      </FormField>
+                      <FormField label="Asset identifier">
+                        <Input
                           value={assetForm.asset_identifier}
                           onChange={(event) =>
                             setAssetForm((prev) => ({
@@ -5454,11 +5272,8 @@ export function OffboardingView() {
                           }
                           placeholder="Serial / tag"
                         />
-                      </label>
-                      <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">
-                          Owner
-                        </span>
+                      </FormField>
+                      <FormField label="Owner">
                         <FluentSelect
                           ariaLabel="Owner"
                           value={assetForm.owner_company_user_id}
@@ -5477,11 +5292,8 @@ export function OffboardingView() {
                             })),
                           ]}
                         />
-                      </label>
-                      <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">
-                          Due date
-                        </span>
+                      </FormField>
+                      <FormField label="Due date">
                         <DateTimeInput
                           aria-label="Asset due date"
                           value={assetForm.due_date}
@@ -5492,13 +5304,10 @@ export function OffboardingView() {
                             }))
                           }
                         />
-                      </label>
-                      <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">
-                          Remarks
-                        </span>
+                      </FormField>
+                      <FormField label="Remarks">
                         <Textarea
-                          className="min-h-16 rounded-md border border-input px-2 py-1.5 text-xs"
+                          className="min-h-16"
                           value={assetForm.remarks}
                           onChange={(event) =>
                             setAssetForm((prev) => ({
@@ -5507,7 +5316,7 @@ export function OffboardingView() {
                             }))
                           }
                         />
-                      </label>
+                      </FormField>
                       <div className="flex justify-end gap-2">
                         <Button
                           type="button"
@@ -5634,10 +5443,7 @@ export function OffboardingView() {
                   {showSettlementComposer ? (
                     <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3 text-xs">
                       <div className="grid gap-2 md:grid-cols-2">
-                        <label className="grid gap-1">
-                          <span className="font-medium text-muted-foreground">
-                            Item type
-                          </span>
+                        <FormField label="Item type">
                           <FluentSelect
                             ariaLabel="Item type"
                             value={settlementForm.item_type}
@@ -5654,11 +5460,8 @@ export function OffboardingView() {
                               }),
                             )}
                           />
-                        </label>
-                        <label className="grid gap-1">
-                          <span className="font-medium text-muted-foreground">
-                            Status
-                          </span>
+                        </FormField>
+                        <FormField label="Status">
                           <FluentSelect
                             ariaLabel="Status"
                             value={settlementForm.status}
@@ -5675,14 +5478,10 @@ export function OffboardingView() {
                               }),
                             )}
                           />
-                        </label>
+                        </FormField>
                       </div>
-                      <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">
-                          Title
-                        </span>
-                        <input
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      <FormField label="Title">
+                        <Input
                           value={settlementForm.title}
                           onChange={(event) =>
                             setSettlementForm((prev) => ({
@@ -5692,14 +5491,10 @@ export function OffboardingView() {
                           }
                           placeholder="e.g. Leave encashment"
                         />
-                      </label>
+                      </FormField>
                       <div className="grid gap-2 md:grid-cols-2">
-                        <label className="grid gap-1">
-                          <span className="font-medium text-muted-foreground">
-                            Amount
-                          </span>
-                          <input
-                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        <FormField label="Amount">
+                          <Input
                             value={settlementForm.amount}
                             onChange={(event) =>
                               setSettlementForm((prev) => ({
@@ -5709,13 +5504,9 @@ export function OffboardingView() {
                             }
                             placeholder="Optional"
                           />
-                        </label>
-                        <label className="grid gap-1">
-                          <span className="font-medium text-muted-foreground">
-                            Currency
-                          </span>
-                          <input
-                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        </FormField>
+                        <FormField label="Currency">
+                          <Input
                             value={settlementForm.currency}
                             onChange={(event) =>
                               setSettlementForm((prev) => ({
@@ -5724,12 +5515,9 @@ export function OffboardingView() {
                               }))
                             }
                           />
-                        </label>
+                        </FormField>
                       </div>
-                      <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">
-                          Owner
-                        </span>
+                      <FormField label="Owner">
                         <FluentSelect
                           ariaLabel="Owner"
                           value={settlementForm.owner_company_user_id}
@@ -5748,11 +5536,8 @@ export function OffboardingView() {
                             })),
                           ]}
                         />
-                      </label>
-                      <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">
-                          Due date
-                        </span>
+                      </FormField>
+                      <FormField label="Due date">
                         <DateTimeInput
                           aria-label="Settlement due date"
                           value={settlementForm.due_date}
@@ -5763,13 +5548,10 @@ export function OffboardingView() {
                             }))
                           }
                         />
-                      </label>
-                      <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">
-                          Remarks
-                        </span>
+                      </FormField>
+                      <FormField label="Remarks">
                         <Textarea
-                          className="min-h-16 rounded-md border border-input px-2 py-1.5 text-xs"
+                          className="min-h-16"
                           value={settlementForm.remarks}
                           onChange={(event) =>
                             setSettlementForm((prev) => ({
@@ -5778,7 +5560,7 @@ export function OffboardingView() {
                             }))
                           }
                         />
-                      </label>
+                      </FormField>
                       <div className="flex justify-end gap-2">
                         <Button
                           type="button"

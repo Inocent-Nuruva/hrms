@@ -7,6 +7,7 @@ import { HeadphonesIcon, SendIcon, XIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { cn } from "@/lib/utils"
@@ -332,8 +333,9 @@ export function SupportChatWidget() {
           </div>
           <div className="space-y-2 border-t border-border p-3">
             <div className="flex gap-2">
-              <input
-                className="h-10 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background"
+              <Input
+                className="min-w-0 flex-1"
+                aria-label="Message"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {

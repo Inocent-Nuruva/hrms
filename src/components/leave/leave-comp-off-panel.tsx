@@ -4,6 +4,8 @@ import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { FluentSelect } from "@/components/ui/fluent-select"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   approveCompOffPolicy,
   decideCompOff,
@@ -213,32 +215,23 @@ function SelfView({ token }: { token: string }) {
       {enabled.length ? (
         eligibility.convertible_overtime.length ? (
           <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
-            <select
-              className="h-9 rounded-md border border-border bg-background px-2 text-sm"
-              aria-label="Comp-off leave type"
+            <FluentSelect
+              ariaLabel="Comp-off leave type"
+              placeholder="Leave type…"
               value={typeId}
-              onChange={(e) => setTypeId(e.target.value)}
-            >
-              <option value="">Leave type…</option>
-              {enabled.map((t) => (
-                <option key={String(t.id)} value={String(t.id)}>
-                  {text(t.name)}
-                </option>
-              ))}
-            </select>
-            <select
-              className="h-9 rounded-md border border-border bg-background px-2 text-sm"
-              aria-label="Approved overtime"
+              onChange={setTypeId}
+              options={enabled.map((t) => ({ value: String(t.id), label: text(t.name) }))}
+            />
+            <FluentSelect
+              ariaLabel="Approved overtime"
+              placeholder="Approved overtime…"
               value={overtimeId}
-              onChange={(e) => setOvertimeId(e.target.value)}
-            >
-              <option value="">Approved overtime…</option>
-              {eligibility.convertible_overtime.map((o) => (
-                <option key={String(o.id)} value={String(o.id)}>
-                  {text(o.work_date)} · {(Number(o.requested_minutes) / 60).toFixed(2)} h
-                </option>
-              ))}
-            </select>
+              onChange={setOvertimeId}
+              options={eligibility.convertible_overtime.map((o) => ({
+                value: String(o.id),
+                label: `${text(o.work_date)} · ${(Number(o.requested_minutes) / 60).toFixed(2)} h`,
+              }))}
+            />
             <Button disabled={busy} onClick={() => void submit()}>
               Request
             </Button>
@@ -406,23 +399,18 @@ function HrView({ token, canManagePolicy }: { token: string; canManagePolicy: bo
         )}
         {canManagePolicy ? (
           <div className="grid gap-2 sm:grid-cols-6">
-            <select
-              className="h-9 rounded-md border border-border bg-background px-2 text-sm sm:col-span-2"
-              aria-label="Policy leave type"
+            <FluentSelect
+              className="sm:col-span-2"
+              ariaLabel="Policy leave type"
+              placeholder="Leave type with comp-off switched on…"
               value={form.leave_type_id}
-              onChange={(e) => setForm({ ...form, leave_type_id: e.target.value })}
-            >
-              <option value="">Leave type with comp-off switched on…</option>
-              {types.map((t) => (
-                <option key={String(t.id)} value={String(t.id)}>
-                  {text(t.name)}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => setForm({ ...form, leave_type_id: value })}
+              options={types.map((t) => ({ value: String(t.id), label: text(t.name) }))}
+            />
             <Input aria-label="Hours per day" inputMode="decimal" placeholder="Hours = 1 day" value={form.hours_per_day} onChange={(e) => setForm({ ...form, hours_per_day: e.target.value })} />
             <Input aria-label="Expiry days" inputMode="numeric" placeholder="Expiry (days)" value={form.expiry_days} onChange={(e) => setForm({ ...form, expiry_days: e.target.value })} />
             <label className="flex items-center gap-1 text-xs">
-              <input type="checkbox" checked={form.requires_approval} onChange={(e) => setForm({ ...form, requires_approval: e.target.checked })} />
+              <Checkbox checked={form.requires_approval} onCheckedChange={(checked) => setForm({ ...form, requires_approval: checked })} />
               Needs approval
             </label>
             <Button

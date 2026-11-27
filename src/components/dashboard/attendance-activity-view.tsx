@@ -1,5 +1,8 @@
 "use client"
 
+import { Input } from "@/components/ui/input"
+import { FileDropzone } from "@/components/ui/file-dropzone"
+import { FormField } from "@/components/ui/form-field"
 import { AttendanceTodayPanel } from "@/components/dashboard/dashboard-attendance-actions"
 import { AttendanceCleanupSettingsPanel } from "@/components/dashboard/attendance-cleanup-settings"
 import type { AttendanceDailySummaryStatusCounts } from "@/lib/admin-api"
@@ -19,7 +22,6 @@ import * as React from "react"
 import {
   Button,
   Field,
-  Input,
   Skeleton,
   SkeletonItem,
   Tab,
@@ -4495,13 +4497,13 @@ export function AttendanceActivityView({ section }: { section: string }) {
             </label>
             <label className={dailySummaryFilterLabelClass}>
               <span>Employee name or number</span>
-              <input
+              <Input
                 type="text"
                 value={recordSearch}
                 onChange={(event) => setRecordSearch(event.target.value)}
                 placeholder="e.g. Amina or AIC-EMP-1001"
                 aria-label="Employee name or employee number"
-                className="w-full min-w-0 rounded border border-border bg-background text-foreground"
+                className="w-full min-w-0"
               />
             </label>
             <label className={dailySummaryFilterLabelClass}>
@@ -4717,8 +4719,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
             </label>
             <label className={`${dailySummaryFilterLabelClass} col-span-2`}>
               <span>Search name or number</span>
-              <input
-                className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+              <Input
                 value={processingExceptionFilters.search}
                 onChange={(event) =>
                   setProcessingExceptionFilters((current) => ({ ...current, search: event.target.value }))
@@ -4812,7 +4813,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
   const refreshButton = (
     <Button
       appearance="subtle"
-      className="!h-8 !min-h-8 !min-w-8"
+      className="!min-h-8 !min-w-8"
       type="button"
       disabled={loading}
       aria-label="Refresh"
@@ -6249,21 +6250,15 @@ export function AttendanceActivityView({ section }: { section: string }) {
                 placeholder="Explain what should be corrected if a reason is required by your attendance policy."
               />
             </label>
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-medium text-slate-700">Supporting evidence</span>
-              <input
-                type="file"
+            <FormField label="Supporting evidence">
+              <FileDropzone
+                file={correctionEvidenceFile}
+                onFileChange={(file) => setCorrectionEvidenceFile(file)}
                 accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.txt"
                 disabled={correctionBusy}
-                onChange={(event) => setCorrectionEvidenceFile(event.target.files?.[0] ?? null)}
-                className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1.5"
+                hint="Attach a document if your attendance policy requires supporting evidence. Maximum 10 MB."
               />
-              <span className="text-xs text-muted-foreground">
-                {correctionEvidenceFile
-                  ? `${correctionEvidenceFile.name} selected`
-                  : "Attach a document if your attendance policy requires supporting evidence. Maximum 10 MB."}
-              </span>
-            </label>
+            </FormField>
           </div>
           <DialogFooter className="sticky bottom-0 z-10 mt-auto border-t border-border bg-background py-3">
             <Button
@@ -6441,8 +6436,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium text-slate-700">Break minutes</span>
-                <input
-                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                <Input
                   inputMode="numeric"
                   value={adjustmentForm.break_minutes}
                   onChange={(event) =>
@@ -6452,8 +6446,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium text-slate-700">Worked minutes</span>
-                <input
-                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                <Input
                   inputMode="numeric"
                   value={adjustmentForm.worked_minutes}
                   onChange={(event) =>
@@ -6463,8 +6456,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium text-slate-700">Late minutes</span>
-                <input
-                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                <Input
                   inputMode="numeric"
                   value={adjustmentForm.late_minutes}
                   onChange={(event) =>
@@ -6474,8 +6466,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium text-slate-700">Early departure minutes</span>
-                <input
-                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                <Input
                   inputMode="numeric"
                   value={adjustmentForm.early_departure_minutes}
                   onChange={(event) =>
@@ -6488,8 +6479,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium text-slate-700">Overtime minutes</span>
-                <input
-                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                <Input
                   inputMode="numeric"
                   value={adjustmentForm.overtime_minutes}
                   onChange={(event) =>

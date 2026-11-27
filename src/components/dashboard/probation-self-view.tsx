@@ -3,6 +3,8 @@
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { Textarea } from "@/components/ui/textarea"
+import { FormField } from "@/components/ui/form-field"
+import { Input } from "@/components/ui/input"
 import { RefreshCwIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 
@@ -19,7 +21,6 @@ import {
   asRecordArray,
   formatDate,
   heroActionButtonClass,
-  inputClass,
   optionLabel,
   prettify,
   primaryButtonClass,
@@ -322,8 +323,9 @@ export function ProbationSelfView() {
                     <p className="text-sm font-medium">
                       {item.name}{item.required ? <span className="text-rose-600"> *</span> : <span className="ml-1 text-xs text-muted-foreground">Optional</span>}
                     </p>
-                    <input
-                      className={`${textareaClass} mt-2 min-h-16`}
+                    <Input
+                      className="mt-2"
+                      aria-label={`${item.name} comment`}
                       value={item.comment}
                       placeholder="Comment"
                       onChange={(event) =>
@@ -335,10 +337,9 @@ export function ProbationSelfView() {
                       }
                     />
                   </div>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Rating</span>
-                    <input
-                      className={inputClass}
+                  <FormField label="Rating">
+                    <Input
+                      aria-label={`${item.name} rating`}
                       type="number"
                       min={0}
                       max={item.maximumRating}
@@ -352,15 +353,16 @@ export function ProbationSelfView() {
                         )
                       }
                     />
-                  </label>
+                  </FormField>
                 </div>
               ))}
               {objectives.map((item, index) => (
                 <div key={item.id || index} className="grid gap-2 rounded-xl border border-border p-3 md:grid-cols-[minmax(0,1fr)_120px]">
                   <div>
                     <p className="text-sm font-medium">{item.title}</p>
-                    <input
-                      className={`${textareaClass} mt-2 min-h-16`}
+                    <Input
+                      className="mt-2"
+                      aria-label={`${item.title} progress comment`}
                       value={item.comment}
                       placeholder="Progress comment"
                       onChange={(event) =>
@@ -372,10 +374,9 @@ export function ProbationSelfView() {
                       }
                     />
                   </div>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">% complete</span>
-                    <input
-                      className={inputClass}
+                  <FormField label="% complete">
+                    <Input
+                      aria-label={`${item.title} % complete`}
                       type="number"
                       min={0}
                       max={100}
@@ -389,7 +390,7 @@ export function ProbationSelfView() {
                         )
                       }
                     />
-                  </label>
+                  </FormField>
                 </div>
               ))}
             </div>

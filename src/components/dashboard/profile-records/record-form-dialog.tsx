@@ -11,8 +11,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { FluentSelect } from "@/components/ui/fluent-select"
-import { formatFileSize, renderEntryInput } from "@/components/dashboard/employee-profile/profile-shared"
+import { renderEntryInput } from "@/components/dashboard/employee-profile/profile-shared"
 import { cn } from "@/lib/utils"
+import { FormField } from "@/components/ui/form-field"
+import { FileDropzone } from "@/components/ui/file-dropzone"
 
 // Employee-side add/edit form that matches the HR "Add record" dialog on the
 // employee profile: same AlertDialog, two-column grid, uppercase labels and the
@@ -52,7 +54,6 @@ type OpenRequest = {
   resolve: (result: RecordFormResult | null) => void
 }
 
-const LABEL_CLASS = "text-xs font-semibold uppercase tracking-wide text-slate-500"
 const WIDE_KEYS = new Set(["notes", "responsibilities_description", "address"])
 
 function RecordFormDialog({ request, onDone }: { request: OpenRequest; onDone: (result: RecordFormResult | null) => void }) {
@@ -92,14 +93,13 @@ function RecordFormDialog({ request, onDone }: { request: OpenRequest; onDone: (
               setError(null)
             }
             return (
-              <label
+              <FormField
                 key={field.name}
-                className={cn("grid min-w-0 gap-1", (field.wide || WIDE_KEYS.has(field.name)) && "md:col-span-2")}
+                label={field.required ? field.label : `${field.label} (optional)`}
+                required={field.required}
+                hint={field.hint}
+                className={cn((field.wide || WIDE_KEYS.has(field.name)) && "md:col-span-2")}
               >
-                <span className={LABEL_CLASS}>
-                  {field.label}
-                  {field.required ? <span className="text-rose-600"> *</span> : <span className="normal-case font-normal"> (optional)</span>}
-                </span>
                 {field.options ? (
                   <FluentSelect
                     ariaLabel={field.label}
@@ -116,42 +116,31 @@ function RecordFormDialog({ request, onDone }: { request: OpenRequest; onDone: (
                     onChange,
                   })
                 )}
-                {field.hint ? <span className="text-xs text-slate-500">{field.hint}</span> : null}
-              </label>
+              </FormField>
             )
           })}
           {options.file ? (
-            <label className="grid min-w-0 gap-1 md:col-span-2">
-              <span className={LABEL_CLASS}>
-                {options.file.label ?? "Attachment"}
-                <span className="text-rose-600"> *</span>
-              </span>
-              <input
-                type="file"
+            <FormField label={options.file.label ?? "Attachment"} required className="md:col-span-2">
+              <FileDropzone
+                file={file}
                 accept={options.file.accept}
-                className="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white"
-                onChange={(event) => {
-                  setFile(event.target.files?.[0] ?? null)
+                hint={options.file.hint ?? "Choose the document file to upload."}
+                onFileChange={(next) => {
+                  setFile(next)
                   setError(null)
                 }}
+                onError={setError}
               />
-              <p className="text-xs text-slate-500">
-                {file ? `${file.name} · ${formatFileSize(file.size)}` : options.file.hint ?? "Choose the document file to upload."}
-              </p>
-            </label>
+            </FormField>
           ) : null}
           {options.reasonLabel ? (
-            <label className="grid min-w-0 gap-1 md:col-span-2">
-              <span className={LABEL_CLASS}>
-                {options.reasonLabel}
-                <span className="normal-case font-normal"> (optional)</span>
-              </span>
+            <FormField label={`${options.reasonLabel} (optional)`} className="md:col-span-2">
               {renderEntryInput({
                 entry: { key: "notes", label: options.reasonLabel, value: "", kind: "text" },
                 value: reason,
                 onChange: setReason,
               })}
-            </label>
+            </FormField>
           ) : null}
         </div>
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}

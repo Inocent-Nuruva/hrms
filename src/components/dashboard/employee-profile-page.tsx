@@ -140,6 +140,7 @@ import {
 } from "@/components/dashboard/employee-profile/profile-record-views"
 import { EmployeeIdentitySheet } from "@/components/dashboard/employee-profile/employee-identity-sheet"
 import { EmployeeProfileHero } from "@/components/dashboard/employee-profile/employee-profile-hero"
+import { FormField } from "@/components/ui/form-field"
 
 const PROFILE_SECTION_DEFS: Array<{
   title: string
@@ -525,21 +526,20 @@ function ProfileSectionsTabs({
       {header}
       <div className="sticky top-12 z-20 border-t border-border bg-card/95 backdrop-blur">
         <div className="px-3 py-2 sm:hidden">
-          <label className="sr-only" htmlFor="employee-profile-group">Profile section</label>
-          <select
+          <FluentSelect
             id="employee-profile-group"
+            ariaLabel="Profile section"
+            className="w-full"
             value={activeGroup}
-            onChange={(event) => selectGroup(event.target.value as ProfileGroupKey)}
-            className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
-          >
-            <option value="overview">Overview</option>
-            {groupSummaries.map(({ group, missing }) => (
-              <option key={group.key} value={group.key}>
-                {group.label}
-                {missing.length ? ` (${missing.length} missing)` : ""}
-              </option>
-            ))}
-          </select>
+            onChange={(value) => selectGroup(value as ProfileGroupKey)}
+            options={[
+              { value: "overview", label: "Overview" },
+              ...groupSummaries.map(({ group, missing }) => ({
+                value: group.key,
+                label: `${group.label}${missing.length ? ` (${missing.length} missing)` : ""}`,
+              })),
+            ]}
+          />
         </div>
         <div
           className="hidden items-center gap-1 overflow-x-auto px-3 [scrollbar-width:none] sm:flex"
@@ -699,17 +699,18 @@ function EmployeeLettersSection({ employeeId }: { employeeId: number | null }) {
         onViewChange={setRecordView}
       />
       <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border bg-background p-4 sm:flex-row sm:items-end">
-        <label className="grid min-w-0 flex-1 gap-1 text-xs font-medium text-muted-foreground sm:max-w-xs">
-          Template type
-          <select
-            className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+        <FormField label="Template type" className="min-w-0 flex-1 sm:max-w-xs">
+          <FluentSelect
+            ariaLabel="Template type"
+            className="w-full"
             value={letterType}
-            onChange={(event) => setLetterType(event.target.value as typeof letterType)}
-          >
-            <option value="JOINING_FORM">Joining form</option>
-            <option value="OTHER">Other letter</option>
-          </select>
-        </label>
+            onChange={(value) => setLetterType(value as typeof letterType)}
+            options={[
+              { value: "JOINING_FORM", label: "Joining form" },
+              { value: "OTHER", label: "Other letter" },
+            ]}
+          />
+        </FormField>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -1128,10 +1129,7 @@ function DepartmentAssignmentsSection({
           </>}
       >
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1 sm:col-span-2">
-              <span className="text-xs font-medium text-foreground">
-                Department
-              </span>
+            <FormField label="Department" className="sm:col-span-2">
               <FluentSelect
                 ariaLabel="Department"
                 className="w-full"
@@ -1155,12 +1153,9 @@ function DepartmentAssignmentsSection({
                   }),
                 ]}
               />
-            </label>
+            </FormField>
 
-            <label className="grid gap-1">
-              <span className="text-xs font-medium text-foreground">
-                Primary Assignment
-              </span>
+            <FormField label="Primary assignment">
               <FluentSelect
                 ariaLabel="Primary Assignment"
                 className="w-full"
@@ -1173,32 +1168,26 @@ function DepartmentAssignmentsSection({
                   { value: "true", label: "Yes" },
                 ]}
               />
-            </label>
+            </FormField>
 
-            <label className="grid gap-1">
-              <span className="text-xs font-medium text-foreground">
-                Effective Date
-              </span>
+            <FormField label="Effective date">
               <DatePickerPresets
                 value={form.effective_date}
                 onChange={(value) =>
                   setForm((current) => ({ ...current, effective_date: value }))
                 }
               />
-            </label>
+            </FormField>
 
-            <label className="grid gap-1 sm:col-span-2">
-              <span className="text-xs font-medium text-foreground">
-                Reason
-              </span>
+            <FormField label="Reason" className="sm:col-span-2">
               <Textarea
                 value={form.reason}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, reason: event.target.value }))
                 }
-                className="min-h-24 w-full rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-3 py-2 text-sm"
+                className="min-h-24 w-full"
               />
-            </label>
+            </FormField>
           </div>
           {mutationError ? <p className="text-sm text-rose-600">{mutationError}</p> : null}
       </ProfileSidePanel>
@@ -1548,10 +1537,7 @@ function PositionAssignmentsSection({
           </>}
       >
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1 sm:col-span-2">
-              <span className="text-xs font-medium text-foreground">
-                Position
-              </span>
+            <FormField label="Position" className="sm:col-span-2">
               <FluentSelect
                 ariaLabel="Position"
                 className="w-full"
@@ -1573,12 +1559,9 @@ function PositionAssignmentsSection({
                   }),
                 ]}
               />
-            </label>
+            </FormField>
 
-            <label className="grid gap-1">
-              <span className="text-xs font-medium text-foreground">
-                Assignment Type
-              </span>
+            <FormField label="Assignment type">
               <FluentSelect
                 ariaLabel="Assignment Type"
                 className="w-full"
@@ -1591,12 +1574,9 @@ function PositionAssignmentsSection({
                   label: formatLabelValue(option),
                 }))}
               />
-            </label>
+            </FormField>
 
-            <label className="grid gap-1">
-              <span className="text-xs font-medium text-foreground">
-                Status
-              </span>
+            <FormField label="Status">
               <FluentSelect
                 ariaLabel="Status"
                 className="w-full"
@@ -1607,32 +1587,23 @@ function PositionAssignmentsSection({
                   label: formatLabelValue(option),
                 }))}
               />
-            </label>
+            </FormField>
 
-            <label className="grid gap-1">
-              <span className="text-xs font-medium text-foreground">
-                Start Date
-              </span>
+            <FormField label="Start date">
               <DatePickerPresets
                 value={form.start_date}
                 onChange={(value) => setForm((current) => ({ ...current, start_date: value }))}
               />
-            </label>
+            </FormField>
 
-            <label className="grid gap-1">
-              <span className="text-xs font-medium text-foreground">
-                End Date
-              </span>
+            <FormField label="End date">
               <DatePickerPresets
                 value={form.end_date}
                 onChange={(value) => setForm((current) => ({ ...current, end_date: value }))}
               />
-            </label>
+            </FormField>
 
-            <label className="grid gap-1">
-              <span className="text-xs font-medium text-foreground">
-                Primary Assignment
-              </span>
+            <FormField label="Primary assignment">
               <FluentSelect
                 ariaLabel="Primary Assignment"
                 className="w-full"
@@ -1645,18 +1616,15 @@ function PositionAssignmentsSection({
                   { value: "true", label: "Yes" },
                 ]}
               />
-            </label>
+            </FormField>
 
-            <label className="grid gap-1 sm:col-span-2">
-              <span className="text-xs font-medium text-foreground">
-                Notes
-              </span>
+            <FormField label="Notes" className="sm:col-span-2">
               <Textarea
                 value={form.notes}
                 onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
-                className="min-h-24 w-full rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-3 py-2 text-sm"
+                className="min-h-24 w-full"
               />
-            </label>
+            </FormField>
           </div>
           {mutationError ? <p className="text-sm text-rose-600">{mutationError}</p> : null}
       </ProfileSidePanel>
@@ -2427,10 +2395,7 @@ function EmployeeMovementsSection({
           </>}
       >
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1">
-              <span className="text-xs font-medium text-foreground">
-                Movement Type
-              </span>
+            <FormField label="Movement type">
               <FluentSelect
                 ariaLabel="Movement Type"
                 className="w-full"
@@ -2454,47 +2419,35 @@ function EmployeeMovementsSection({
                   label: formatLabelValue(option),
                 }))}
               />
-            </label>
+            </FormField>
 
-            <label className="grid gap-1">
-              <span className="text-xs font-medium text-foreground">
-                Effective Date
-              </span>
+            <FormField label="Effective date">
               <DatePickerPresets
                 value={form.effective_date}
                 onChange={(value) => setForm((current) => ({ ...current, effective_date: value }))}
               />
-            </label>
+            </FormField>
 
-            <label className="grid gap-1 sm:col-span-2">
-              <span className="text-xs font-medium text-foreground">
-                Title
-              </span>
+            <FormField label="Title" className="sm:col-span-2">
               <Input
                 value={form.title}
                 onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
                 className="w-full"
                 placeholder="Movement title"
               />
-            </label>
+            </FormField>
 
-            <label className="grid gap-1 sm:col-span-2">
-              <span className="text-xs font-medium text-foreground">
-                Reason
-              </span>
+            <FormField label="Reason" className="sm:col-span-2">
               <Textarea
                 value={form.reason}
                 onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}
-                className="min-h-24 w-full rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-3 py-2 text-sm"
+                className="min-h-24 w-full"
                 placeholder="Why this movement is needed"
               />
-            </label>
+            </FormField>
 
             {showBranchField ? (
-              <label className="grid gap-1">
-                <span className="text-xs font-medium text-foreground">
-                  Target Branch
-                </span>
+              <FormField label="Target branch">
                 <FluentSelect
                   ariaLabel="Target Branch"
                   className="w-full"
@@ -2522,14 +2475,11 @@ function EmployeeMovementsSection({
                     }),
                   ]}
                 />
-              </label>
+              </FormField>
             ) : null}
 
             {showDepartmentField ? (
-              <label className="grid gap-1">
-                <span className="text-xs font-medium text-foreground">
-                  Target Department
-                </span>
+              <FormField label="Target department">
                 <FluentSelect
                   ariaLabel="Target Department"
                   className="w-full"
@@ -2559,14 +2509,11 @@ function EmployeeMovementsSection({
                     }),
                   ]}
                 />
-              </label>
+              </FormField>
             ) : null}
 
             {showPositionField ? (
-              <label className="grid gap-1">
-                <span className="text-xs font-medium text-foreground">
-                  Target Position
-                </span>
+              <FormField label="Target position">
                 <FluentSelect
                   ariaLabel="Target Position"
                   className="w-full"
@@ -2599,14 +2546,11 @@ function EmployeeMovementsSection({
                     }),
                   ]}
                 />
-              </label>
+              </FormField>
             ) : null}
 
             {showManagerField ? (
-              <label className="grid gap-1">
-                <span className="text-xs font-medium text-foreground">
-                  Target Manager
-                </span>
+              <FormField label="Target manager">
                 <FluentSelect
                   ariaLabel="Target Manager"
                   className="w-full"
@@ -2641,14 +2585,11 @@ function EmployeeMovementsSection({
                     }),
                   ]}
                 />
-              </label>
+              </FormField>
             ) : null}
 
             {showGradeField ? (
-              <label className="grid gap-1">
-                <span className="text-xs font-medium text-foreground">
-                  Target Grade
-                </span>
+              <FormField label="Target grade">
                 <FluentSelect
                   ariaLabel="Target Grade"
                   className="w-full"
@@ -2667,14 +2608,11 @@ function EmployeeMovementsSection({
                     }),
                   ]}
                 />
-              </label>
+              </FormField>
             ) : null}
 
             {showCostCenterField ? (
-              <label className="grid gap-1">
-                <span className="text-xs font-medium text-foreground">
-                  Target Cost Center
-                </span>
+              <FormField label="Target cost center">
                 <FluentSelect
                   ariaLabel="Target Cost Center"
                   className="w-full"
@@ -2708,14 +2646,11 @@ function EmployeeMovementsSection({
                     }),
                   ]}
                 />
-              </label>
+              </FormField>
             ) : null}
 
             {showEmploymentTypeField ? (
-              <label className="grid gap-1">
-                <span className="text-xs font-medium text-foreground">
-                  Target Employment Type
-                </span>
+              <FormField label="Target employment type">
                 <FluentSelect
                   ariaLabel="Target Employment Type"
                   className="w-full"
@@ -2732,7 +2667,7 @@ function EmployeeMovementsSection({
                     })),
                   ]}
                 />
-              </label>
+              </FormField>
             ) : null}
           </div>
           {mutationError ? <p className="text-sm text-rose-600">{mutationError}</p> : null}
@@ -3131,16 +3066,13 @@ export function EmployeeProfilePage({
                     <p className="text-sm font-semibold text-foreground">Find Another Employee</p>
                     <p className="text-xs text-muted-foreground">Search by name, employee number, email, or phone.</p>
                   </div>
-                  <div className="flex items-center gap-2 rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-3 dark:border-slate-700 dark:bg-slate-950">
-                    <SearchIcon className="size-4 shrink-0 text-slate-400" />
-                    <input
-                      type="text"
-                      value={profileSearch}
-                      onChange={(event) => setProfileSearch(event.target.value)}
-                      placeholder="Search employee profile"
-                      className="h-10 w-full border-0 bg-transparent p-0 text-sm text-foreground outline-none placeholder:text-slate-400"
-                    />
-                  </div>
+                  <Input
+                    type="search"
+                    value={profileSearch}
+                    onChange={(_event, data) => setProfileSearch(data.value)}
+                    placeholder="Search employee profile"
+                    aria-label="Search employee profile"
+                  />
                   {profileSearchError ? <p className="text-xs text-rose-600">{profileSearchError}</p> : null}
                   {profileSearchLoading ? <p className="text-xs text-muted-foreground">Searching employees...</p> : null}
                   {!profileSearchLoading && !profileSearchError && profileSearch.trim().length > 0 && profileSearch.trim().length < 2 ? (

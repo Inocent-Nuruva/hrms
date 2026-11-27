@@ -5,6 +5,7 @@ import { Dialog as FluentDialog, DialogSurface, DialogTitle } from "@fluentui/re
 import { Download, Loader2, PenLine, Upload, X } from "lucide-react"
 
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import { toast } from "@/components/ui/fluent-toast-store"
 import {
   errorMessage,
@@ -205,8 +206,7 @@ function DigitalSignDialog({
               </div>
               {kind === "TYPED" ? (
                 <div className="grid gap-1">
-                  <input
-                    className="h-10 rounded-md border border-border px-3 text-sm"
+                  <Input
                     value={typed}
                     maxLength={100}
                     aria-label="Type your full name"

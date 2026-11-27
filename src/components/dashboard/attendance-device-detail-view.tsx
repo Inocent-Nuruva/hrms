@@ -1,5 +1,6 @@
 "use client";
 
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow, StandardTableHead, StandardTableCell } from "@/components/ui/standard-fluent-table"
 import { fluentConfirm, fluentPrompt } from "@/components/ui/fluent-dialog-service";
@@ -20,7 +21,6 @@ import {
   ScanFaceIcon,
   Trash2Icon,
 } from "lucide-react";
-import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons";
 
 import {
   Dialog,
@@ -3120,24 +3120,23 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
             )}
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative min-w-[12rem] flex-1 sm:max-w-xs">
-                <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  className="h-9 w-full rounded-md border border-slate-300 bg-white py-1.5 pl-8 pr-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-[color:rgb(var(--primary-rgb)/0.18)]"
+                <Input
                   placeholder="Search name or number…"
                   value={employeeSearch}
                   onChange={(event) => setEmployeeSearch(event.target.value)}
                 />
               </div>
-              <select
-                aria-label="Filter employees by HR link"
-                className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-700"
+              <FluentSelect
+                ariaLabel="Filter employees by HR link"
+                className="w-44"
                 value={employeeLinkFilter}
-                onChange={(event) => setEmployeeLinkFilter(event.target.value as "all" | "linked" | "unlinked")}
-              >
-                <option value="all">All users</option>
-                <option value="linked">Linked to HR</option>
-                <option value="unlinked">Not linked to HR</option>
-              </select>
+                onChange={(value) => setEmployeeLinkFilter(value as "all" | "linked" | "unlinked")}
+                options={[
+                  { value: "all", label: "All users" },
+                  { value: "linked", label: "Linked to HR" },
+                  { value: "unlinked", label: "Not linked to HR" },
+                ]}
+              />
               <p className="text-xs text-slate-500 sm:ml-1">
                 {linkedEmployeeCount} linked · {assignedEmployees.length - linkedEmployeeCount} not linked
                 {(employeeSearch.trim() || employeeLinkFilter !== "all") && ` · ${filteredAssignedEmployees.length} shown`}
@@ -3696,9 +3695,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                     {assignEmployeePickerOpen ? (
                       <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
                         <div className="relative">
-                          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                          <input
-                            className="w-full rounded-md border border-slate-300 py-2 pl-10 pr-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/20"
+                          <Input
                             placeholder="Search employees by number or name"
                             value={assignEmployeeSearch}
                             onChange={(event) =>
@@ -4024,8 +4021,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                             ? "PIN Password"
                             : "Password"}
                         </span>
-                        <input
-                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/20"
+                        <Input
                           value={credentialForm.pin_password}
                           onChange={(event) =>
                             setCredentialForm((current) => ({
@@ -4084,13 +4080,12 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                           />
                         </div>
                         <label className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={credentialForm.sync_to_device}
-                            onChange={(event) =>
+                            onCheckedChange={(checked) =>
                               setCredentialForm((current) => ({
                                 ...current,
-                                sync_to_device: event.target.checked,
+                                sync_to_device: checked,
                               }))
                             }
                           />
@@ -4276,8 +4271,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                       ? "PIN"
                       : "Password"}
                   </span>
-                  <input
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-[color:rgb(var(--primary-rgb)/0.2)]"
+                  <Input
                     value={credentialForm.pin_password}
                     onChange={(event) =>
                       setCredentialForm((current) => ({
@@ -4422,13 +4416,12 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                   ) : null}
 
                   <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={credentialForm.sync_to_device}
-                      onChange={(event) =>
+                      onCheckedChange={(checked) =>
                         setCredentialForm((current) => ({
                           ...current,
-                          sync_to_device: event.target.checked,
+                          sync_to_device: checked,
                         }))
                       }
                     />

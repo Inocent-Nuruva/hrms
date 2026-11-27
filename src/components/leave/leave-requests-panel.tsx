@@ -30,6 +30,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { DateInput } from "@/components/ui/date-input"
+import { FluentSelect } from "@/components/ui/fluent-select"
+import { FormField } from "@/components/ui/form-field"
 import {
   getLeaveRequestSummary,
   getMyLeaveRequestSummary,
@@ -509,21 +512,16 @@ export function LeaveRequestsPanel(props: LeaveRequestsPanelProps) {
               </span>
             ) : null}
           </Button>
-          <label className="relative inline-flex items-center">
-            <span className="sr-only">Sort</span>
-            <ArrowDownUp className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" />
-            <select
+          <div className="inline-flex items-center gap-1.5">
+            <ArrowDownUp className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <FluentSelect
+              className="w-44"
+              ariaLabel="Sort"
               value={sort}
-              onChange={(event) => setSort(event.target.value as SortKey)}
-              className="h-9 rounded-md border border-input bg-background pl-8 pr-2 text-sm text-foreground"
-            >
-              {(Object.keys(SORTS) as SortKey[]).map((key) => (
-                <option key={key} value={key}>
-                  {SORTS[key].label}
-                </option>
-              ))}
-            </select>
-          </label>
+              onChange={(value) => setSort(value as SortKey)}
+              options={(Object.keys(SORTS) as SortKey[]).map((key) => ({ value: key, label: SORTS[key].label }))}
+            />
+          </div>
           {activeFilterCount ? (
             <Button type="button" variant="ghost" onClick={clearFilters}>
               <X className="size-4" />
@@ -538,29 +536,24 @@ export function LeaveRequestsPanel(props: LeaveRequestsPanelProps) {
           id="leave-request-filters"
           className="grid gap-3 rounded-xl border border-border bg-muted/30 p-3 sm:grid-cols-3"
         >
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
-            Leave type
-            <select
+          <FormField label="Leave type">
+            <FluentSelect
+              ariaLabel="Leave type"
+              placeholder="All leave types"
               value={leaveTypeId}
-              onChange={(event) => setLeaveTypeId(event.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
-            >
-              <option value="">All leave types</option>
-              {leaveTypes.map((type) => (
-                <option key={type.id} value={type.id}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
-            From
-            <Input type="date" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} />
-          </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
-            To
-            <Input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} />
-          </label>
+              onChange={setLeaveTypeId}
+              options={[
+                { value: "", label: "All leave types" },
+                ...leaveTypes.map((type) => ({ value: type.id, label: type.label })),
+              ]}
+            />
+          </FormField>
+          <FormField label="From">
+            <DateInput aria-label="From" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} />
+          </FormField>
+          <FormField label="To">
+            <DateInput aria-label="To" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} />
+          </FormField>
         </div>
       ) : null}
 

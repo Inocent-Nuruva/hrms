@@ -3,6 +3,9 @@
 import * as React from "react"
 
 import { Button } from "@/components/ui/button"
+import { DateInput } from "@/components/ui/date-input"
+import { FormField } from "@/components/ui/form-field"
+import { Input } from "@/components/ui/input"
 import { downloadLeaveReport } from "@/lib/admin-api"
 import { showErrorAlert } from "@/lib/error-alert"
 
@@ -39,7 +42,7 @@ export function LeaveReportDownloads({ token }: { token: string | null }) {
     }
   }
 
-  const inputClass = "h-8 rounded-md border border-border bg-background px-2 text-sm"
+
   return (
     <section className="space-y-3 rounded-lg border border-border p-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -48,18 +51,15 @@ export function LeaveReportDownloads({ token }: { token: string | null }) {
           <p className="text-xs text-muted-foreground">Built on the server from live data and limited to the employees you can see.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2 text-xs">
-          <label className="grid gap-1">
-            <span>Leave year</span>
-            <input className={`${inputClass} w-20`} inputMode="numeric" value={filters.fiscal_year} onChange={(event) => setFilters({ ...filters, fiscal_year: event.target.value })} />
-          </label>
-          <label className="grid gap-1">
-            <span>From</span>
-            <input type="date" className={inputClass} value={filters.from_date} onChange={(event) => setFilters({ ...filters, from_date: event.target.value })} />
-          </label>
-          <label className="grid gap-1">
-            <span>To</span>
-            <input type="date" className={inputClass} value={filters.to_date} onChange={(event) => setFilters({ ...filters, to_date: event.target.value })} />
-          </label>
+          <FormField label="Leave year" htmlFor="leave-report-year" className="w-24">
+            <Input id="leave-report-year" inputMode="numeric" value={filters.fiscal_year} onChange={(event) => setFilters({ ...filters, fiscal_year: event.target.value })} />
+          </FormField>
+          <FormField label="From" className="w-40">
+            <DateInput aria-label="From" value={filters.from_date} onChange={(event) => setFilters({ ...filters, from_date: event.target.value })} />
+          </FormField>
+          <FormField label="To" className="w-40">
+            <DateInput aria-label="To" value={filters.to_date} onChange={(event) => setFilters({ ...filters, to_date: event.target.value })} />
+          </FormField>
         </div>
       </div>
       <ul className="grid gap-2 sm:grid-cols-2">

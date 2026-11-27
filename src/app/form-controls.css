@@ -273,3 +273,53 @@ body[data-app-text-scale="compact"] {
     padding-inline-end: 64px !important;
   }
 }
+
+/* --- Validation state ----------------------------------------------------
+ * A FormField with an error (data-invalid) or a control marked .hrms-invalid
+ * / aria-invalid gets a red outline, for Fluent and native controls alike. */
+:where([data-invalid="true"]) :where(.fui-Input, .fui-Dropdown, .fui-Combobox, .fui-Textarea, .fui-DatePicker .fui-Input, .fui-SpinButton),
+:where(.hrms-invalid.fui-Input, .hrms-invalid.fui-Dropdown, .hrms-invalid.fui-Combobox, .hrms-invalid.fui-Textarea),
+:where([data-invalid="true"]) :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea),
+:where(input[aria-invalid="true"]:not([type="checkbox"]):not([type="radio"]), select[aria-invalid="true"], textarea[aria-invalid="true"]) {
+  border-color: var(--destructive) !important;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive) 12%, transparent) !important;
+}
+
+/* --- Text areas ------------------------------------------------------------
+ * Comfortable, modern multi-line fields: roomier padding, a soft focus ring,
+ * vertical resize only, and the same border/background as other inputs. */
+:where(.fui-Textarea):not(:where([data-control="free"], [data-control="free"] *)) {
+  background-color: var(--background) !important;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+:where(.fui-Textarea:focus-within):not(:where([data-control="free"], [data-control="free"] *)) {
+  border-color: var(--ring) !important;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 18%, transparent);
+}
+:where(.fui-Textarea__textarea, textarea):not(:where([data-control="free"], [data-control="free"] *)) {
+  resize: vertical;
+  padding-block: 0.625rem !important;
+  line-height: 1.5 !important;
+  min-height: var(--hrms-textarea-min);
+}
+:where(textarea):not(:where(.fui-Textarea *, [data-control="free"], [data-control="free"] *)) {
+  width: 100%;
+  border: 1px solid var(--input);
+  background-color: var(--background);
+  color: var(--foreground);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+:where(textarea:focus-visible):not(:where(.fui-Textarea *, [data-control="free"], [data-control="free"] *)) {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 18%, transparent);
+}
+:where(textarea, .fui-Textarea__textarea)::placeholder {
+  color: var(--muted-foreground);
+  opacity: 1;
+}
+
+/* Phone input: the flag/code button sits flush inside the field. */
+.hrms-phone-input .fui-Input__contentBefore {
+  padding-inline-end: 0 !important;
+}

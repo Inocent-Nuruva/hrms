@@ -2,14 +2,15 @@
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import { DateInput } from "@/components/ui/date-input";
+import { FormField } from "@/components/ui/form-field";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
 import * as React from "react";
 import {
   Button as FluentButton,
   Combobox,
-  Field as FluentField,
-  Input as FluentInput,
   Option,
   Card as FluentCard,
   ProgressBar as FluentProgressBar,
@@ -44,7 +45,6 @@ import {
   asRecordArray,
   employeeLabel,
   formatDate,
-  inputClass,
   isPermissionError,
   optionLabel,
   prettify,
@@ -1500,25 +1500,23 @@ export function ProbationManagementView({
             <FluentDialogContent className="grid max-h-[65vh] min-h-0 gap-3 overflow-y-auto pr-1">
               {formMode === "policy" ? (
                 <>
-                  <FluentField label="Code" required>
-                    <FluentInput
+                  <FormField label="Code" required>
+                    <Input
                       value={form.code ?? ""}
-                      onChange={(_event, data) =>
-                        setForm((current) => ({ ...current, code: data.value }))
+                      onChange={(e) =>
+                        setForm((current) => ({ ...current, code: e.target.value }))
                       }
-                      className="!w-full"
                     />
-                  </FluentField>
-                  <FluentField label="Name" required>
-                    <FluentInput
+                  </FormField>
+                  <FormField label="Name" required>
+                    <Input
                       value={form.name ?? ""}
-                      onChange={(_event, data) =>
-                        setForm((current) => ({ ...current, name: data.value }))
+                      onChange={(e) =>
+                        setForm((current) => ({ ...current, name: e.target.value }))
                       }
-                      className="!w-full"
                     />
-                  </FluentField>
-                  <FluentField label="Description">
+                  </FormField>
+                  <FormField label="Description">
                     <Textarea
                       value={form.description ?? ""}
                       onChange={(_event, data) =>
@@ -1528,7 +1526,7 @@ export function ProbationManagementView({
                         }))
                       }
                     />
-                  </FluentField>
+                  </FormField>
                   <Field label="Employment type">
                     <FluentSelect
                       ariaLabel="Employment type"
@@ -1550,67 +1548,63 @@ export function ProbationManagementView({
                       ]}
                     />
                   </Field>
-                  <FluentField label="Probation days" required>
-                    <FluentInput
+                  <FormField label="Probation days" required>
+                    <Input
                       type="number"
                       min={1}
                       step={1}
                       value={form.probation_period_days ?? ""}
-                      onChange={(_event, data) =>
+                      onChange={(e) =>
                         setForm((current) => ({
                           ...current,
-                          probation_period_days: data.value,
+                          probation_period_days: e.target.value,
                         }))
                       }
-                      className="!w-full"
                     />
-                  </FluentField>
+                  </FormField>
                   {policyTargets.map(([key, label]) => (
-                    <FluentField key={key} label={label}>
+                    <FormField key={key} label={label}>
                       <FluentSelect ariaLabel={label} value={form[key] ?? ""} onChange={value => setForm(current => ({ ...current, [key]: value }))}
                         options={[{ value: "", label: "Any" }, ...(form[key] && !policyOptions?.targets[key]?.some(item => String(item.id) === form[key]) ? [{ value: form[key], label: `Current selection (#${form[key]})` }] : []), ...(policyOptions?.targets[key] ?? []).map(item => ({ value: String(item.id), label: item.name }))]} />
-                    </FluentField>
+                    </FormField>
                   ))}
                   {policyNumbers.map(([key, label, min]) => (
-                    <FluentField key={key} label={label}>
-                      <FluentInput type="number" step={1} min={min} value={form[key] ?? ""} onChange={(_, data) => setForm(current => ({ ...current, [key]: data.value }))} />
-                    </FluentField>
+                    <FormField key={key} label={label}>
+                      <Input type="number" step={1} min={min} value={form[key] ?? ""} onChange={(e) => setForm(current => ({ ...current, [key]: e.target.value }))} />
+                    </FormField>
                   ))}
                   {policyFlags.map(([key, label, fallback]) => (
-                    <label key={key} className="flex items-center gap-2"><input type="checkbox" checked={(form[key] ?? String(fallback)) === "true"}
-                      onChange={event => setForm({ ...form, [key]: String(event.target.checked) })} />{label}</label>
+                    <label key={key} className="flex items-center gap-2 text-sm"><Checkbox checked={(form[key] ?? String(fallback)) === "true"}
+                      onCheckedChange={checked => setForm({ ...form, [key]: String(checked) })} />{label}</label>
                   ))}
-                  <FluentField label="Effective to">
-                    <FluentInput type="date" min={form.effective_from} value={form.effective_to ?? ""} onChange={(_, data) => setForm(current => ({ ...current, effective_to: data.value }))} />
-                  </FluentField>
+                  <FormField label="Effective to">
+                    <DateInput min={form.effective_from} value={form.effective_to ?? ""} onChange={(e) => setForm(current => ({ ...current, effective_to: e.target.value }))} />
+                  </FormField>
                   {policyOptions?.defaults && <p className="text-sm text-muted-foreground">Company policies use the installation limit of {policyOptions.defaults.maximum_total_days} total days. Reminder days before the due date: {policyOptions.defaults.reminder_days.join(", ")}.</p>}
-                  <FluentField label="Minimum score">
-                    <FluentInput
+                  <FormField label="Minimum score">
+                    <Input
                       type="number"
                       min={0}
                       value={form.minimum_confirmation_score ?? ""}
-                      onChange={(_event, data) =>
+                      onChange={(e) =>
                         setForm((current) => ({
                           ...current,
-                          minimum_confirmation_score: data.value,
+                          minimum_confirmation_score: e.target.value,
                         }))
                       }
-                      className="!w-full"
                     />
-                  </FluentField>
-                  <FluentField label="Effective from" required>
-                    <FluentInput
-                      type="date"
+                  </FormField>
+                  <FormField label="Effective from" required>
+                    <DateInput
                       value={form.effective_from ?? ""}
-                      onChange={(_event, data) =>
+                      onChange={(e) =>
                         setForm((current) => ({
                           ...current,
-                          effective_from: data.value,
+                          effective_from: e.target.value,
                         }))
                       }
-                      className="!w-full"
                     />
-                  </FluentField>
+                  </FormField>
                   <div className="grid gap-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-foreground">
@@ -1631,46 +1625,46 @@ export function ProbationManagementView({
                         key={index}
                         className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_1fr_90px_auto]"
                       >
-                        <FluentInput
+                        <Input
                           aria-label={`Criterion ${index + 1} code`}
                           placeholder="Code"
                           value={row.code}
-                          onChange={(_event, data) =>
+                          onChange={(e) =>
                             setCriteriaRows((current) =>
                               current.map((item, i) =>
                                 i === index
-                                  ? { ...item, code: data.value }
+                                  ? { ...item, code: e.target.value }
                                   : item,
                               ),
                             )
                           }
                         />
-                        <FluentInput
+                        <Input
                           aria-label={`Criterion ${index + 1} name`}
                           placeholder="Name"
                           value={row.name}
-                          onChange={(_event, data) =>
+                          onChange={(e) =>
                             setCriteriaRows((current) =>
                               current.map((item, i) =>
                                 i === index
-                                  ? { ...item, name: data.value }
+                                  ? { ...item, name: e.target.value }
                                   : item,
                               ),
                             )
                           }
                         />
-                        <FluentInput
+                        <Input
                           aria-label={`Criterion ${index + 1} weight`}
                           type="number"
                           min={0}
                           step={0.01}
                           placeholder="Weight"
                           value={row.weight}
-                          onChange={(_event, data) =>
+                          onChange={(e) =>
                             setCriteriaRows((current) =>
                               current.map((item, i) =>
                                 i === index
-                                  ? { ...item, weight: data.value }
+                                  ? { ...item, weight: e.target.value }
                                   : item,
                               ),
                             )
@@ -1688,16 +1682,15 @@ export function ProbationManagementView({
                             )
                           }
                         />
-                        <FluentInput
-                          aria-label={`Criterion ${index + 1} description`}
-                          className="sm:col-span-4"
+                        <Input
+                          aria-label={`Criterion ${index + 1} description`} className="sm:col-span-4"
                           placeholder="Description (optional)"
                           value={row.description}
-                          onChange={(_event, data) =>
+                          onChange={(e) =>
                             setCriteriaRows((current) =>
                               current.map((item, i) =>
                                 i === index
-                                  ? { ...item, description: data.value }
+                                  ? { ...item, description: e.target.value }
                                   : item,
                               ),
                             )
@@ -1719,10 +1712,10 @@ export function ProbationManagementView({
                 <>
                   {managerReviewCriteria(caseDetail).map(({ code, name, maximum }) => (
                     <div key={code} className="grid gap-2">
-                      <FluentField label={`${name} rating (0–${maximum})`} required>
-                        <FluentInput type="number" min={0} max={maximum} step="any" value={form[`rating_${code}`] ?? ""} onChange={(_, data) => setForm(current => ({ ...current, [`rating_${code}`]: data.value }))} />
-                      </FluentField>
-                      <FluentField label={`${name} comment`}><FluentInput maxLength={2000} value={form[`comment_${code}`] ?? ""} onChange={(_, data) => setForm(current => ({ ...current, [`comment_${code}`]: data.value }))} /></FluentField>
+                      <FormField label={`${name} rating (0–${maximum})`} required>
+                        <Input type="number" min={0} max={maximum} step="any" value={form[`rating_${code}`] ?? ""} onChange={(e) => setForm(current => ({ ...current, [`rating_${code}`]: e.target.value }))} />
+                      </FormField>
+                      <FormField label={`${name} comment`}><Input maxLength={2000} value={form[`comment_${code}`] ?? ""} onChange={(e) => setForm(current => ({ ...current, [`comment_${code}`]: e.target.value }))} /></FormField>
                     </div>
                   ))}
                   {form.recommendation === "FURTHER_REVIEW" && <p className="text-sm">HR will receive this case for a decision. Explain the points that need review in Comments.</p>}
@@ -1757,10 +1750,10 @@ export function ProbationManagementView({
                     />
                   </Field>
                   {form.recommendation === "EXTEND" && (
-                    <FluentField label="Suggested extension days">
-                      <FluentInput type="number" min={1} step={1} value={form.recommended_extension_days ?? ""}
-                        onChange={(_, data) => setForm(current => ({ ...current, recommended_extension_days: data.value }))} />
-                    </FluentField>
+                    <FormField label="Suggested extension days">
+                      <Input type="number" min={1} step={1} value={form.recommended_extension_days ?? ""}
+                        onChange={(e) => setForm(current => ({ ...current, recommended_extension_days: e.target.value }))} />
+                    </FormField>
                   )}
                 </>
               ) : null}
@@ -1794,7 +1787,6 @@ export function ProbationManagementView({
                   </Field>
                   <Field label="Confirmation date">
                     <DateInput
-                      className={inputClass}
                       value={form.confirmation_date ?? ""}
                       onChange={(event) =>
                         setForm((current) => ({
@@ -1805,8 +1797,7 @@ export function ProbationManagementView({
                     />
                   </Field>
                   <Field label="Extension days">
-                    <input
-                      className={inputClass}
+                    <Input
                       value={form.extension_days ?? ""}
                       onChange={(event) =>
                         setForm((current) => ({
@@ -1820,7 +1811,7 @@ export function ProbationManagementView({
               ) : null}
               {formMode === "case" ? (
                 <>
-                  <FluentField label="Employee number" required>
+                  <FormField label="Employee number" required>
                     <Combobox
                       aria-label="Employee number"
                       placeholder="Search by employee number or name"
@@ -1913,20 +1904,18 @@ export function ProbationManagementView({
                         </Option>
                       ) : null}
                     </Combobox>
-                  </FluentField>
-                  <FluentField label="Start date" required>
-                    <FluentInput
-                      type="date"
+                  </FormField>
+                  <FormField label="Start date" required>
+                    <DateInput
                       value={form.start_date ?? ""}
-                      onChange={(_event, data) =>
+                      onChange={(e) =>
                         setForm((current) => ({
                           ...current,
-                          start_date: data.value,
+                          start_date: e.target.value,
                         }))
                       }
-                      className="!w-full"
                     />
-                  </FluentField>
+                  </FormField>
                   <Field label="Policy (optional)">
                     <FluentSelect
                       ariaLabel="Policy"
@@ -1951,7 +1940,6 @@ export function ProbationManagementView({
                 <>
                   <Field label="Start date">
                     <DateInput
-                      className={inputClass}
                       value={form.start_date ?? ""}
                       onChange={(event) =>
                         setForm((current) => ({
@@ -1963,7 +1951,6 @@ export function ProbationManagementView({
                   </Field>
                   <Field label="Due date">
                     <DateInput
-                      className={inputClass}
                       value={form.current_due_date ?? ""}
                       onChange={(event) =>
                         setForm((current) => ({
@@ -1996,8 +1983,7 @@ export function ProbationManagementView({
               {formMode === "objective" ? (
                 <>
                   <Field label="Title">
-                    <input
-                      className={inputClass}
+                    <Input
                       value={form.title ?? ""}
                       onChange={(event) =>
                         setForm((current) => ({
@@ -2020,8 +2006,7 @@ export function ProbationManagementView({
                     />
                   </Field>
                   <Field label="Weight">
-                    <input
-                      className={inputClass}
+                    <Input
                       value={form.weight ?? ""}
                       onChange={(event) =>
                         setForm((current) => ({
@@ -2033,7 +2018,6 @@ export function ProbationManagementView({
                   </Field>
                   <Field label="Due date">
                     <DateInput
-                      className={inputClass}
                       value={form.due_date ?? ""}
                       onChange={(event) =>
                         setForm((current) => ({
@@ -2106,59 +2090,55 @@ export function ProbationManagementView({
               Add a weighted measure to this probation policy.
             </FluentText>
             <FluentDialogContent className="grid gap-3">
-              <FluentField label="Code" required>
-                <FluentInput
+              <FormField label="Code" required>
+                <Input
                   autoFocus
                   value={criterionDraft.code}
-                  onChange={(_event, data) =>
+                  onChange={(e) =>
                     setCriterionDraft((current) => ({
                       ...current,
-                      code: data.value,
+                      code: e.target.value,
                     }))
                   }
-                  className="!w-full"
                 />
-              </FluentField>
-              <FluentField label="Name" required>
-                <FluentInput
+              </FormField>
+              <FormField label="Name" required>
+                <Input
                   value={criterionDraft.name}
-                  onChange={(_event, data) =>
+                  onChange={(e) =>
                     setCriterionDraft((current) => ({
                       ...current,
-                      name: data.value,
+                      name: e.target.value,
                     }))
                   }
-                  className="!w-full"
                 />
-              </FluentField>
-              <FluentField label="Weight" required>
-                <FluentInput
+              </FormField>
+              <FormField label="Weight" required>
+                <Input
                   type="number"
                   min={0}
                   max={100}
                   step={0.01}
                   value={criterionDraft.weight}
-                  onChange={(_event, data) =>
+                  onChange={(e) =>
                     setCriterionDraft((current) => ({
                       ...current,
-                      weight: data.value,
+                      weight: e.target.value,
                     }))
                   }
-                  className="!w-full"
                 />
-              </FluentField>
-              <FluentField label="Description">
-                <FluentInput
+              </FormField>
+              <FormField label="Description">
+                <Input
                   value={criterionDraft.description}
-                  onChange={(_event, data) =>
+                  onChange={(e) =>
                     setCriterionDraft((current) => ({
                       ...current,
-                      description: data.value,
+                      description: e.target.value,
                     }))
                   }
-                  className="!w-full"
                 />
-              </FluentField>
+              </FormField>
               {criterionError ? (
                 <p role="alert" className="text-sm text-destructive">
                   {criterionError}
@@ -2195,8 +2175,8 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="grid gap-1.5 text-sm">
-      <span className="font-medium text-foreground">{label}</span>
+    <label className="grid min-w-0 content-start gap-1.5">
+      <span className="text-xs font-medium leading-4 text-foreground">{label}</span>
       {children}
     </label>
   );

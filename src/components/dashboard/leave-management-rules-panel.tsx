@@ -14,6 +14,9 @@ import {
 import { LeaveCatalogFrame } from "@/components/dashboard/leave-catalog-frame"
 import { Button } from "@/components/ui/button"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import { Checkbox } from "@/components/ui/checkbox"
+import { FormField } from "@/components/ui/form-field"
+import { Input } from "@/components/ui/input"
 import {
   deactivateLeaveManagementRule,
   listDepartments,
@@ -91,10 +94,9 @@ function MultiPick({
             const checked = value.includes(option.value)
             return (
               <label key={option.value} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-xs hover:bg-muted">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={checked}
-                  onChange={() =>
+                  onCheckedChange={() =>
                     onChange(checked ? value.filter((item) => item !== option.value) : [...value, option.value])
                   }
                 />
@@ -315,27 +317,25 @@ export function LeaveManagementRulesPanel({
           </DialogHeader>
           {form ? (
             <div className="grid max-h-[60vh] gap-3 overflow-y-auto sm:grid-cols-2">
-              <label className="grid gap-1 text-xs sm:col-span-2">
-                <span className="font-medium">Rule name</span>
-                <input
-                  className="h-8 rounded-md border border-border bg-background px-2.5 text-sm"
+              <FormField label="Rule name" htmlFor="leave-rule-name" className="sm:col-span-2">
+                <Input
+                  id="leave-rule-name"
                   value={form.name}
                   placeholder="e.g. Long annual leave"
                   onChange={(event) => setForm({ ...form, name: event.target.value })}
                 />
-              </label>
-              <label className="grid gap-1 text-xs">
-                <span className="font-medium">Minimum request length (days)</span>
-                <input
+              </FormField>
+              <FormField label="Minimum request length (days)" htmlFor="leave-rule-min-days">
+                <Input
+                  id="leave-rule-min-days"
                   type="number"
                   min={0}
                   step="0.5"
-                  className="h-8 rounded-md border border-border bg-background px-2.5 text-sm"
                   placeholder="Any length"
                   value={form.min_total_days}
                   onChange={(event) => setForm({ ...form, min_total_days: event.target.value })}
                 />
-              </label>
+              </FormField>
               <div className="grid gap-1 text-xs">
                 <span className="font-medium">Management approver</span>
                 <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-1.5">

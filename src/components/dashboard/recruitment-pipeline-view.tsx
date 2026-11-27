@@ -26,6 +26,8 @@ import { Input } from "@/components/ui/input"
 import {
   Dialog, DialogFooter, DialogHeader, DialogPopup, DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
+import { FormField } from "@/components/ui/form-field"
+import { PhoneInput } from "@/components/ui/phone-input"
 
 type FormMode = "request" | "candidate" | "interview" | "score" | "check" | "offer" | "convert"
 
@@ -57,10 +59,8 @@ function label(row: AdminRecord) {
 }
 function status(row: AdminRecord) { return value(row, "status") }
 
-const fieldClass = "min-h-9 w-full rounded-sm border border-border bg-background px-2.5 py-1.5 text-sm"
-
-function Field({ title, children }: { title: string; children: React.ReactNode }) {
-  return <label className="block space-y-1.5 text-xs font-medium text-muted-foreground"><span>{title}</span>{children}</label>
+function Field({ title, children, required }: { title: string; children: React.ReactNode; required?: boolean }) {
+  return <FormField label={title.charAt(0).toUpperCase() + title.slice(1)} required={required}>{children}</FormField>
 }
 
 export function RecruitmentPipelineView() {
@@ -270,23 +270,23 @@ export function RecruitmentPipelineView() {
             {mode === "request" ? <>
               <Field title="Position"><FluentSelect ariaLabel="Position" className="w-full" value={form.position_id ?? ""} placeholder="Select" onChange={(next) => { const selected = positions.find((row) => idOf(row) === Number(next)); setForm((current) => ({ ...current, position_id: next, job_title: String(selected?.name ?? current.job_title ?? "") })) }} options={[{ value: "", label: "Select" }, ...positions.map((row) => ({ value: String(idOf(row)), label: value(row, "name") }))]} /></Field>
               <Field title="Manager"><FluentSelect ariaLabel="Manager" className="w-full" value={form.manager_employee_id ?? ""} placeholder="Select" onChange={(next) => set("manager_employee_id", next)} options={[{ value: "", label: "Select" }, ...employees.map((row) => ({ value: String(idOf(row)), label: label(row) }))]} /></Field>
-              <Field title="Vacancies"><Input required min="1" type="number" value={form.vacancies ?? "1"} onChange={(event) => set("vacancies", event.target.value)} /></Field>
-              <Field title="Monthly budget (TZS)"><Input required min="1" type="number" value={form.budget_amount ?? ""} onChange={(event) => set("budget_amount", event.target.value)} /></Field>
-              <Field title="Job title"><Input required value={form.job_title ?? ""} onChange={(event) => set("job_title", event.target.value)} /></Field>
+              <Field title="Vacancies" required><Input required min="1" type="number" value={form.vacancies ?? "1"} onChange={(event) => set("vacancies", event.target.value)} /></Field>
+              <Field title="Monthly budget (TZS)" required><Input required min="1" type="number" value={form.budget_amount ?? ""} onChange={(event) => set("budget_amount", event.target.value)} /></Field>
+              <Field title="Job title" required><Input required value={form.job_title ?? ""} onChange={(event) => set("job_title", event.target.value)} /></Field>
               <Field title="Posting closes"><DateInput value={form.closes_on ?? ""} onChange={(event) => set("closes_on", event.target.value)} /></Field>
-              <div className="sm:col-span-2"><Field title="Job description"><Textarea required className={fieldClass} rows={5} value={form.job_description ?? ""} onChange={(event) => set("job_description", event.target.value)} /></Field></div>
+              <div className="sm:col-span-2"><Field title="Job description" required><Textarea required rows={5} value={form.job_description ?? ""} onChange={(event) => set("job_description", event.target.value)} /></Field></div>
             </> : null}
             {mode === "candidate" ? <>
-              {(["first_name", "last_name", "email", "phone"] as const).map((key) => <Field key={key} title={key.replaceAll("_", " ")}><Input required type={key === "email" ? "email" : "text"} value={form[key] ?? ""} onChange={(event) => set(key, event.target.value)} /></Field>)}
+              {(["first_name", "last_name", "email", "phone"] as const).map((key) => <Field key={key} title={key.replaceAll("_", " ")} required>{key === "phone" ? <PhoneInput aria-label="Phone" value={form[key] ?? ""} onChange={(next) => set(key, next)} /> : <Input required type={key === "email" ? "email" : "text"} value={form[key] ?? ""} onChange={(event) => set(key, event.target.value)} />}</Field>)}
               <Field title="Gender"><FluentSelect ariaLabel="Gender" className="w-full" value={form.gender ?? ""} placeholder="Select" onChange={(next) => set("gender", next)} options={[{ value: "", label: "Select" }, { value: "male", label: "Male" }, { value: "female", label: "Female" }]} /></Field>
             </> : null}
             {mode === "interview" ? <>
-              <Field title="Scheduled at"><DateTimeInput required aria-label="Scheduled at" value={form.scheduled_at ?? ""} onChange={(event) => set("scheduled_at", event.target.value)} /></Field>
+              <Field title="Scheduled at" required><DateTimeInput required aria-label="Scheduled at" value={form.scheduled_at ?? ""} onChange={(event) => set("scheduled_at", event.target.value)} /></Field>
               <Field title="Location"><Input required value={form.location ?? ""} onChange={(event) => set("location", event.target.value)} /></Field>
               <div className="sm:col-span-2"><Field title="Panel"><Dropdown multiselect aria-label="Panel" className="w-full" placeholder="Select panel" selectedOptions={(form.panel_ids ?? "").split(",").filter(Boolean)} onOptionSelect={(_event, data) => set("panel_ids", (data.selectedOptions ?? []).join(","))}>{users.map((row) => <Option key={idOf(row)} value={String(idOf(row))} text={label(row)}>{label(row)}</Option>)}</Dropdown></Field></div>
             </> : null}
-            {mode === "score" ? <><Field title="Score / 100"><Input required min="0" max="100" type="number" value={form.score ?? ""} onChange={(event) => set("score", event.target.value)} /></Field><div className="sm:col-span-2"><Field title="Comments"><Textarea required className={fieldClass} rows={3} value={form.comments ?? ""} onChange={(event) => set("comments", event.target.value)} /></Field></div></> : null}
-            {mode === "check" ? <><Field title="Check"><FluentSelect ariaLabel="Check" className="w-full" value={form.type ?? ""} placeholder="Select" onChange={(next) => set("type", next)} options={[{ value: "", label: "Select" }, { value: "REFERENCE", label: "Reference" }, { value: "CERTIFICATE", label: "Certificate" }, { value: "NIDA", label: "NIDA" }]} /></Field><Field title="Result"><FluentSelect ariaLabel="Result" className="w-full" value={form.result ?? ""} placeholder="Select" onChange={(next) => set("result", next)} options={[{ value: "", label: "Select" }, { value: "PASS", label: "Pass" }, { value: "FAIL", label: "Fail" }]} /></Field><div className="sm:col-span-2"><Field title="Evidence note"><Textarea required className={fieldClass} rows={3} value={form.evidence_note ?? ""} onChange={(event) => set("evidence_note", event.target.value)} /></Field></div></> : null}
+            {mode === "score" ? <><Field title="Score / 100" required><Input required min="0" max="100" type="number" value={form.score ?? ""} onChange={(event) => set("score", event.target.value)} /></Field><div className="sm:col-span-2"><Field title="Comments" required><Textarea required rows={3} value={form.comments ?? ""} onChange={(event) => set("comments", event.target.value)} /></Field></div></> : null}
+            {mode === "check" ? <><Field title="Check"><FluentSelect ariaLabel="Check" className="w-full" value={form.type ?? ""} placeholder="Select" onChange={(next) => set("type", next)} options={[{ value: "", label: "Select" }, { value: "REFERENCE", label: "Reference" }, { value: "CERTIFICATE", label: "Certificate" }, { value: "NIDA", label: "NIDA" }]} /></Field><Field title="Result"><FluentSelect ariaLabel="Result" className="w-full" value={form.result ?? ""} placeholder="Select" onChange={(next) => set("result", next)} options={[{ value: "", label: "Select" }, { value: "PASS", label: "Pass" }, { value: "FAIL", label: "Fail" }]} /></Field><div className="sm:col-span-2"><Field title="Evidence note" required><Textarea required rows={3} value={form.evidence_note ?? ""} onChange={(event) => set("evidence_note", event.target.value)} /></Field></div></> : null}
             {mode === "offer" ? <><Field title="Monthly salary (TZS)"><Input required min="1" type="number" value={form.salary ?? ""} onChange={(event) => set("salary", event.target.value)} /></Field><Field title="Start date"><DateInput required value={form.start_date ?? ""} onChange={(event) => set("start_date", event.target.value)} /></Field></> : null}
             {mode === "convert" ? <div className="sm:col-span-2"><Field title="Onboarding workflow"><FluentSelect ariaLabel="Onboarding workflow" className="w-full" value={form.onboarding_workflow_id ?? ""} placeholder="Select" onChange={(next) => set("onboarding_workflow_id", next)} options={[{ value: "", label: "Select" }, ...workflows.map((row) => ({ value: String(idOf(row)), label: value(row, "name") }))]} /></Field></div> : null}
           </div>

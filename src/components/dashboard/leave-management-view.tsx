@@ -7,6 +7,9 @@ import { ActingEmployeePanel, type ActingDraft } from "@/components/leave/acting
 import { Button } from "@/components/ui/button";
 import { fluentConfirm, fluentForm } from "@/components/ui/fluent-dialog-service";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
+import { FormField } from "@/components/ui/form-field";
+import { FileDropzone } from "@/components/ui/file-dropzone";
 import { leaveEvidenceMessage } from "@/lib/leave-evidence";
 import {
   extendLeaveEvidenceDeadline,
@@ -341,8 +344,6 @@ function LeaveTypeField({
   );
 }
 
-const leaveTypeControlClass =
-  "mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-border dark:bg-background dark:text-foreground";
 
 function createEmptyLeaveTypeForm() {
   return {
@@ -1618,7 +1619,6 @@ export function LeaveManagementView({
   const [leaveDocumentFile, setLeaveDocumentFile] = React.useState<File | null>(
     null,
   );
-  const leaveMedicalAttachmentInputRef = React.useRef<HTMLInputElement>(null);
   const [selectedWorkflowId, setSelectedWorkflowId] = React.useState("");
   const [holidayImportCountry, setHolidayImportCountry] =
     React.useState<HolidayImportCountryCode>("TZ");
@@ -1875,9 +1875,6 @@ export function LeaveManagementView({
     setEvidenceReason("");
     hydrateLeaveMedicalForm(selectedLeaveRequestRow);
     setLeaveMedicalAttachmentFile(null);
-    if (leaveMedicalAttachmentInputRef.current) {
-      leaveMedicalAttachmentInputRef.current.value = "";
-    }
     setLeaveDocumentFile(null);
   }, [hydrateLeaveMedicalForm, selectedLeaveRequestRow]);
 
@@ -5529,9 +5526,7 @@ export function LeaveManagementView({
           attachment_url: attachmentUrl,
         }));
         setLeaveMedicalAttachmentFile(null);
-        if (leaveMedicalAttachmentInputRef.current) {
-          leaveMedicalAttachmentInputRef.current.value = "";
-        }
+
       }
       await patchLeaveRequestMedicalDetail(token, id, {
         sickness_nature: leaveMedicalForm.sickness_nature.trim() || undefined,
@@ -6287,9 +6282,7 @@ export function LeaveManagementView({
                   <div className="grid grid-cols-2 gap-2">
                     <label className="grid gap-1">
                       <span className="font-medium">From</span>
-                      <input
-                        type="date"
-                        className="h-8 rounded-md border border-border bg-background px-2"
+                      <DateInput
                         value={requestFilters.from_date}
                         onChange={(event) =>
                           setRequestFilters((prev) => ({ ...prev, from_date: event.target.value }))
@@ -6298,9 +6291,7 @@ export function LeaveManagementView({
                     </label>
                     <label className="grid gap-1">
                       <span className="font-medium">To</span>
-                      <input
-                        type="date"
-                        className="h-8 rounded-md border border-border bg-background px-2"
+                      <DateInput
                         value={requestFilters.to_date}
                         onChange={(event) =>
                           setRequestFilters((prev) => ({ ...prev, to_date: event.target.value }))
@@ -6893,8 +6884,7 @@ export function LeaveManagementView({
                                 <p className="text-xs font-medium text-slate-600">
                                   Sickness nature
                                 </p>
-                                <input
-                                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                                <Input className="w-full"
                                   value={leaveMedicalForm.sickness_nature}
                                   onChange={(event) =>
                                     setLeaveMedicalForm((current) => ({
@@ -6908,8 +6898,7 @@ export function LeaveManagementView({
                                 <p className="text-xs font-medium text-slate-600">
                                   Doctor name
                                 </p>
-                                <input
-                                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                                <Input className="w-full"
                                   value={leaveMedicalForm.doctor_name}
                                   onChange={(event) =>
                                     setLeaveMedicalForm((current) => ({
@@ -6923,8 +6912,7 @@ export function LeaveManagementView({
                                 <p className="text-xs font-medium text-slate-600">
                                   Doctor phone
                                 </p>
-                                <input
-                                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                                <Input className="w-full"
                                   value={leaveMedicalForm.doctor_phone}
                                   onChange={(event) =>
                                     setLeaveMedicalForm((current) => ({
@@ -6938,8 +6926,7 @@ export function LeaveManagementView({
                                 <p className="text-xs font-medium text-slate-600">
                                   Hospital name
                                 </p>
-                                <input
-                                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                                <Input className="w-full"
                                   value={leaveMedicalForm.hospital_name}
                                   onChange={(event) =>
                                     setLeaveMedicalForm((current) => ({
@@ -6983,16 +6970,10 @@ export function LeaveManagementView({
                                 <p className="text-xs font-medium text-slate-600">
                                   Medical attachment
                                 </p>
-                                <input
-                                  ref={leaveMedicalAttachmentInputRef}
-                                  type="file"
+                                <FileDropzone
+                                  file={leaveMedicalAttachmentFile}
+                                  onFileChange={setLeaveMedicalAttachmentFile}
                                   accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.txt"
-                                  className="block w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white"
-                                  onChange={(event) =>
-                                    setLeaveMedicalAttachmentFile(
-                                      event.target.files?.[0] ?? null,
-                                    )
-                                  }
                                 />
                                 <p className="text-[11px] text-muted-foreground">
                                   {leaveMedicalAttachmentFile
@@ -7193,21 +7174,18 @@ export function LeaveManagementView({
               The reason is recorded on the request and in the audit log.
             </DialogDescription>
           </DialogHeader>
-          <label className="block space-y-1.5 text-sm font-medium text-foreground">
-            Reason
-            <textarea
+          <FormField label="Reason" htmlFor="leave-override-reason" required hint="At least 5 characters.">
+            <Textarea
+              id="leave-override-reason"
               autoFocus
               rows={3}
-              className="block w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-normal"
+              formatting={false}
               placeholder="e.g. Manager on leave until next week"
               value={overrideReason}
               disabled={saving}
               onChange={(event) => setOverrideReason(event.target.value)}
             />
-            <span className="block text-xs font-normal text-muted-foreground">
-              At least 5 characters.
-            </span>
-          </label>
+          </FormField>
           <DialogFooter>
             <button
               type="button"
@@ -7262,19 +7240,17 @@ export function LeaveManagementView({
                 ? "Preparing template…"
                 : "Download Excel template"}
             </button>
-            <label className="block space-y-1.5 text-sm font-medium text-foreground">
-              Completed Excel file
-              <input
-                type="file"
+            <FormField label="Completed Excel file">
+              <FileDropzone
+                file={requestImportFile}
                 accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                className="block w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 disabled={requestImportBusy}
-                onChange={(event) => {
-                  setRequestImportFile(event.target.files?.[0] ?? null);
+                onFileChange={(file) => {
+                  setRequestImportFile(file);
                   setRequestImportResult(null);
                 }}
               />
-            </label>
+            </FormField>
             {requestImportResult ? (
               <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
                 <p className="font-medium">
@@ -7803,10 +7779,9 @@ export function LeaveManagementView({
                     label="Leave name"
                     help="The name employees will see. Example: Sick Leave."
                   >
-                    <input
+                    <Input
                       autoFocus
                       required
-                      className={leaveTypeControlClass}
                       placeholder="Example: Sick Leave"
                       value={typeForm.name}
                       onChange={(event) => {
@@ -7984,11 +7959,10 @@ export function LeaveManagementView({
                       label="Days that can move forward"
                       help="The most unused days an employee can keep for next year. Leave blank for no cap. Policies can set expiry and stricter rules per employee group."
                     >
-                      <input
+                      <Input
                         type="number"
                         min={0}
                         placeholder="No cap"
-                        className={leaveTypeControlClass}
                         value={typeForm.max_carry_forward_days}
                         onChange={(event) =>
                           setTypeForm((prev) => ({
@@ -8003,12 +7977,11 @@ export function LeaveManagementView({
                     label="Yearly maximum"
                     help="The most days an employee can receive in one year. Enter 0 for no limit."
                   >
-                    <input
+                    <Input
                       type="text"
                       inputMode="decimal"
                       autoComplete="off"
                       placeholder="0 = no limit"
-                      className={leaveTypeControlClass}
                       value={typeForm.max_days_per_year}
                       onChange={(event) => {
                         const raw = event.target.value.replace(/[^0-9.]/g, "");
@@ -8238,8 +8211,7 @@ export function LeaveManagementView({
             {returnToEmployeeBalances ? null : (
               <label className="space-y-1">
                 <span className="text-xs text-slate-500">Fiscal year</span>
-                <input
-                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                <Input className="w-full"
                   placeholder="2026"
                   value={balanceForm.fiscal_year}
                   onChange={(event) =>
@@ -8280,10 +8252,9 @@ export function LeaveManagementView({
               </label>
               <label className="space-y-1">
                 <span className="text-xs text-slate-500">Amount</span>
-                <input
+                <Input
                   type="number"
-                  min={0}
-                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  min={0} className="w-full"
                   value={balanceForm.amount}
                   onChange={(event) =>
                     setBalanceForm((prev) => ({
@@ -8580,8 +8551,7 @@ export function LeaveManagementView({
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 md:grid-cols-3">
-            <input
-              className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+            <Input
               aria-label="Holiday name"
               maxLength={200}
               placeholder="Holiday name"
@@ -8603,12 +8573,16 @@ export function LeaveManagementView({
             {!holidayBeingEdited && canCreateBranchHolidays ? (
               <label className="space-y-1">
                 <span className="text-sm font-medium">Applies to</span>
-                <select aria-label="Applies to" className="h-10 w-full rounded-md border px-3 text-sm"
+                <FluentSelect
+                  ariaLabel="Applies to"
+                  placeholder="All branches"
                   value={holidayForm.branch_id}
-                  onChange={(event) => setHolidayForm((prev) => ({ ...prev, branch_id: event.target.value }))}>
-                  <option value="">All branches</option>
-                  {holidayBranches.map((branch) => <option key={String(branch.id)} value={String(branch.id)}>{String(branch.name)}</option>)}
-                </select>
+                  onChange={(value) => setHolidayForm((prev) => ({ ...prev, branch_id: value }))}
+                  options={[
+                    { value: "", label: "All branches" },
+                    ...holidayBranches.map((branch) => ({ value: String(branch.id), label: String(branch.name) })),
+                  ]}
+                />
               </label>
             ) : null}
             <FluentSelect
@@ -8679,11 +8653,10 @@ export function LeaveManagementView({
                 <span className="block text-sm font-medium text-slate-700">
                   Year
                 </span>
-                <input
+                <Input
                   type="number"
                   min={1970}
-                  max={2100}
-                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                  max={2100} className="w-full"
                   value={holidayImportYear}
                   onChange={(event) => setHolidayImportYear(event.target.value)}
                   disabled={holidayImportBusy}
@@ -8789,11 +8762,10 @@ export function LeaveManagementView({
                 <span className="block text-sm font-medium text-slate-700">
                   Year
                 </span>
-                <input
+                <Input
                   type="number"
                   min={1970}
-                  max={2100}
-                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                  max={2100} className="w-full"
                   value={holidayRemoveYear}
                   onChange={(event) => setHolidayRemoveYear(event.target.value)}
                   disabled={holidayRemoveBusy}
@@ -8916,8 +8888,7 @@ export function LeaveManagementView({
                 <span className="block text-xs font-medium text-muted-foreground">
                   Fiscal year
                 </span>
-                <input
-                  className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
+                <Input className="w-full"
                   inputMode="numeric"
                   maxLength={4}
                   value={leaveReportYear}
@@ -8934,9 +8905,7 @@ export function LeaveManagementView({
                   <span className="block text-xs font-medium text-muted-foreground">
                     From
                   </span>
-                  <input
-                    type="date"
-                    className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
+                  <DateInput className="w-full"
                     value={leaveReportFrom}
                     onChange={(event) => setLeaveReportFrom(event.target.value)}
                   />
@@ -8945,9 +8914,7 @@ export function LeaveManagementView({
                   <span className="block text-xs font-medium text-muted-foreground">
                     To
                   </span>
-                  <input
-                    type="date"
-                    className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
+                  <DateInput className="w-full"
                     value={leaveReportTo}
                     onChange={(event) => setLeaveReportTo(event.target.value)}
                   />
@@ -9134,16 +9101,11 @@ export function LeaveManagementView({
             title="Leave Balances"
             toolbarActions={
               <>
-                <input aria-label="Balance fiscal year" inputMode="numeric" maxLength={4} className="h-8 w-20 rounded-md border border-border bg-background px-2 text-xs" value={balanceYear} onChange={(event) => { setBalanceYear(event.target.value.replace(/[^\d]/g, "").slice(0, 4)); setMissingPage(1); }} />
-                <input aria-label="Search employee balances" placeholder="Employee name or ID" className="h-8 w-36 rounded-md border border-border bg-background px-2 text-xs" value={balanceSearch} onChange={(event) => setBalanceSearch(event.target.value)} />
-                <select aria-label="Filter department" className="h-8 rounded-md border border-border bg-background px-2 text-xs" value={balanceDepartment} onChange={(event) => setBalanceDepartment(event.target.value)}><option value="all">All departments</option>{balanceDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select>
-                <select aria-label="Filter leave type" className="h-8 rounded-md border border-border bg-background px-2 text-xs" value={balanceType} onChange={(event) => setBalanceType(event.target.value)}>
-                  <option value="all">All leave types</option>
-                  {types.map((type) => <option key={String(type.id)} value={String(type.id)}>{readString(type, ["name", "code"])}</option>)}
-                </select>
-                <select aria-label="Filter available balance" className="h-8 rounded-md border border-border bg-background px-2 text-xs" value={balanceStatus} onChange={(event) => setBalanceStatus(event.target.value)}>
-                  <option value="all">All balances</option><option value="low">5 days or less</option><option value="negative">Negative</option>
-                </select>
+                <Input aria-label="Balance fiscal year" inputMode="numeric" maxLength={4} className="w-20" value={balanceYear} onChange={(event) => { setBalanceYear(event.target.value.replace(/[^\d]/g, "").slice(0, 4)); setMissingPage(1); }} />
+                <Input aria-label="Search employee balances" placeholder="Employee name or ID" className="w-36" value={balanceSearch} onChange={(event) => setBalanceSearch(event.target.value)} />
+                <FluentSelect className="w-44" size="small" ariaLabel="Filter department" value={balanceDepartment} onChange={setBalanceDepartment} options={[{ value: "all", label: "All departments" }, ...balanceDepartments.map((department) => ({ value: String(department.id), label: String(department.name) }))]} />
+                <FluentSelect className="w-44" size="small" ariaLabel="Filter leave type" value={balanceType} onChange={setBalanceType} options={[{ value: "all", label: "All leave types" }, ...types.map((type) => ({ value: String(type.id), label: readString(type, ["name", "code"]) }))]} />
+                <FluentSelect className="w-40" size="small" ariaLabel="Filter available balance" value={balanceStatus} onChange={setBalanceStatus} options={[{ value: "all", label: "All balances" }, { value: "low", label: "5 days or less" }, { value: "negative", label: "Negative" }]} />
                 <button
                   type="button"
                   className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium disabled:opacity-60"
@@ -9771,8 +9733,7 @@ export function LeaveManagementView({
           </AlertDialogHeader>
           <div className="space-y-1">
             <p className="text-xs text-slate-500">Fiscal year</p>
-            <input
-              className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+            <Input className="w-full"
               inputMode="numeric"
               maxLength={4}
               placeholder="2026"

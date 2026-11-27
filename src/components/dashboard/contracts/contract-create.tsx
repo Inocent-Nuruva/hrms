@@ -20,6 +20,10 @@ import {
   type ContractTemplate,
   type ContractType,
 } from "@/lib/contracts-api";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DateInput } from "@/components/ui/date-input";
+import { FluentSelect } from "@/components/ui/fluent-select";
+import { Input } from "@/components/ui/input";
 import { contractWorkspaceMessages as m } from "./contract-workspace-messages";
 import { missingInheritedReasons } from "./contract-workspace-inheritance";
 import {
@@ -239,8 +243,7 @@ export function ContractCreate({
             )}
           </span>
         ) : (
-          <input
-            className="rounded border border-border bg-background p-2"
+          <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={m.employeeSearch}
@@ -290,59 +293,48 @@ export function ContractCreate({
       ) : null}
       <label className="grid gap-1">
         {m.contractType}
-        <select
-          className="rounded border border-border bg-background p-2"
+        <FluentSelect
+          ariaLabel={m.contractType}
           value={type}
-          onChange={(event) => setType(event.target.value as ContractType)}
-        >
-          {Object.entries(m.contractTypes).map(([key, label]) => (
-            <option key={key} value={key}>
-              {label}
-            </option>
-          ))}
-        </select>
+          onChange={(value) => setType(value as ContractType)}
+          options={Object.entries(m.contractTypes).map(([key, label]) => ({
+            value: key,
+            label,
+          }))}
+        />
       </label>
       <label className="grid gap-1">
         {m.template}
-        <select
-          aria-label={m.template}
-          className="rounded border border-border bg-background p-2"
-          value={template?.id ?? "default"}
+        <FluentSelect
+          ariaLabel={m.template}
+          value={String(template?.id ?? "default")}
+          onChange={() => undefined}
+          options={[
+            {
+              value: String(template?.id ?? "default"),
+              label: template?.title ?? m.defaultTemplate,
+            },
+          ]}
           disabled
-        >
-          <option value={template?.id ?? "default"}>
-            {template?.title ?? m.defaultTemplate}
-          </option>
-        </select>
+        />
       </label>
       <label className="grid gap-1">
         {m.startDate}
-        <input
-          className="rounded border border-border bg-background p-2"
-          type="date"
-          value={start}
-          readOnly
-        />
+        <Input type="date" value={start} readOnly />
         <span className="text-sm text-muted-foreground">Taken automatically from the employee’s hire date. Update the employee record to change it.</span>
         {employee && !start ? <span role="alert" className="text-sm text-destructive">The employee has no hire date. Add one to their employee record before creating a contract.</span> : null}
       </label>
       {type === "FIXED_TERM" && (
         <label className="grid gap-1">
           {m.endDate}
-          <input
-            className="rounded border border-border bg-background p-2"
-            type="date"
-            value={end}
-            onChange={(event) => setEnd(event.target.value)}
-          />
+          <DateInput value={end} onValueChange={(value) => setEnd(value)} />
         </label>
       )}
-      <label>
-        <input
-          type="checkbox"
+      <label className="flex items-center gap-2 text-sm">
+        <Checkbox
           checked={partTime}
-          onChange={(event) => setPartTime(event.target.checked)}
-        />{" "}
+          onCheckedChange={(checked) => setPartTime(checked)}
+        />
         {m.partTime}
       </label>
       {error && (

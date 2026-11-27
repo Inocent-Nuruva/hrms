@@ -4,12 +4,12 @@ import { MailRoutingNotice } from "@/components/dashboard/mail-routing-notice"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { Textarea } from "@/components/ui/textarea"
+import { FormField } from "@/components/ui/form-field"
+import { Input } from "@/components/ui/input"
 import Link from "next/link"
 import {
   Button as FluentButton,
   Card,
-  Field as FluentField,
-  Input as FluentInput,
   Switch,
   Text,
 } from "@fluentui/react-components"
@@ -623,15 +623,16 @@ function Field({
   className?: string
 }) {
   return (
-    <label className={cn("grid min-w-0 gap-1 text-xs", className)}>
-      <span className="font-medium text-muted-foreground">{label}</span>
+    <FormField
+      label={label.replace(/\s*\*$/, "")}
+      required={/\*$/.test(label)}
+      className={className}
+    >
       {children}
-    </label>
+    </FormField>
   )
 }
 
-const inputClass =
-  "h-9 w-full rounded-md border border-border bg-background px-2.5 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
 const textareaClass =
   "min-h-20 w-full rounded-md border border-border bg-background px-2.5 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
 
@@ -1996,7 +1997,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
   const renderTemplateFields = (form: ReturnType<typeof emptyTemplateForm>, setForm: typeof setTemplateForm) => (
     <div className="grid gap-3 md:grid-cols-2">
       <Field label="Name *">
-        <input className={inputClass} value={form.name} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} />
+        <Input value={form.name} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} />
       </Field>
       <Field label="Output format">
         <FluentSelect
@@ -2078,16 +2079,14 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         />
       </Field>
       <Field label="Filename pattern">
-        <input
-          className={inputClass}
+        <Input
           value={form.filenamePattern}
           onChange={(e) => setForm((c) => ({ ...c, filenamePattern: e.target.value }))}
           placeholder="attendance-{{date}}.pdf"
         />
       </Field>
       <Field label="Email subject">
-        <input
-          className={inputClass}
+        <Input
           value={form.emailSubjectTemplate}
           onChange={(e) => setForm((c) => ({ ...c, emailSubjectTemplate: e.target.value }))}
         />
@@ -2212,8 +2211,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
             </Field>
             {recipient.recipientType === "EMAIL" ? (
               <Field label="Email address">
-                <input
-                  className={inputClass}
+                <Input
                   type="email"
                   value={recipient.emailAddress}
                   onChange={(e) =>
@@ -2232,8 +2230,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
             ) : null}
             {recipient.recipientType === "COMPANY_USER" ? (
               <Field label="Company user ID">
-                <input
-                  className={inputClass}
+                <Input
                   type="number"
                   min={1}
                   value={recipient.companyUserId}
@@ -2252,8 +2249,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
             ) : null}
             {recipient.recipientType === "EMPLOYEE" ? (
               <Field label="Employee ID">
-                <input
-                  className={inputClass}
+                <Input
                   type="number"
                   min={1}
                   value={recipient.employeeId}
@@ -2272,8 +2268,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
             ) : null}
             {recipient.recipientType === "ROLE" ? (
               <Field label="Role ID">
-                <input
-                  className={inputClass}
+                <Input
                   type="number"
                   min={1}
                   value={recipient.roleId}
@@ -2293,8 +2288,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
             {recipient.recipientType === "DEPARTMENT" ||
             recipient.recipientType === "DEPARTMENT_MANAGER" ? (
               <Field label="Department ID">
-                <input
-                  className={inputClass}
+                <Input
                   type="number"
                   min={1}
                   value={recipient.departmentId}
@@ -2313,8 +2307,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
             ) : null}
             {recipient.recipientType === "DYNAMIC_GROUP" ? (
               <Field label="Dynamic group code">
-                <input
-                  className={inputClass}
+                <Input
                   value={recipient.dynamicGroupCode}
                   onChange={(e) =>
                     setForm((current) => ({
@@ -2331,8 +2324,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
               </Field>
             ) : null}
             <Field label="Display name (optional)">
-              <input
-                className={inputClass}
+              <Input
                 value={recipient.displayName}
                 onChange={(e) =>
                   setForm((current) => ({
@@ -2371,7 +2363,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
   const renderScheduleFields = (form: ReturnType<typeof emptyScheduleForm>, setForm: typeof setScheduleForm) => (
     <div className="grid gap-3 md:grid-cols-2">
       <Field label="Name *">
-        <input className={inputClass} value={form.name} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} />
+        <Input value={form.name} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} />
       </Field>
       <Field label="Template *">
         <FluentSelect
@@ -2400,8 +2392,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         />
       </Field>
       <Field label="Execution time">
-        <input
-          className={inputClass}
+        <Input
           value={form.executionTime}
           onChange={(e) => setForm((c) => ({ ...c, executionTime: e.target.value }))}
           placeholder="08:00"
@@ -2415,8 +2406,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
               ? "Day in first month of quarter"
               : "Day in January"
         }>
-          <input
-            className={inputClass}
+          <Input
             type="number"
             min={1}
             max={31}
@@ -2427,8 +2417,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
       ) : null}
       {form.scheduleType === "WEEKLY" ? (
         <Field label="Weekdays (comma-separated)">
-          <input
-            className={inputClass}
+          <Input
             value={form.weekdays}
             onChange={(e) => setForm((c) => ({ ...c, weekdays: e.target.value }))}
             placeholder={WEEKDAYS.join(",")}
@@ -2436,7 +2425,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         </Field>
       ) : null}
       <Field label="Timezone">
-        <input className={inputClass} value={form.timezone} onChange={(e) => setForm((c) => ({ ...c, timezone: e.target.value }))} />
+        <Input value={form.timezone} onChange={(e) => setForm((c) => ({ ...c, timezone: e.target.value }))} />
       </Field>
       <Field label="Start date">
         <DatePickerPresets value={form.startDate} onChange={(value) => setForm((c) => ({ ...c, startDate: value }))} placeholder="Start" className="h-9" />
@@ -2458,8 +2447,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         />
       </Field>
       <Field label="Max retries">
-        <input
-          className={inputClass}
+        <Input
           type="number"
           min={0}
           value={form.maxRetryAttempts}
@@ -2483,16 +2471,16 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
 
   const renderSmtpFields = (form: ReturnType<typeof emptySmtpForm>, setForm: typeof setSmtpForm, isEdit: boolean) => (
     <div className="grid gap-3 md:grid-cols-2">
-      <FluentField label="Name" required>
-        <FluentInput value={form.name} onChange={(_, data) => setForm((c) => ({ ...c, name: data.value }))} />
-      </FluentField>
-      <FluentField label="Host" required>
-        <FluentInput value={form.host} onChange={(_, data) => setForm((c) => ({ ...c, host: data.value }))} />
-      </FluentField>
-      <FluentField label="Port">
-        <FluentInput type="number" value={form.port} onChange={(_, data) => setForm((c) => ({ ...c, port: data.value }))} />
-      </FluentField>
-      <FluentField label="Security">
+      <FormField label="Name" required>
+        <Input value={form.name} onChange={(event) => setForm((c) => ({ ...c, name: event.target.value }))} />
+      </FormField>
+      <FormField label="Host" required>
+        <Input value={form.host} onChange={(event) => setForm((c) => ({ ...c, host: event.target.value }))} />
+      </FormField>
+      <FormField label="Port">
+        <Input type="number" value={form.port} onChange={(event) => setForm((c) => ({ ...c, port: event.target.value }))} />
+      </FormField>
+      <FormField label="Security">
         <FluentSelect
           ariaLabel="Security"
           className="w-full"
@@ -2500,56 +2488,56 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
           onChange={(value) => setForm((c) => ({ ...c, securityType: value }))}
           options={SECURITY_TYPES.map((value) => ({ value, label: value }))}
         />
-      </FluentField>
-      <FluentField label="Username">
-        <FluentInput value={form.username} onChange={(_, data) => setForm((c) => ({ ...c, username: data.value }))} />
-      </FluentField>
-      <FluentField label={isEdit ? "Password (leave blank to keep)" : "Password"}>
-        <FluentInput
+      </FormField>
+      <FormField label="Username">
+        <Input value={form.username} onChange={(event) => setForm((c) => ({ ...c, username: event.target.value }))} />
+      </FormField>
+      <FormField label={isEdit ? "Password (leave blank to keep)" : "Password"}>
+        <Input
           type="password"
           value={form.password}
-          onChange={(_, data) => setForm((c) => ({ ...c, password: data.value }))}
+          onChange={(event) => setForm((c) => ({ ...c, password: event.target.value }))}
           autoComplete="new-password"
         />
-      </FluentField>
-      <FluentField label="Sender name">
-        <FluentInput value={form.senderName} onChange={(_, data) => setForm((c) => ({ ...c, senderName: data.value }))} />
-      </FluentField>
-      <FluentField label="Sender email" required>
-        <FluentInput
+      </FormField>
+      <FormField label="Sender name">
+        <Input value={form.senderName} onChange={(event) => setForm((c) => ({ ...c, senderName: event.target.value }))} />
+      </FormField>
+      <FormField label="Sender email" required>
+        <Input
           type="email"
           value={form.senderEmail}
-          onChange={(_, data) => setForm((c) => ({ ...c, senderEmail: data.value }))}
+          onChange={(event) => setForm((c) => ({ ...c, senderEmail: event.target.value }))}
         />
-      </FluentField>
-      <FluentField label="Reply-to email">
-        <FluentInput
+      </FormField>
+      <FormField label="Reply-to email">
+        <Input
           type="email"
           value={form.replyToEmail}
-          onChange={(_, data) => setForm((c) => ({ ...c, replyToEmail: data.value }))}
+          onChange={(event) => setForm((c) => ({ ...c, replyToEmail: event.target.value }))}
         />
-      </FluentField>
-      <FluentField label="Connection timeout (ms)">
-        <FluentInput
+      </FormField>
+      <FormField label="Connection timeout (ms)">
+        <Input
           type="number"
           value={form.connectionTimeoutMs}
-          onChange={(_, data) => setForm((c) => ({ ...c, connectionTimeoutMs: data.value }))}
+          onChange={(event) => setForm((c) => ({ ...c, connectionTimeoutMs: event.target.value }))}
         />
-      </FluentField>
-      <FluentField label="Status">
+      </FormField>
+      <FormField label="Status">
         <Switch
           checked={form.isActive === "true"}
           label={form.isActive === "true" ? "Active" : "Inactive"}
           onChange={(_, data) => setForm((c) => ({ ...c, isActive: String(data.checked) }))}
         />
-      </FluentField>
-      <FluentField label="Default configuration">
+      </FormField>
+      <FormField label="Default configuration">
         <Switch
           checked={form.isDefault === "true"}
           label={form.isDefault === "true" ? "Default" : "Not default"}
           onChange={(_, data) => setForm((c) => ({ ...c, isDefault: String(data.checked) }))}
         />
-      </FluentField>
+      </FormField>
       <Card className="grid gap-3 p-4 md:col-span-2" appearance="subtle">
         <div>
           <Text weight="semibold" size={200}>Draft SMTP test</Text>
@@ -2557,14 +2545,14 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
             Test the form values before saving. If you are editing an authenticated SMTP server, include the password if the connection needs it.
           </Text>
         </div>
-        <FluentField label="Test recipient email" required>
-          <FluentInput
+        <FormField label="Test recipient email" required>
+          <Input
             type="email"
             value={smtpDraftTestRecipient}
-            onChange={(_, data) => setSmtpDraftTestRecipient(data.value)}
+            onChange={(event) => setSmtpDraftTestRecipient(event.target.value)}
             placeholder="name@example.com"
           />
-        </FluentField>
+        </FormField>
         <div className="flex justify-end">
           <FluentButton
             type="button"
@@ -2648,8 +2636,8 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         }
         toolbarActions={
           <>
-            <input
-              className="h-8 w-36 rounded-lg border border-border bg-background px-2 text-xs sm:w-48"
+            <Input
+              className="w-36 sm:w-48"
               placeholder="Search…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -3063,8 +3051,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
             </DialogDescription>
           </DialogHeader>
           <Field label="Test recipient email">
-            <input
-              className={inputClass}
+            <Input
               type="email"
               placeholder="name@example.com"
               value={smtpTestRecipient}

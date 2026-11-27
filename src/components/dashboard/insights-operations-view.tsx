@@ -11,6 +11,7 @@ import { SearchToggleField } from "@/components/common/search-toggle-field";
 import { DatePickerPresets } from "@/components/ui/date-picker-presets";
 import { FluentSelect } from "@/components/ui/fluent-select";
 import { Input } from "@/components/ui/input";
+import { FormField } from "@/components/ui/form-field";
 import { DashboardIdentitySummary } from "@/components/dashboard/dashboard-identity";
 import { useDashboardIdentity } from "@/components/dashboard/dashboard-identity";
 import { WelcomeCardBackground } from "@/components/dashboard/welcome-card-background";
@@ -2952,17 +2953,14 @@ export function InsightsOperationsView({
             No clock-in rules yet. People cannot punch in until you create this
             set.
           </p>
-          <label className="mt-3 block space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">
-              Name for these clock-in rules
-            </span>
-            <input
-              className={inputClass}
+          <FormField className="mt-3" label="Name for these clock-in rules" htmlFor="clock-in-policy-name">
+            <Input
+              id="clock-in-policy-name"
               value={policyName}
               onChange={(event) => setPolicyName(event.target.value)}
               placeholder="Office clock-in"
             />
-          </label>
+          </FormField>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
             <button

@@ -5,7 +5,8 @@ import * as React from "react"
 import { GitCompareIcon, HistoryIcon, UsersIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { DateInput } from "@/components/ui/date-input"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import type { AdminRecord } from "@/lib/admin-api"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
@@ -133,30 +134,28 @@ export function LeavePolicyVersionsPanel({
             Editing an approved policy creates a new version. Earlier versions stay for history and the calculations made under them.
           </p>
         </div>
-        <select
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-          value={policyId ?? ""}
-          onChange={(event) => {
+        <FluentSelect
+          className="max-w-sm"
+          value={policyId != null ? String(policyId) : ""}
+          onChange={(value) => {
             setCompare(null)
             setImpact(null)
-            setPolicyId(event.target.value ? Number(event.target.value) : null)
+            setPolicyId(value ? Number(value) : null)
           }}
-          aria-label="Policy"
-        >
-          <option value="">Choose a policy…</option>
-          {policies.map((policy) => (
-            <option key={String(policy.id)} value={String(policy.id)}>
-              {String(policy.name)} {policy.version_no ? `(v${String(policy.version_no)})` : ""}
-            </option>
-          ))}
-        </select>
+          ariaLabel="Policy"
+          placeholder="Choose a policy…"
+          options={policies.map((policy) => ({
+            value: String(policy.id),
+            label: `${String(policy.name)} ${policy.version_no ? `(v${String(policy.version_no)})` : ""}`.trim(),
+          }))}
+        />
       </div>
 
       {policyId !== null ? (
         <>
           <label className="flex flex-wrap items-center gap-2 text-xs">
             <span className="font-medium">Effective date for approvals</span>
-            <Input type="date" className="w-44" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} />
+            <DateInput className="w-44" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} />
           </label>
           <div className="overflow-x-auto">
             <StandardTable className="w-full min-w-[720px] text-sm" data-testid="policy-versions">

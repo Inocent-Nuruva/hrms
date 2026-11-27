@@ -4,6 +4,8 @@ import { LeaveAccrualSimulator } from "@/components/leave/leave-accrual-simulato
 import * as React from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { InfoLabel } from "@fluentui/react-components"
+import { Input } from "@/components/ui/input"
+import { DateInput } from "@/components/ui/date-input"
 import { Check, ChevronDown, Plus, Trash2, Users } from "lucide-react"
 
 import { useDashboardMotion } from "@/lib/dashboard-motion"
@@ -150,8 +152,6 @@ function BoolPair({
   )
 }
 
-const inputClass =
-  "h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-border dark:bg-background dark:text-white"
 
 function ChoiceRow({
   label,
@@ -294,22 +294,20 @@ function PolicyTypeAccrualCarryForward({
           />
           {assignment.carry_forward_method === "percentage" ? (
             <Field label="Percentage carried" hint="Share of unused days carried into the new leave year (0–100).">
-              <input
+              <Input
                 type="number"
                 min={0}
                 max={100}
-                className={inputClass}
                 value={assignment.carry_forward_percentage}
                 onChange={(event) => onChange({ carry_forward_percentage: event.target.value })}
               />
             </Field>
           ) : null}
           <Field label="Max days carried" hint="Leave blank for no cap.">
-            <input
+            <Input
               type="number"
               min={0}
               step="0.5"
-              className={inputClass}
               placeholder="No cap"
               value={assignment.carry_forward_max_days}
               onChange={(event) => onChange({ carry_forward_max_days: event.target.value })}
@@ -329,11 +327,10 @@ function PolicyTypeAccrualCarryForward({
           />
           {assignment.carry_forward_expiry_mode === "months" ? (
             <Field label="Months into the new year" hint="e.g. 3 = carried days expire after 31 March.">
-              <input
+              <Input
                 type="number"
                 min={1}
                 max={12}
-                className={inputClass}
                 value={assignment.carry_forward_expiry_months}
                 onChange={(event) => onChange({ carry_forward_expiry_months: event.target.value })}
               />
@@ -341,12 +338,11 @@ function PolicyTypeAccrualCarryForward({
           ) : null}
           {assignment.carry_forward_expiry_mode === "date" ? (
             <Field label="Expiry date (MM-DD)" hint="Day of the new leave year, e.g. 06-30.">
-              <input
+              <Input
                 type="text"
                 inputMode="numeric"
                 pattern="(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])"
                 placeholder="MM-DD"
-                className={inputClass}
                 value={assignment.carry_forward_expiry_date}
                 onChange={(event) => onChange({ carry_forward_expiry_date: event.target.value })}
               />
@@ -395,11 +391,10 @@ function PolicyTypeAccrualCarryForward({
         label="Protected days (never lapse)"
         hint="Minimum unused days that must be kept (e.g. a statutory or contractual minimum). A stricter statutory rule applies automatically."
       >
-        <input
+        <Input
           type="number"
           min={0}
           step="0.5"
-          className={inputClass}
           value={assignment.protected_minimum_days}
           onChange={(event) => onChange({ protected_minimum_days: event.target.value })}
         />
@@ -428,10 +423,9 @@ function PolicyTypeAccrualCarryForward({
           />
           {assignment.auto_encash_method !== "all" ? (
             <Field label="Max days encashed" hint="Leave blank for no limit.">
-              <input
+              <Input
                 type="number"
                 min={0}
-                className={inputClass}
                 value={assignment.auto_encash_max_days}
                 onChange={(event) => onChange({ auto_encash_max_days: event.target.value })}
               />
@@ -439,11 +433,10 @@ function PolicyTypeAccrualCarryForward({
           ) : null}
           {assignment.auto_encash_method === "percentage" ? (
             <Field label="Percentage encashed" hint="Share of the remaining days paid out (0–100).">
-              <input
+              <Input
                 type="number"
                 min={0}
                 max={100}
-                className={inputClass}
                 value={assignment.auto_encash_percentage}
                 onChange={(event) => onChange({ auto_encash_percentage: event.target.value })}
               />
@@ -693,9 +686,8 @@ export function LeavePolicyEditorSheet({
                   {stage === "basics" ? (
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Field label="Policy name" hint="The name shown in the policy list. Example: Staff leave rules.">
-                        <input
+                        <Input
                           autoFocus
-                          className={inputClass}
                           placeholder="e.g. Staff leave rules"
                           value={value.name}
                           onChange={(event) => onValueChange({ name: event.target.value })}
@@ -726,8 +718,7 @@ export function LeavePolicyEditorSheet({
                       </div>
                       <div className="sm:col-span-2">
                         <Field label="Notes" hint="Add any extra details. You can leave this blank.">
-                          <input
-                            className={inputClass}
+                          <Input
                             placeholder="Optional"
                             value={value.description}
                             onChange={(event) => onValueChange({ description: event.target.value })}
@@ -772,10 +763,9 @@ export function LeavePolicyEditorSheet({
                           </div>
                           {value.accrual_method !== "manual" && value.accrual_method !== "daily" ? (
                             <Field label="Days added each period" hint="How many leave days are added each time.">
-                              <input
+                              <Input
                                 type="number"
                                 min={0}
-                                className={inputClass}
                                 value={value.accrual_rate}
                                 onChange={(event) => onValueChange({ accrual_rate: event.target.value })}
                               />
@@ -831,10 +821,9 @@ export function LeavePolicyEditorSheet({
                                   </p>
                                 </button>
                                 <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-                                  <input
+                                  <Input
                                     type="number"
-                                    min={0}
-                                    className="h-9 w-16 rounded-md border border-slate-200 bg-white px-2 text-center text-xs font-semibold text-primary outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                    min={0} className="w-16 text-center"
                                     value={assignment.annual_quota_days}
                                     onChange={(event) => {
                                       const next = event.target.value
@@ -903,10 +892,9 @@ export function LeavePolicyEditorSheet({
                                         label="Max per request"
                                         hint="Filled from this leave type's yearly maximum. You can lower it for this policy. Enter 0 for no extra cap."
                                       >
-                                        <input
+                                        <Input
                                           type="number"
                                           min={0}
-                                          className={inputClass}
                                           value={assignment.max_per_request_days}
                                           onChange={(event) =>
                                             updateAssignment(index, { max_per_request_days: event.target.value })
@@ -917,10 +905,9 @@ export function LeavePolicyEditorSheet({
                                         label="Maximum accumulated balance"
                                         hint="The most leave days an employee may hold for this type (applied to balance imports). Enter 0 for no limit."
                                       >
-                                        <input
+                                        <Input
                                           type="number"
                                           min={0}
-                                          className={inputClass}
                                           value={assignment.maximum_accumulation_days}
                                           onChange={(event) =>
                                             updateAssignment(index, { maximum_accumulation_days: event.target.value })
@@ -947,12 +934,11 @@ export function LeavePolicyEditorSheet({
                                             label="Salary divisor for encashment"
                                             hint="Monthly base salary is divided by this value to calculate pay per unused leave day. Set this from your approved HR/Finance rule."
                                           >
-                                            <input
+                                            <Input
                                               type="number"
                                               min={1}
                                               step="0.01"
                                               required
-                                              className={inputClass}
                                               value={assignment.encashment_rate_divisor}
                                               onChange={(event) => updateAssignment(index, { encashment_rate_divisor: event.target.value })}
                                             />
@@ -961,10 +947,9 @@ export function LeavePolicyEditorSheet({
                                             label="Max encashment days"
                                             hint="The most unused days an employee can exchange for money at one time."
                                           >
-                                            <input
+                                            <Input
                                               type="number"
                                               min={0}
-                                              className={inputClass}
                                               value={assignment.maximum_encashment_days}
                                               onChange={(event) =>
                                                 updateAssignment(index, { maximum_encashment_days: event.target.value })
@@ -975,10 +960,9 @@ export function LeavePolicyEditorSheet({
                                             label="Min balance after"
                                             hint="How many leave days must remain after days are exchanged for money."
                                           >
-                                            <input
+                                            <Input
                                               type="number"
                                               min={0}
-                                              className={inputClass}
                                               value={assignment.minimum_balance_after_encashment}
                                               onChange={(event) =>
                                                 updateAssignment(index, {
@@ -1219,10 +1203,9 @@ export function LeavePolicyEditorSheet({
 
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     <Field label="Longest stretch" hint="The most leave days an employee can take in a row.">
-                      <input
+                      <Input
                         type="number"
                         min={1}
-                        className={inputClass}
                         value={value.max_consecutive_days}
                         onChange={(event) => onValueChange({ max_consecutive_days: event.target.value })}
                       />
@@ -1289,10 +1272,9 @@ export function LeavePolicyEditorSheet({
                             label="Min short leave (min)"
                             hint="The fewest minutes an employee can request."
                           >
-                            <input
+                            <Input
                               type="number"
                               min={1}
-                              className={inputClass}
                               value={value.minimum_short_leave_minutes}
                               onChange={(event) => onValueChange({ minimum_short_leave_minutes: event.target.value })}
                             />
@@ -1301,10 +1283,9 @@ export function LeavePolicyEditorSheet({
                             label="Max short leave (min)"
                             hint="The most minutes an employee can request as short leave."
                           >
-                            <input
+                            <Input
                               type="number"
                               min={1}
-                              className={inputClass}
                               value={value.maximum_short_leave_minutes}
                               onChange={(event) => onValueChange({ maximum_short_leave_minutes: event.target.value })}
                             />
@@ -1335,28 +1316,25 @@ export function LeavePolicyEditorSheet({
                       >
                         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                           <Field label="Service months" hint="How many months an employee must work before using this policy.">
-                            <input
+                            <Input
                               type="number"
                               min={0}
-                              className={inputClass}
                               value={value.min_service_months}
                               onChange={(event) => onValueChange({ min_service_months: event.target.value })}
                             />
                           </Field>
                           <Field label="Notice days" hint="How many days early an employee must request leave.">
-                            <input
+                            <Input
                               type="number"
                               min={0}
-                              className={inputClass}
                               value={value.minimum_notice_days}
                               onChange={(event) => onValueChange({ minimum_notice_days: event.target.value })}
                             />
                           </Field>
                           <Field label="Backdate days" hint="How many days in the past an employee can date a request.">
-                            <input
+                            <Input
                               type="number"
                               min={0}
-                              className={inputClass}
                               value={value.maximum_backdate_days}
                               onChange={(event) => onValueChange({ maximum_backdate_days: event.target.value })}
                             />
@@ -1378,19 +1356,17 @@ export function LeavePolicyEditorSheet({
                             onChange={(next) => onValueChange({ cancellation_requires_approval: next })}
                           />
                           <Field label="Cancel cutoff days" hint="How many days before leave a cancellation still needs approval.">
-                            <input
+                            <Input
                               type="number"
                               min={0}
-                              className={inputClass}
                               value={value.cancellation_cutoff_days}
                               onChange={(event) => onValueChange({ cancellation_cutoff_days: event.target.value })}
                             />
                           </Field>
                           <Field label="Overall carry-over cap" hint="The total unused days an employee can keep. Enter 0 for no limit.">
-                            <input
+                            <Input
                               type="number"
                               min={0}
-                              className={inputClass}
                               value={value.maximum_accumulation_days}
                               onChange={(event) => onValueChange({ maximum_accumulation_days: event.target.value })}
                             />
@@ -1410,21 +1386,19 @@ export function LeavePolicyEditorSheet({
                           {value.leave_year_type === "custom" ? (
                             <>
                               <Field label="Starts in month" hint="1–12">
-                                <input
+                                <Input
                                   type="number"
                                   min={1}
                                   max={12}
-                                  className={inputClass}
                                   value={value.leave_year_start_month}
                                   onChange={(event) => onValueChange({ leave_year_start_month: event.target.value })}
                                 />
                               </Field>
                               <Field label="Starts on day" hint="1–31 (clamped to the month's last day)">
-                                <input
+                                <Input
                                   type="number"
                                   min={1}
                                   max={31}
-                                  className={inputClass}
                                   value={value.leave_year_start_day}
                                   onChange={(event) => onValueChange({ leave_year_start_day: event.target.value })}
                                 />
@@ -1446,17 +1420,14 @@ export function LeavePolicyEditorSheet({
                             label="Change takes effect"
                             hint="For a change to an approved policy: the new version applies from this date (blank = today). Earlier versions stay for history."
                           >
-                            <input
-                              type="date"
-                              className={inputClass}
+                            <DateInput
                               value={value.effective_from}
                               onChange={(event) => onValueChange({ effective_from: event.target.value })}
                             />
                           </Field>
                           <Field label="Reason for change" hint="Recorded in the policy history and audit log.">
-                            <input
+                            <Input
                               type="text"
-                              className={inputClass}
                               value={value.change_reason}
                               onChange={(event) => onValueChange({ change_reason: event.target.value })}
                             />
@@ -1471,9 +1442,8 @@ export function LeavePolicyEditorSheet({
                             onChange={(next) => onValueChange({ save_as_draft: next })}
                           />
                           <Field label="Priority" hint="If two policies apply, the one with the higher number is used.">
-                            <input
+                            <Input
                               type="number"
-                              className={inputClass}
                               value={value.priority}
                               onChange={(event) => onValueChange({ priority: event.target.value })}
                             />
@@ -1491,11 +1461,10 @@ export function LeavePolicyEditorSheet({
                                 label="Absent day"
                                 hint="Days to remove for one full day marked absent. Usually 1."
                               >
-                                <input
+                                <Input
                                   type="number"
                                   min={0}
                                   step="0.5"
-                                  className={inputClass}
                                   value={value.absent_day_deduction_days}
                                   onChange={(event) => onValueChange({ absent_day_deduction_days: event.target.value })}
                                 />
@@ -1504,11 +1473,10 @@ export function LeavePolicyEditorSheet({
                                 label="Unpaid day"
                                 hint="Days to remove for one unpaid leave day. Usually 1."
                               >
-                                <input
+                                <Input
                                   type="number"
                                   min={0}
                                   step="0.5"
-                                  className={inputClass}
                                   value={value.unpaid_leave_day_deduction_days}
                                   onChange={(event) =>
                                     onValueChange({ unpaid_leave_day_deduction_days: event.target.value })
@@ -1519,11 +1487,10 @@ export function LeavePolicyEditorSheet({
                                 label="Half-day deduction"
                                 hint="Days to remove for a half-day absence. Usually 0.5."
                               >
-                                <input
+                                <Input
                                   type="number"
                                   min={0}
                                   step="0.5"
-                                  className={inputClass}
                                   value={value.half_day_deduction_days}
                                   onChange={(event) => onValueChange({ half_day_deduction_days: event.target.value })}
                                 />

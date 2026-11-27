@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import { DateInput } from "@/components/ui/date-input"
+import { Input } from "@/components/ui/input"
 import {
   cancelLeaveDelegation,
   createLeaveDelegation,
@@ -118,7 +120,7 @@ export function LeaveDelegationsPanel({
   if (mode === "self" && !isApprover) return null
 
   const delegateOptions = people.filter((person) => Number(person.value) !== currentCompanyUserId || mode === "hr")
-  const inputClass = "h-8 w-full rounded-md border border-border bg-background px-2.5 text-sm"
+
 
   return (
     <section className="min-w-0 space-y-3 rounded-lg border border-border p-4">
@@ -143,9 +145,9 @@ export function LeaveDelegationsPanel({
           onChange={(value) => setForm({ ...form, delegate: value })}
           options={[{ value: "", label: "Covered by…" }, ...delegateOptions]}
         />
-        <input type="date" aria-label="Cover starts" className={inputClass} value={form.start} onChange={(event) => setForm({ ...form, start: event.target.value })} />
-        <input type="date" aria-label="Cover ends" className={inputClass} value={form.end} min={form.start} onChange={(event) => setForm({ ...form, end: event.target.value })} />
-        <input aria-label="Reason" placeholder="Reason (optional)" className={inputClass} value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} />
+        <DateInput aria-label="Cover starts" value={form.start} onChange={(event) => setForm({ ...form, start: event.target.value })} />
+        <DateInput aria-label="Cover ends" value={form.end} min={form.start} onChange={(event) => setForm({ ...form, end: event.target.value })} />
+        <Input aria-label="Reason" placeholder="Reason (optional)" value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} />
       </div>
       <div className="flex justify-end">
         <Button appearance="primary" disabled={saving} onClick={() => void save()}>
