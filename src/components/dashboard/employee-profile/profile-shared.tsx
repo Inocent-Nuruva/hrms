@@ -1254,7 +1254,9 @@ export function renderEntryInput({
       <Textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="min-h-20 w-full rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-3 py-2 text-sm"
+        formatting={false}
+        rows={4}
+        className="w-full"
       />
     )
   }

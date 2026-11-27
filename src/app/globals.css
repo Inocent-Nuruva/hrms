@@ -164,8 +164,15 @@ input:focus {
   outline: none;
 }
 
-/* Fluent outline inputs: keep the Microsoft stroke visible, including inside portaled dialogs. */
-.fui-Input {
+/* Fluent outline controls (inputs, dropdowns, comboboxes, spin buttons,
+ * selects): keep the Microsoft stroke visible, including inside portaled
+ * dialogs. The base reset otherwise strips it from everything but inputs. */
+.fui-Input,
+.fui-Dropdown,
+.fui-Combobox,
+.fui-SpinButton,
+.fui-Textarea,
+.fui-Select__select {
   border-style: solid !important;
   border-width: 1px !important;
   border-color: var(--colorNeutralStroke1, #d1d1d1) !important;
@@ -173,7 +180,12 @@ input:focus {
   background-color: var(--colorNeutralBackground1, #ffffff);
 }
 
-.fui-Input:hover {
+.fui-Input:hover,
+.fui-Dropdown:hover,
+.fui-Combobox:hover,
+.fui-SpinButton:hover,
+.fui-Textarea:hover,
+.fui-Select__select:hover {
   border-color: var(--colorNeutralStroke1Hover, #c7c7c7) !important;
   border-bottom-color: var(
     --colorNeutralStrokeAccessibleHover,
@@ -181,7 +193,12 @@ input:focus {
   ) !important;
 }
 
-.fui-Input:focus-within {
+.fui-Input:focus-within,
+.fui-Dropdown:focus-within,
+.fui-Combobox:focus-within,
+.fui-SpinButton:focus-within,
+.fui-Textarea:focus-within,
+.fui-Select__select:focus {
   border-color: var(--colorNeutralStroke1Pressed, #b3b3b3) !important;
   border-bottom-width: 2px !important;
   border-bottom-color: var(--colorCompoundBrandStroke, #0f6cbd) !important;
@@ -196,7 +213,12 @@ input:focus {
   color: var(--colorNeutralForegroundOnBrand, #ffffff) !important;
 }
 
-.dark .fui-Input {
+.dark .fui-Input,
+.dark .fui-Dropdown,
+.dark .fui-Combobox,
+.dark .fui-SpinButton,
+.dark .fui-Textarea,
+.dark .fui-Select__select {
   background-color: var(--colorNeutralBackground1, #292929);
 }
 

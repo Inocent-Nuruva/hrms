@@ -18,7 +18,7 @@
 :root {
   --hrms-control-height: 36px;
   --hrms-control-px: 12px;
-  --hrms-control-radius: 0px;
+  --hrms-control-radius: 2px;
   --hrms-control-font: 13px;
   --hrms-control-line: 20px;
   --hrms-control-gap: 8px; /* icon to text */
@@ -322,4 +322,44 @@ body[data-app-text-scale="compact"] {
 /* Phone input: the flag/code button sits flush inside the field. */
 .hrms-phone-input .fui-Input__contentBefore {
   padding-inline-end: 0 !important;
+}
+
+/* Dropdowns and comboboxes fill their container like every other input.
+ * Zero-specificity :where() so a width class on the control (w-56, sm:w-44,
+ * max-w-xs …) still wins where a fixed width is wanted. */
+:where(.fui-Dropdown, .fui-Combobox, .fui-Select):not(:where([data-control="free"], [data-control="free"] *)) {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+:where(.fui-Combobox__input):not(:where([data-control="free"] *)) {
+  width: 100%;
+  min-width: 0;
+}
+
+@layer base {
+/* Plain browser inputs and selects that are not Fluent controls still get
+ * the standard stroke. In the base layer, so any Tailwind class on the
+ * element (OTP boxes, custom search fields, borderless toolbars) wins. */
+:where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]),
+  select
+):not(:where(
+  .fui-Input *, .fui-SearchBox *, .fui-Dropdown *, .fui-Combobox *, .fui-Select *, .fui-SpinButton *, .fui-Textarea *, .fui-DatePicker *, .fui-TimePicker *,
+  [data-control="free"], [data-control="free"] *
+)) {
+  border: 1px solid var(--colorNeutralStroke1, var(--input));
+  border-bottom-color: var(--colorNeutralStrokeAccessible, #616161);
+  background-color: var(--background);
+  color: var(--foreground);
+}
+:where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="color"]),
+  select
+):focus-visible:not(:where(.fui-Input *, .fui-SearchBox *, .fui-Dropdown *, .fui-Combobox *, .fui-Select *, .fui-SpinButton *, .fui-Textarea *, .fui-DatePicker *, .fui-TimePicker *, [data-control="free"], [data-control="free"] *)) {
+  outline: none;
+  border-bottom-color: var(--colorCompoundBrandStroke, #0f6cbd);
+  box-shadow: inset 0 -1px 0 var(--colorCompoundBrandStroke, #0f6cbd);
+}
 }
