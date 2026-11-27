@@ -52,13 +52,13 @@ test("employee uploads a document with title, type, expiry and notes", async ({ 
 
   const dialog = page.getByRole("alertdialog")
   await expect(dialog.getByRole("heading", { name: "Add Documents Record" })).toBeVisible()
-  for (const label of ["Title *", "Document type *", "Expiry date (optional)", "Notes (optional)", "Attachment *"])
-    await expect(dialog.getByText(label, { exact: true })).toBeVisible()
+  for (const label of ["Title", "Document type", "Expiry date (optional)", "Notes (optional)", "Attachment"])
+    await expect(dialog.locator("label").filter({ hasText: label })).toBeVisible()
 
   await dialog.getByRole("button", { name: "Upload", exact: true }).click()
   await expect(dialog.getByText("Title is required.")).toBeVisible()
 
-  await dialog.getByRole("textbox", { name: "Title *" }).fill("Passport copy")
+  await dialog.getByRole("textbox", { name: /Title/ }).fill("Passport copy")
   await dialog.getByRole("combobox", { name: "Document type" }).click()
   await page.getByRole("option", { name: "id", exact: true }).click()
   await dialog.getByRole("textbox", { name: "Formatted text" }).fill("Renewed this year")
@@ -92,7 +92,7 @@ test("employee contact form uses the HR-style dialog with a type select", async 
   const dialog = page.getByRole("alertdialog")
   await expect(dialog.getByRole("heading", { name: "Add Contact Record" })).toBeVisible()
   await expect(dialog.getByRole("combobox", { name: "Contact type" })).toBeVisible()
-  await dialog.locator("label", { hasText: "Email" }).locator("input").fill("robin@example.com")
+  await dialog.getByRole("textbox", { name: "Email" }).fill("robin@example.com")
   await dialog.getByRole("button", { name: "Add", exact: true }).click()
 
   await expect.poll(() => posts.length).toBe(1)
@@ -118,10 +118,10 @@ test("Documents page upload uses the same HR-style form", async ({ page }) => {
 
   const dialog = page.getByRole("alertdialog")
   await expect(dialog.getByRole("heading", { name: "Upload a document" })).toBeVisible()
-  for (const label of ["Title *", "Document type *", "Expiry date (optional)", "Notes (optional)", "Attachment *"])
-    await expect(dialog.getByText(label, { exact: true })).toBeVisible()
+  for (const label of ["Title", "Document type", "Expiry date (optional)", "Notes (optional)", "Attachment"])
+    await expect(dialog.locator("label").filter({ hasText: label })).toBeVisible()
 
-  await dialog.getByRole("textbox", { name: "Title *" }).fill("Degree certificate")
+  await dialog.getByRole("textbox", { name: /Title/ }).fill("Degree certificate")
   await dialog.getByRole("combobox", { name: "Document type" }).click()
   await page.getByRole("option", { name: "Certificate", exact: true }).click()
   await dialog.locator('input[type="file"]').setInputFiles({

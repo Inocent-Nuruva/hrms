@@ -78,13 +78,13 @@ for (const [name,width,height] of [["desktop",1366,900],["mobile",390,844]] as c
       await page.getByRole("option",{name:choice,exact:true}).click()
     }
     await expect(page.getByLabel("Minimum score")).toHaveValue("67")
-    await expect(page.getByLabel("Self-assessment required")).toBeChecked()
+    await expect(page.getByRole("checkbox", { name: "Self-assessment required" })).toBeChecked()
     for (const label of ["Objectives required","Manager review required","Confirmation letter required"])
-      await expect(page.getByLabel(label)).not.toBeChecked()
-    await page.getByLabel("Manager review required").check()
+      await expect(page.getByRole("checkbox", { name: label })).not.toBeChecked()
+    await page.getByRole("checkbox", { name: "Manager review required" }).check()
     await page.getByLabel("Priority",{exact:true}).fill("3")
     await page.getByLabel("Maximum extensions",{exact:true}).fill("0")
-    await page.getByLabel("Default policy",{exact:true}).check()
+    await page.getByRole("checkbox", { name: "Default policy", exact: true }).check()
     await page.getByLabel("Effective from").fill("2026-01-01")
     await page.getByLabel("Effective to").fill("2030-01-01")
     if (name === "desktop") { await policyForm.getByRole("textbox",{name:/^Code\b/i}).scrollIntoViewIfNeeded(); await policyForm.screenshot({ animations:"disabled",path:"handbook-images/probation-policy.png" }) }
@@ -115,10 +115,12 @@ for (const [name,width,height] of [["desktop",1366,900],["mobile",390,844]] as c
     await page.getByRole("button",{name:"Save template"}).click()
     await expect(page.getByRole("status").filter({hasText:"Template saved."})).toBeVisible()
     expect(saved["/api/probation/letter-templates"]).toMatchObject({letter_type:"CONFIRMATION",letterhead:"People team",signatory_name:"HR reviewer"})
-    await page.getByLabel("Letter type").selectOption("EXTENSION")
+    await page.getByRole("combobox", { name: "Letter type" }).click()
+    await page.getByRole("option", { name: "Extension", exact: true }).click()
     await expect(page.getByLabel("Letterhead")).toHaveValue("")
     for (const type of ["EXTENSION","NOT_CONFIRMED"]) {
-      await page.getByLabel("Letter type").selectOption(type)
+      await page.getByRole("combobox", { name: "Letter type" }).click()
+      await page.getByRole("option", { name: type === "CONFIRMATION" ? "Confirmation" : type === "EXTENSION" ? "Extension" : "Non-confirmation", exact: true }).click()
       await page.getByLabel("Letterhead").fill("People team")
       await page.getByLabel("Letter body").fill("Decision " + type)
       await page.getByLabel("Signatory name").fill("HR reviewer")
@@ -128,7 +130,8 @@ for (const [name,width,height] of [["desktop",1366,900],["mobile",390,844]] as c
       expect(saved["/api/probation/letter-templates"].letter_type).toBe(type)
     }
     await page.reload()
-    await page.getByLabel("Letter type").selectOption("CONFIRMATION")
+    await page.getByRole("combobox", { name: "Letter type" }).click()
+    await page.getByRole("option", { name: "Confirmation", exact: true }).click()
     await expect(page.getByLabel("Letterhead")).toHaveValue("People team")
   })
 }

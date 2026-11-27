@@ -83,7 +83,7 @@ for (const [device, width, height] of [
       const limit = page.getByLabel("Maximum backdate days")
       await expect(limit).toHaveValue("30")
       await page
-        .getByLabel("Allow backdating for users with backdate permission")
+        .getByRole("checkbox", { name: "Allow backdating for users with backdate permission" })
         .check()
       await limit.fill("12")
       await page.getByRole("button", { name: "Save settings" }).click()
@@ -99,9 +99,7 @@ for (const [device, width, height] of [
         .getByRole("button", { name: "New movement", exact: true })
         .first()
         .click()
-      const acknowledgement = page.getByLabel(
-        "Require employee acknowledgement after the movement is applied"
-      )
+      const acknowledgement = page.getByRole("checkbox", { name: "Require employee acknowledgement after the movement is applied" })
       await expect(acknowledgement).not.toBeChecked()
       await acknowledgement.check()
       await expect(acknowledgement).toBeChecked()

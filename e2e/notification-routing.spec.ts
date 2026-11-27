@@ -61,7 +61,7 @@ for (const [size,width,height] of [["desktop",1366,900],["mobile",390,844]] as c
       await page.getByRole("button",{name:"View",exact:true}).first().click()
       await page.getByRole("button",{name:"Edit "+kind,exact:true}).click()
       const form = page.getByRole("form",{name:"Edit "+kind})
-      if (kind === "template") await form.getByRole("textbox",{name:"Title",exact:true}).fill("Changed notice")
+      if (kind === "template") await form.getByRole("textbox",{name:/Title/}).fill("Changed notice")
       else await form.getByRole("spinbutton",{name:"Reminder before (minutes)",exact:true}).fill("0")
       const sent = page.waitForRequest(r => r.method() === "PATCH" && r.url().includes("/notifications/"+kind+"s/"))
       await form.getByRole("button",{name:"Save "+kind,exact:true}).click()

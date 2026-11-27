@@ -186,10 +186,14 @@ for (const [device, width, height] of [
       await expect(
         page.getByRole("heading", { name: "Team recommendations", exact: true })
       ).toBeVisible()
-      await page.getByLabel("Team member").selectOption("14")
-      await page.getByLabel("Recommendation type").selectOption("TRANSFER")
-      await page.getByLabel("Proposed branch").selectOption("4")
-      await page.getByLabel("Proposed department").selectOption("2")
+      await page.getByRole("combobox", { name: "Team member" }).click()
+      await page.getByRole("option", { name: "Robin Vale (E014)", exact: true }).click()
+      await page.getByRole("combobox", { name: "Recommendation type" }).click()
+      await page.getByRole("option", { name: "Transfer", exact: true }).click()
+      await page.getByRole("combobox", { name: "Proposed branch" }).click()
+      await page.getByRole("option", { name: "Central", exact: true }).click()
+      await page.getByRole("combobox", { name: "Proposed department" }).click()
+      await page.getByRole("option", { name: "Operations", exact: true }).click()
       await page
         .getByRole("textbox", { name: "Rationale", exact: true })
         .fill("Matching this assignment to the Operations vacancy.")
