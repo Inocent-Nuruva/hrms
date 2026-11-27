@@ -23,7 +23,9 @@ it("shows the applied movement and effective date in the employee’s Status His
     const panel = host.querySelector('[aria-label="Status history"]')
     expect(panel?.textContent).toContain("Movement applied")
     expect(panel?.textContent).toContain("Salary Revision (MOV-0042)")
-    expect(panel?.textContent).toContain("Effective 2026-11-02")
+    const effectiveDate = [...(panel?.querySelectorAll("dt") ?? [])]
+      .find((label) => label.textContent === "Effective date")
+    expect(effectiveDate?.parentElement?.querySelector("dd")?.textContent).toBe("2026-11-02")
     expect(listEmployeeEmploymentHistory).toHaveBeenCalledWith("fixture", 7)
   } finally {
     await act(async () => root.unmount())

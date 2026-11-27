@@ -21,6 +21,7 @@ on:
       - "next.config.ts"
       - "scripts/ci-release-*.mjs"
       - "scripts/check-release-routes*.mjs"
+      - "scripts/browser-shards.cjs"
       - "tsconfig.json"
       - "vitest.config.ts"
       - "android/src/lib/mobile-notification-routing.ts"
@@ -90,7 +91,7 @@ jobs:
           echo "Using API origin ${current} (UAT=9999, production=8888)"
       - name: Set up Node.js
         uses: actions/setup-node@v4
-        with: { node-version: "22" }
+        with: { node-version: "22", cache: npm }
       - name: Validate required deployment files
         shell: bash
         run: |
@@ -204,10 +205,14 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-  onboarding-ui:
-    name: Onboarding desktop and mobile regression
+  browser-shard:
+    name: Browser regression (shard ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     env:
       CI: true
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8888
@@ -216,47 +221,98 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: "22" }
+        with: { node-version: "22", cache: npm }
       - name: Exclude desktop tooling
         run: npm pkg delete devDependencies.electron devDependencies.electron-builder --package-lock=false
       - run: npm ci --no-audit --no-fund
+      - name: Verify browser shard coverage
+        if: matrix.shard == 1
+        run: node scripts/browser-shards.cjs verify
       - run: npx playwright install --with-deps chromium
       - name: Build production browser-test server
         run: |
           npm run build
           cp -r public .next/standalone/
           cp -r .next/static .next/standalone/.next/
-      - run: npx playwright test e2e/onboarding-workspace.spec.ts e2e/forms-feedback.spec.ts e2e/public.spec.ts e2e/auth-session-policy.spec.ts e2e/probation-access.spec.ts e2e/company-directory.spec.ts e2e/notification-routing.spec.ts e2e/organization-structure.spec.ts e2e/attendance-navigation.spec.ts e2e/leave-calendar.spec.ts e2e/movement-workflow.spec.ts e2e/self-service-workspace.spec.ts e2e/profile-record-modals.spec.ts
+      - run: node scripts/browser-shards.cjs run ${{ matrix.shard }}
       - name: Upload browser failure evidence
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: onboarding-ui-failure
+          name: onboarding-ui-failure-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/
           retention-days: 7
-      - name: Upload self-service manual illustrations
+      - name: Upload manual illustrations from this shard
         if: success() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: self-service-manual-illustrations
+          name: manual-illustrations-shard-${{ matrix.shard }}
           path: |
             test-results/**/my-insights.png
             test-results/**/team-recommendation.png
-          if-no-files-found: error
-          retention-days: 7
-      - name: Save verified Companies manual illustrations
-        if: success() && github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: company-manual-illustrations
-          path: |
             test-results/**/employee-number-preview.png
             test-results/**/company-bank-directory.png
             test-results/**/company-deletion-confirmation.png
+          if-no-files-found: ignore
+          retention-days: 7
+
+  verify-manual-illustrations:
+    name: Verify manual illustrations
+    needs: [browser-shard]
+    if: github.event_name == 'pull_request' && needs.browser-shard.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: manual-illustrations-shard-*
+          path: ${{ runner.temp }}/manual-illustrations
+          merge-multiple: true
+      - name: Require all expected illustrations
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for file in my-insights.png team-recommendation.png employee-number-preview.png company-bank-directory.png company-deletion-confirmation.png; do
+            find "$RUNNER_TEMP/manual-illustrations" -type f -name "$file" -print -quit | grep -q . || { echo "Missing manual illustration: $file" >&2; exit 1; }
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: self-service-manual-illustrations
+          path: |
+            ${{ runner.temp }}/manual-illustrations/**/my-insights.png
+            ${{ runner.temp }}/manual-illustrations/**/team-recommendation.png
           if-no-files-found: error
           retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: company-manual-illustrations
+          path: |
+            ${{ runner.temp }}/manual-illustrations/**/employee-number-preview.png
+            ${{ runner.temp }}/manual-illustrations/**/company-bank-directory.png
+            ${{ runner.temp }}/manual-illustrations/**/company-deletion-confirmation.png
+          if-no-files-found: error
+          retention-days: 7
+
+  onboarding-ui:
+    name: Onboarding desktop and mobile regression
+    needs: [browser-shard, verify-manual-illustrations]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require both browser shards and pull-request illustrations
+        env:
+          SHARD_RESULT: ${{ needs.browser-shard.result }}
+          ILLUSTRATIONS_RESULT: ${{ needs.verify-manual-illustrations.result }}
+          EVENT_NAME: ${{ github.event_name }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          [[ "$SHARD_RESULT" == success ]] || { echo 'A browser test shard did not pass.' >&2; exit 1; }
+          if [[ "$EVENT_NAME" == pull_request && "$ILLUSTRATIONS_RESULT" != success ]]; then
+            echo 'Pull-request manual illustration verification did not pass.' >&2
+            exit 1
+          fi
 
   deploy:
     name: Deploy HRMS frontend
