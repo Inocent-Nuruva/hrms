@@ -1008,9 +1008,10 @@ export function EmployeeInviteView() {
       : "Send invitation"
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-0 pb-28 sm:gap-6 lg:pb-10">
+    <div className="mx-auto w-full max-w-6xl pt-4 pb-28 sm:pt-6 lg:pb-10">
+     <div className="flex flex-col rounded-lg border border-border bg-card">
       <PageHeader
-        className="border-b border-border pb-3"
+        className="border-b border-border px-4 py-4 sm:px-6"
         title="Invite employee"
         description="Send a new hire a secure link to complete their own registration."
         actions={
@@ -1028,7 +1029,7 @@ export function EmployeeInviteView() {
       />
 
       {savedInviteDraft ? (
-        <div className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-4 mt-4 flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4 sm:mx-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">Continue where you left off?</p>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -1051,16 +1052,16 @@ export function EmployeeInviteView() {
       ) : null}
 
       {error ? (
-        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <div role="alert" className="mx-4 mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive sm:mx-6">
           {error}
         </div>
       ) : null}
 
       <form
         onSubmit={handleSubmit}
-        className="grid grid-cols-1 items-start gap-5 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]"
+        className="grid grid-cols-1 items-stretch lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]"
       >
-        <div className="flex min-w-0 flex-col gap-5 sm:gap-6">
+        <div className="flex min-w-0 flex-col divide-y divide-border">
           <InviteSection
             step={1}
             icon={<UserRoundIcon className="size-5" />}
@@ -1333,8 +1334,9 @@ export function EmployeeInviteView() {
         </div>
 
         {/* Summary + send: a sticky side panel on large screens, a card on tablets and phones. */}
-        <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20">
-          <section className="rounded-lg border border-border bg-card p-4 sm:p-5">
+        <aside className="min-w-0 rounded-b-lg border-t border-border bg-muted/20 lg:rounded-bl-none lg:border-l lg:border-t-0">
+         <div className="flex flex-col divide-y divide-border lg:sticky lg:top-20">
+          <section className="p-4 sm:p-6">
             <div className="flex items-center gap-3">
               <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
                 {fullName
@@ -1362,7 +1364,7 @@ export function EmployeeInviteView() {
             </dl>
           </section>
 
-          <section className="rounded-lg border border-border bg-card p-4 sm:p-5">
+          <section className="p-4 sm:p-6">
             <p className="text-sm font-semibold text-foreground">What happens next</p>
             <ol className="mt-3 flex flex-col gap-3">
               {[
@@ -1415,6 +1417,7 @@ export function EmployeeInviteView() {
               </Button>
             </div>
           </section>
+         </div>
         </aside>
 
         {/* Phones and tablets: actions stay reachable at the bottom of the screen. */}
@@ -1444,6 +1447,7 @@ export function EmployeeInviteView() {
           </div>
         </div>
       </form>
+     </div>
     </div>
   )
 }
@@ -1463,8 +1467,8 @@ function InviteSection({
   children: React.ReactNode
 }) {
   return (
-    <section aria-labelledby={`invite-section-${step}`} className="rounded-lg border border-border bg-card">
-      <header className="flex items-start gap-3 border-b border-border px-4 py-4 sm:px-6">
+    <section aria-labelledby={`invite-section-${step}`} className="px-4 py-5 sm:px-6 sm:py-6">
+      <header className="mb-5 flex items-start gap-3">
         <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary" aria-hidden="true">
           {icon}
         </span>
@@ -1476,7 +1480,7 @@ function InviteSection({
           <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
         </div>
       </header>
-      <div className="px-4 py-5 sm:px-6 sm:py-6">{children}</div>
+      <div>{children}</div>
     </section>
   )
 }
