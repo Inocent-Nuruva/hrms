@@ -89,7 +89,7 @@ for (const [name,width,height] of [["desktop",1366,900],["mobile",390,844]] as c
     await page.getByLabel("Effective to").fill("2030-01-01")
     if (name === "desktop") { await policyForm.getByRole("textbox",{name:/^Code\b/i}).scrollIntoViewIfNeeded(); await policyForm.screenshot({ animations:"disabled",path:"handbook-images/probation-policy.png" }) }
     await page.getByRole("button",{name:"Save",exact:true}).click()
-    await expect.poll(()=>saved["/api/probation/policies"]).toMatchObject({branch_id:3,department_id:4,position_id:5,grade_id:6,priority:3,maximum_extensions:0,default_extension_days:60,maximum_extension_days:120,minimum_confirmation_score:67,self_assessment_required:true,objectives_required:false,manager_review_required:true,confirmation_letter_required:false,is_default:true,effective_to:"2030-01-01"})
+    await expect.poll(()=>saved["/api/probation/policies"]).toMatchObject({branch_id:3,department_id:4,position_id:5,grade_id:6,priority:3,maximum_extensions:0,default_extension_days:60,maximum_extension_days:120,minimum_confirmation_score:67,self_assessment_required:true,objectives_required:false,manager_review_required:true,confirmation_letter_required:false,is_default:true,effective_from:"2026-01-01",effective_to:"2026-01-02"})
     await page.goto("/dashboard/probation/cases")
     await page.getByRole("button",{name:"Open",exact:true}).first().click()
     await page.getByRole("button",{name:"Manager review",exact:true}).click()

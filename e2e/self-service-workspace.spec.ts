@@ -195,7 +195,7 @@ for (const [device, width, height] of [
       await page.getByRole("combobox", { name: "Proposed department" }).click()
       await page.getByRole("option", { name: "Operations", exact: true }).click()
       await page
-        .getByRole("textbox", { name: "Rationale", exact: true })
+        .getByRole("textbox", { name: /^Rationale/ })
         .fill("Matching this assignment to the Operations vacancy.")
       if (device === "desktop")
         await page
@@ -221,7 +221,7 @@ for (const [device, width, height] of [
       ).toBeFocused()
       await expect(page.getByLabel("Team member")).toBeDisabled()
       await page
-        .getByRole("textbox", { name: "Rationale", exact: true })
+        .getByRole("textbox", { name: /^Rationale/ })
         .fill("Delivered the migration and coached three analysts.")
       await page.getByRole("button", { name: "Submit revision" }).click()
       await expect(page.getByText(/Revision of #51/)).toBeVisible()

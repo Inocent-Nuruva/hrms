@@ -5,14 +5,7 @@ on:
     branches: [uat, master]
     paths:
       - "src/**"
-      - "e2e/onboarding-workspace.spec.ts"
-      - "e2e/probation-access.spec.ts"
-      - "e2e/company-directory.spec.ts"
-      - "e2e/notification-routing.spec.ts"
-      - "e2e/organization-structure.spec.ts"
-      - "e2e/attendance-navigation.spec.ts"
-      - "e2e/leave-calendar.spec.ts"
-      - "e2e/helpers/dashboard-fixture.ts"
+      - "e2e/**"
       - "playwright.config.ts"
       - "public/**"
       - "deploy/hrms-frontend/**"
