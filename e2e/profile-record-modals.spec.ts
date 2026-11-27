@@ -45,7 +45,7 @@ async function workspace(page: Page) {
 test("employee uploads a document with title, type, expiry and notes", async ({ page }) => {
   const posts = await workspace(page)
   await page.goto("/dashboard/me/profile", { waitUntil: "domcontentloaded" })
-  await expect(page.getByText("Loading your profile…")).toHaveCount(0, { timeout: 120000 })
+  await expect(page.getByText("Loading your profileâ€¦")).toHaveCount(0, { timeout: 120000 })
   await page.getByRole("tab", { name: "Records", exact: true }).click()
   await page.getByRole("tablist", { name: "Personal profile sections" }).getByRole("tab", { name: /Documents/ }).click()
   await page.getByRole("button", { name: "Add", exact: true }).click()
@@ -61,7 +61,7 @@ test("employee uploads a document with title, type, expiry and notes", async ({ 
   await dialog.getByRole("textbox", { name: /Title/ }).fill("Passport copy")
   await dialog.getByRole("combobox", { name: "Document type" }).click()
   await page.getByRole("option", { name: "id", exact: true }).click()
-  await dialog.getByRole("textbox", { name: "Formatted text" }).fill("Renewed this year")
+  await dialog.getByRole("textbox", { name: "Notes (optional)" }).fill("Renewed this year")
   await dialog.getByRole("button", { name: "Upload", exact: true }).click()
   await expect(dialog.getByText("Choose a file to upload.")).toBeVisible()
 
@@ -84,7 +84,7 @@ test("employee uploads a document with title, type, expiry and notes", async ({ 
 test("employee contact form uses the HR-style dialog with a type select", async ({ page }) => {
   const posts = await workspace(page)
   await page.goto("/dashboard/me/profile", { waitUntil: "domcontentloaded" })
-  await expect(page.getByText("Loading your profile…")).toHaveCount(0, { timeout: 120000 })
+  await expect(page.getByText("Loading your profileâ€¦")).toHaveCount(0, { timeout: 120000 })
   await page.getByRole("tab", { name: "Personal", exact: true }).click()
   await page.getByRole("tablist", { name: "Personal profile sections" }).getByRole("tab", { name: /Contacts/ }).click()
   await page.getByRole("button", { name: "Add", exact: true }).first().click()
