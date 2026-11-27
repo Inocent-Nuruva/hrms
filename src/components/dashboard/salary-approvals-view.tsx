@@ -1,7 +1,6 @@
 "use client"
 
-import { PageShell } from "@/components/dashboard/page-shell"
-import { PageHeader } from "@/components/ui/page-header"
+import { PageShell, PageShellHeader } from "@/components/dashboard/page-shell"
 import * as React from "react"
 import {
   Avatar,
@@ -26,7 +25,6 @@ import {
   ArrowClockwise20Regular,
   CheckmarkCircle20Regular,
   Eye20Regular,
-  MoneyHand20Regular,
   PersonAdd20Regular,
   Person20Regular,
   Delete20Regular,
@@ -223,9 +221,8 @@ export function SalaryApprovalsView() {
 
   return (
     <PageShell>
-      <header className="border-b border-border px-4 py-4 sm:px-6">
-        <PageHeader
-          title={<span className="inline-flex items-center gap-2"><MoneyHand20Regular />Salary approvals</span>}
+      <PageShellHeader
+          title="Salary approvals"
           description="Review starting salaries, assigned approvers, and completed decisions."
           stats={[
             { label: "Pending", value: pendingCount, tone: pendingCount ? "warning" : "success" },
@@ -236,7 +233,6 @@ export function SalaryApprovalsView() {
             <Button icon={<ArrowClockwise20Regular />} aria-label="Refresh salary approvals" onClick={() => void refresh()} />
           </>}
         />
-      </header>
 
       {loading ? (
         <div className="flex min-h-56 items-center justify-center"><FluentLoadingIndicator /></div>

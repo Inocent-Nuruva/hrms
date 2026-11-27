@@ -1,6 +1,6 @@
 "use client"
 
-import { PageHeader } from "@/components/ui/page-header"
+import { PageShell, PageShellHeader } from "@/components/dashboard/page-shell"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { BriefcaseBusinessIcon, Building2Icon, MailIcon, RotateCcwIcon, UserPlus2Icon, UserRoundIcon } from "lucide-react";
@@ -1009,10 +1009,8 @@ export function EmployeeInviteView({ embedded = false }: { embedded?: boolean } 
       : "Send invitation"
 
   return (
-    <div className={embedded ? "w-full" : "mx-auto w-full max-w-6xl pt-4 pb-6 sm:pt-6 lg:pb-10"}>
-     <div className={embedded ? "flex flex-col" : "flex flex-col rounded-lg border border-border bg-card"}>
-      <PageHeader
-        className="border-b border-border px-4 py-4 sm:px-6"
+    <PageShell embedded={embedded}>
+      <PageShellHeader
         title="Invite employee"
         description="Send a new hire a secure link to complete their own registration."
         actions={
@@ -1448,8 +1446,7 @@ export function EmployeeInviteView({ embedded = false }: { embedded?: boolean } 
           </div>
         </div>
       </form>
-     </div>
-    </div>
+    </PageShell>
   )
 }
 

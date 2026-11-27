@@ -4,6 +4,8 @@ import { PayrollOperationsView } from "@/components/dashboard/payroll-operations
 import { UnifiedReportsView } from "@/components/dashboard/unified-reports-view"
 import { ScheduledReportingView } from "@/components/dashboard/scheduled-reporting-view"
 import { RecruitmentView } from "@/components/dashboard/recruitment-view"
+import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs"
+import { employeeSectionTabGroups } from "@/lib/dashboard-sections"
 import { MovementOperationsView } from "@/components/dashboard/movement-operations-view"
 
 const ALLOWED_VIEWS = new Set([
@@ -40,7 +42,16 @@ export default async function OperationsViewPage({
   }
 
   if (normalized === "recruitment") {
-    return <RecruitmentView />
+    // Recruitment is part of Employees → Joining & onboarding, so it keeps the
+    // same section menu as Invite, Registration, Onboarding and Contracts.
+    return (
+      <div className="flex min-w-0 max-w-full flex-col gap-0">
+        <DashboardSectionTabs groups={employeeSectionTabGroups} />
+        <div className="min-w-0 max-w-full">
+          <RecruitmentView />
+        </div>
+      </div>
+    )
   }
 
   if (normalized === "reports") {
