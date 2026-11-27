@@ -4,7 +4,14 @@ import * as React from "react"
 import { Loader2 } from "lucide-react"
 
 import { listEmployeeEmploymentHistory, type EmploymentEventRecord } from "@/lib/admin-api"
-import { cn } from "@/lib/utils"
+import {
+  ProfileRecordCollection,
+  ProfileRecordEmpty,
+  ProfileSectionHeader,
+  RecordBadges,
+  RecordTag,
+  useProfileRecordView,
+} from "@/components/dashboard/employee-profile/profile-record-views"
 
 const STATUS_REFRESH_EVENT = "hrms:employee-status-updated"
 
@@ -88,6 +95,7 @@ export function EmployeeStatusHistorySection({ employeeId, token }: { employeeId
   const [events, setEvents] = React.useState<EmploymentEventRecord[]>([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [recordView, setRecordView] = useProfileRecordView()
 
   const refresh = React.useCallback(async () => {
     if (!token || employeeId === null) return
@@ -110,64 +118,63 @@ export function EmployeeStatusHistorySection({ employeeId, token }: { employeeId
   }, [refresh])
 
   return (
-    <section aria-label="Status history" className="grid gap-3">
-      <div>
-        <h3 className="text-base font-semibold">Status History</h3>
-        <p className="text-xs text-muted-foreground">Employment changes and applied movements, newest first.</p>
-      </div>
+    <section aria-label="Status history">
+      <ProfileSectionHeader
+        title="Status History"
+        count={events.length}
+        description="Employment changes and applied movements, newest first."
+        view={recordView}
+        onViewChange={setRecordView}
+      />
       {loading && !events.length ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" /> Loading…
         </p>
       ) : error ? (
-        <p className="text-sm text-rose-600">{error}</p>
+        <p role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {error}
+        </p>
       ) : !events.length ? (
-        <p className="py-2 text-sm text-muted-foreground">No status history yet.</p>
+        <ProfileRecordEmpty title="Status History" message="Status changes will appear here." />
       ) : (
-        <ol className="grid gap-0">
-          {events.map((event) => {
-            const rows = detailRows(event)
+        <ProfileRecordCollection
+          title="Status History"
+          view={recordView}
+          moreHint="more details"
+          records={events.map((event) => {
             const from = record(event.old_values)?.employment_status
             const to = record(event.new_values)?.employment_status
-            return (
-              <li key={event.id} className="relative border-l border-border pb-4 pl-4 last:pb-0">
-                <span
-                  className={cn(
-                    "absolute -left-[5px] top-1.5 size-2.5 rounded-full",
-                    event.event_type === "EXITED" ? "bg-rose-500" : event.event_type === "OTHER" ? "bg-sky-500" : "bg-primary",
-                  )}
-                  aria-hidden
-                />
-                <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                  <p className="text-sm font-medium text-slate-800">{event.title}</p>
-                  <p className="text-xs text-muted-foreground">Effective {event.effective_date}</p>
-                </div>
-                {typeof from === "string" && typeof to === "string" && from !== to ? (
-                  <p className="text-xs text-slate-600">
-                    {label(from)} → {label(to)}
-                  </p>
-                ) : null}
-                {rows.length ? (
-                  <dl className="mt-1 grid gap-x-3 gap-y-0.5 text-xs sm:grid-cols-[140px_1fr]">
-                    {rows.map(([key, value]) => (
-                      <React.Fragment key={key}>
-                        <dt className="text-slate-500">{key}</dt>
-                        <dd className="text-slate-800">{value}</dd>
-                      </React.Fragment>
-                    ))}
-                  </dl>
-                ) : null}
-                {event.description ? (
-                  <p className="mt-1 whitespace-pre-line text-xs text-slate-600">{event.description}</p>
-                ) : null}
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  {event.created_by_name ? `By ${event.created_by_name} · ` : ""}
-                  {event.created_at ? new Date(event.created_at).toLocaleString() : ""}
-                </p>
-              </li>
-            )
+            return {
+              key: String(event.id),
+              heading: event.title,
+              badges: (
+                <RecordBadges inline>
+                  <RecordTag tone={event.event_type === "EXITED" ? "danger" : event.event_type === "OTHER" ? "neutral" : "primary"}>
+                    {label(event.event_type)}
+                  </RecordTag>
+                  {typeof from === "string" && typeof to === "string" && from !== to ? (
+                    <RecordTag>
+                      {label(from)} → {label(to)}
+                    </RecordTag>
+                  ) : null}
+                </RecordBadges>
+              ),
+              fields: [
+                { label: "Effective date", value: String(event.effective_date ?? "") },
+                ...detailRows(event).map(([key, value]) => ({ label: key, value })),
+              ].filter((entry) => entry.value && entry.value !== "-"),
+              extra: event.description ? (
+                <p className="mt-1.5 whitespace-pre-line text-xs text-muted-foreground">{event.description}</p>
+              ) : null,
+              meta: [
+                event.created_by_name ? `By ${event.created_by_name}` : null,
+                event.created_at ? new Date(event.created_at).toLocaleString() : null,
+              ]
+                .filter(Boolean)
+                .join(" · "),
+            }
           })}
-        </ol>
+        />
       )}
     </section>
   )

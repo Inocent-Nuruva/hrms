@@ -4,8 +4,18 @@ import { StandardTable, StandardTableHeader, StandardTableBody, StandardTableRow
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Plus, RefreshCw, Search } from "lucide-react"
+import { ExternalLink, Plus, RefreshCw, Search } from "lucide-react"
 
+import {
+  ProfileAddButton,
+  ProfileRecordCollection,
+  ProfileRecordEmpty,
+  ProfileSectionHeader,
+  RecordActionButton,
+  RecordBadges,
+  RecordTag,
+  useProfileRecordView,
+} from "@/components/dashboard/employee-profile/profile-record-views"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { errorMessage, listContracts, type ContractRow } from "@/lib/contracts-api"
 import { cn } from "@/lib/utils"
@@ -59,6 +69,7 @@ export function ContractsList({
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const router = useRouter()
+  const [recordView, setRecordView] = useProfileRecordView()
 
   const load = React.useCallback(async () => {
     if (!token) return
@@ -88,6 +99,101 @@ export function ContractsList({
   }, [load, q])
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  const pager =
+    pages > 1 ? (
+      <div className="flex items-center justify-end gap-2 text-sm">
+        <button type="button" className="rounded-md border border-border px-2 py-1 disabled:opacity-40" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+          Previous
+        </button>
+        <span>
+          Page {page} of {pages}
+        </span>
+        <button type="button" className="rounded-md border border-border px-2 py-1 disabled:opacity-40" disabled={page >= pages} onClick={() => setPage(page + 1)}>
+          Next
+        </button>
+      </div>
+    ) : null
+
+  // One employee's contracts (profile, onboarding, recruitment): same header,
+  // cards and list as the other employee profile sections.
+  if (compact) {
+    const newContract = () =>
+      router.push(`/dashboard/employees/contracts/new${employeeId ? `?employee_id=${employeeId}` : ""}`)
+    return (
+      <section aria-label="Employment contracts" className="grid gap-3">
+        <ProfileSectionHeader
+          title="Contracts"
+          count={loading && !rows.length ? undefined : total}
+          view={recordView}
+          onViewChange={setRecordView}
+          actions={
+            <>
+              <button
+                type="button"
+                aria-label="Refresh"
+                title="Refresh"
+                className="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background hover:bg-muted"
+                onClick={() => void load()}
+              >
+                <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+              </button>
+              {canManage ? <ProfileAddButton label="New contract" onClick={newContract} /> : null}
+            </>
+          }
+        />
+        {error ? (
+          <p role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            {error}
+          </p>
+        ) : null}
+        {!rows.length && !loading ? (
+          <ProfileRecordEmpty
+            title="Contracts"
+            message={`No contracts for ${employeeName ?? "this employee"} yet.`}
+            actionLabel={canManage ? "New contract" : undefined}
+            onAction={canManage ? newContract : undefined}
+          />
+        ) : (
+          <ProfileRecordCollection
+            title="Contracts"
+            view={recordView}
+            records={rows.map((row) => ({
+              key: String(row.id),
+              searchText: [row.referenceNo, CONTRACT_TYPE_LABELS[row.contractType], row.status, row.signatoryName ?? ""].join(" "),
+              heading: (
+                <Link href={`/dashboard/employees/contracts/${row.id}`} className="text-primary hover:underline">
+                  {row.referenceNo}
+                </Link>
+              ),
+              badges: (
+                <RecordBadges inline>
+                  <ContractStatusBadge status={row.status} />
+                  <RecordTag>v{row.version}</RecordTag>
+                  {row.validity ? <ContractValidityText validity={row.validity} /> : null}
+                </RecordBadges>
+              ),
+              fields: [
+                { label: "Type", value: CONTRACT_TYPE_LABELS[row.contractType] ?? String(row.contractType) },
+                { label: "Period", value: `${formatDate(row.startDate)} – ${row.endDate ? formatDate(row.endDate) : "open"}` },
+                { label: "Company signatory", value: row.signatoryName ?? "" },
+                { label: "Amendment", value: row.amendmentReason ?? "" },
+              ].filter((entry) => entry.value),
+              actions: (
+                <RecordActionButton
+                  label="Open"
+                  ariaLabel={`Open contract ${row.referenceNo}`}
+                  icon={<ExternalLink className="size-4" />}
+                  onClick={() => router.push(`/dashboard/employees/contracts/${row.id}`)}
+                />
+              ),
+            }))}
+          />
+        )}
+        {pager}
+      </section>
+    )
+  }
 
   return (
     <section aria-label="Employment contracts" className="grid gap-3">
@@ -196,19 +302,7 @@ export function ContractsList({
         ) : null}
       </div>
 
-      {pages > 1 ? (
-        <div className="flex items-center justify-end gap-2 text-sm">
-          <button type="button" className="rounded-md border border-border px-2 py-1 disabled:opacity-40" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-            Previous
-          </button>
-          <span>
-            Page {page} of {pages}
-          </span>
-          <button type="button" className="rounded-md border border-border px-2 py-1 disabled:opacity-40" disabled={page >= pages} onClick={() => setPage(page + 1)}>
-            Next
-          </button>
-        </div>
-      ) : null}
+      {pager}
 
     </section>
   )

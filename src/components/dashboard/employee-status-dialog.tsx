@@ -651,8 +651,9 @@ export function EmployeeStatusDialog({
         aria-describedby="employee-status-dialog-subtitle"
         className={cn(
           "!flex !flex-col !p-0 !gap-0 overflow-hidden",
-          "!w-[min(720px,calc(100vw-2rem))] !max-w-[720px] !max-h-[calc(100dvh-2rem)]",
-          "max-sm:!m-0 max-sm:!h-dvh max-sm:!max-h-dvh max-sm:!w-screen max-sm:!max-w-none max-sm:!rounded-none",
+          // Full-height panel pinned to the right edge (same as other profile forms).
+          "!fixed !inset-y-0 !right-0 !left-auto !top-0 !m-0 !h-dvh !max-h-dvh !rounded-none !border-y-0 !border-r-0 !border-l !border-border",
+          "!w-full !max-w-full sm:!w-[min(720px,100vw)] sm:!max-w-[720px]",
         )}
       >
         {/* Fixed header */}
@@ -684,7 +685,7 @@ export function EmployeeStatusDialog({
         </div>
 
         {/* Scrollable body */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth px-5 py-4 [scrollbar-gutter:stable] sm:px-6">
           {confirmDiscard ? (
             <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
               <p className="font-medium">Discard unsaved changes?</p>

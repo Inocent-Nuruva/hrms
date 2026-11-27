@@ -372,7 +372,7 @@ export function EmployeeIdentitySheet({
             Update account details and keep branch, department, position, manager, grade, and cost center in sync.
           </SheetDescription>
         </SheetHeader>
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth px-4 py-5 [scrollbar-gutter:stable] sm:px-6">
           <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 [&>*]:min-w-0">
           <FluentField label="First name" className="min-w-0">
             <FluentInput
@@ -409,7 +409,7 @@ export function EmployeeIdentitySheet({
           </FluentField>
           <div className="grid min-w-0 grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 [&>*]:min-w-0">
             <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Branch</span>
+              <span className="text-xs font-medium text-foreground">Branch</span>
               <FluentSelect
                 ariaLabel="Branch"
                 className="w-full min-w-0"
@@ -435,7 +435,7 @@ export function EmployeeIdentitySheet({
               />
             </label>
             <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Department</span>
+              <span className="text-xs font-medium text-foreground">Department</span>
               <FluentSelect
                 ariaLabel="Department"
                 className="w-full min-w-0"
@@ -460,7 +460,7 @@ export function EmployeeIdentitySheet({
               />
             </label>
             <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Position</span>
+              <span className="text-xs font-medium text-foreground">Position</span>
               <FluentSelect
                 ariaLabel="Position"
                 className="w-full min-w-0"
@@ -498,7 +498,7 @@ export function EmployeeIdentitySheet({
             </label>
           </div>
           <label className="grid gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Manager</span>
+            <span className="text-xs font-medium text-foreground">Manager</span>
             <FluentSelect
               ariaLabel="Manager"
               className="w-full min-w-0"
@@ -521,7 +521,7 @@ export function EmployeeIdentitySheet({
             </span>
           </label>
           <label className="grid gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Grade</span>
+            <span className="text-xs font-medium text-foreground">Grade</span>
             <FluentSelect
               ariaLabel="Grade"
               className="w-full min-w-0"
@@ -539,7 +539,7 @@ export function EmployeeIdentitySheet({
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cost Center</span>
+            <span className="text-xs font-medium text-foreground">Cost Center</span>
             <FluentSelect
               ariaLabel="Cost Center"
               className="w-full min-w-0"
@@ -557,7 +557,7 @@ export function EmployeeIdentitySheet({
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <span className="text-xs font-medium text-foreground">
               Assignment Effective Date
             </span>
             <DatePickerPresets

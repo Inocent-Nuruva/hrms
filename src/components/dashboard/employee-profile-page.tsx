@@ -5,9 +5,11 @@ import { EmployeeCoverCard } from "@/components/leave/employee-cover-card"
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import {
+  RefreshCwIcon,
+  TriangleAlertIcon,
+  DownloadIcon,
   EyeIcon,
   PencilIcon,
-  PlusIcon,
   Trash2Icon,
 } from "lucide-react"
 import {
@@ -34,6 +36,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
   createEmployeeMovement,
@@ -89,8 +92,6 @@ import {
   employeeDisplayNameFromLinkedUser,
   formatDateTime,
   formatLabelValue,
-  statusTone,
-  assignmentTypeTone,
   readNumber,
   readRelatedId,
   isPrimaryEmployeePosition,
@@ -124,6 +125,19 @@ import {
   DepartmentAssignmentFormState,
 } from "@/components/dashboard/employee-profile/profile-shared"
 import { Section } from "@/components/dashboard/employee-profile/profile-record-section"
+import { ProfileSidePanel } from "@/components/dashboard/employee-profile/profile-side-panel"
+import {
+  ProfileAddButton,
+  ProfileRecordCollection,
+  ProfileRecordEmpty,
+  ProfileSectionHeader,
+  RecordActionButton,
+  RecordFieldGrid,
+  SectionGlyph,
+  RecordBadges,
+  RecordTag,
+  useProfileRecordView,
+} from "@/components/dashboard/employee-profile/profile-record-views"
 import { EmployeeIdentitySheet } from "@/components/dashboard/employee-profile/employee-identity-sheet"
 import { EmployeeProfileHero } from "@/components/dashboard/employee-profile/employee-profile-hero"
 
@@ -394,7 +408,7 @@ function ProfileSectionsTabs({
         return <EmploymentContractsView employee={{ id: employeeId, full_name: fullName }} canManage={canManageContracts} />
       case "Leave":
         return (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-6">
             <EmployeeLeaveBalanceCard
               token={readStoredToken()}
               employeeId={employeeId}
@@ -413,6 +427,7 @@ function ProfileSectionsTabs({
             employeeId={employeeId}
             onMutated={onMutated}
             requestedRouteKey={requestedRouteKey}
+            expected={EXPECTED_PROFILE_SECTIONS.has(section.title)}
           />
         )
     }
@@ -567,6 +582,7 @@ function ProfileSectionsTabs({
                 role="tab"
                 aria-selected={isActive}
                 onClick={() => setActiveTitles((current) => ({ ...current, [activeGroup]: section.title }))}
+                title={isMissing ? "Needs attention: no records yet" : undefined}
                 className={cn(
                   "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium whitespace-nowrap transition-colors",
                   isActive
@@ -576,7 +592,14 @@ function ProfileSectionsTabs({
                       : "border-border bg-background text-muted-foreground hover:text-foreground"
                 )}
               >
+                {isMissing ? (
+                  <Warning16Regular
+                    className={cn("size-3.5 shrink-0", isActive ? "text-primary-foreground" : "text-amber-600 dark:text-amber-300")}
+                    aria-hidden="true"
+                  />
+                ) : null}
                 {section.title}
+                {isMissing ? <span className="sr-only"> (needs attention)</span> : null}
                 {section.hideCount ? null : (
                   <span className={cn("tabular-nums", isActive ? "text-primary-foreground/80" : "opacity-80")}>{section.count}</span>
                 )}
@@ -607,6 +630,7 @@ function ProfileSectionsTabs({
 function EmployeeLettersSection({ employeeId }: { employeeId: number | null }) {
   const [history, setHistory] = React.useState<AdminRecord[]>([])
   const [letterType, setLetterType] = React.useState<"JOINING_FORM" | "OTHER">("JOINING_FORM")
+  const [recordView, setRecordView] = useProfileRecordView()
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -666,25 +690,79 @@ function EmployeeLettersSection({ employeeId }: { employeeId: number | null }) {
   }
 
   return (
-    <section className="grid gap-4">
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="grid gap-1 text-sm">Template type
-          <select className="h-9 rounded-md border border-border bg-background px-2" value={letterType} onChange={(event) => setLetterType(event.target.value as typeof letterType)}>
-            <option value="JOINING_FORM">Joining form</option><option value="OTHER">Other letter</option>
+    <section aria-label="Letters">
+      <ProfileSectionHeader
+        title="Letters"
+        count={history.length}
+        description={history.length ? undefined : "Generate letters from templates and keep a copy here."}
+        view={recordView}
+        onViewChange={setRecordView}
+      />
+      <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border bg-background p-4 sm:flex-row sm:items-end">
+        <label className="grid min-w-0 flex-1 gap-1 text-xs font-medium text-muted-foreground sm:max-w-xs">
+          Template type
+          <select
+            className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+            value={letterType}
+            onChange={(event) => setLetterType(event.target.value as typeof letterType)}
+          >
+            <option value="JOINING_FORM">Joining form</option>
+            <option value="OTHER">Other letter</option>
           </select>
         </label>
-        <button type="button" disabled={busy || employeeId === null} onClick={() => void preview()} className="rounded-md border border-border px-3 py-2 text-sm">Preview</button>
-        <button type="button" disabled={busy || employeeId === null} onClick={() => void generate()} className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground">Generate and save</button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busy || employeeId === null}
+            onClick={() => void preview()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
+          >
+            <EyeIcon className="size-4" /> Preview
+          </button>
+          <button
+            type="button"
+            disabled={busy || employeeId === null}
+            onClick={() => void generate()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium !text-white hover:bg-primary/90 disabled:opacity-50"
+          >
+            Generate and save
+          </button>
+        </div>
       </div>
-      {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-      <div className="divide-y divide-border rounded-md border border-border">
-        {history.length === 0 ? <p className="p-3 text-sm text-muted-foreground">No generated letters yet.</p> : history.map((row) => (
-          <div key={String(row.id)} className="flex flex-wrap items-center justify-between gap-2 p-3">
-            <div><p className="text-sm font-medium">{String(row.title ?? "Generated letter")}</p><p className="text-xs text-muted-foreground">{String(row.document_type ?? "")} · {String(row.created_at ?? "")}</p></div>
-            <button type="button" onClick={() => void download(Number(row.id))} className="rounded-md border border-border px-3 py-1.5 text-sm">Download PDF</button>
-          </div>
-        ))}
-      </div>
+      {error ? (
+        <p role="alert" className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {error}
+        </p>
+      ) : null}
+      {history.length === 0 ? (
+        <ProfileRecordEmpty title="Letters" message="Generated letters will be listed here." />
+      ) : (
+        <ProfileRecordCollection
+          title="Letters"
+          view={recordView}
+          records={history.map((row) => {
+            const documentType = String(row.document_type ?? "")
+            return {
+              key: String(row.id),
+              heading: String(row.title ?? "Generated letter"),
+              badges: documentType ? (
+                <RecordBadges inline>
+                  <RecordTag tone="primary">{formatLabelValue(documentType)}</RecordTag>
+                </RecordBadges>
+              ) : null,
+              fields: [],
+              meta: row.created_at ? `Generated ${formatDateTime(row.created_at)}` : null,
+              actions: (
+                <RecordActionButton
+                  label="Download PDF"
+                  icon={<DownloadIcon className="size-4" />}
+                  onClick={() => void download(Number(row.id))}
+                />
+              ),
+            }
+          })}
+        />
+      )}
     </section>
   )
 }
@@ -703,6 +781,10 @@ function DepartmentAssignmentsSection({
   requestedRouteKey?: string | null
 }) {
   const sectionRef = React.useRef<HTMLDivElement | null>(null)
+  const [recordView, setRecordView] = useProfileRecordView()
+  const assignmentActor = useDashboardActor()
+  // Assignment changes need employees:update on the server.
+  const canManage = assignmentActor.ready && canPerformPermission(assignmentActor.permissionLabels, "employees:update")
   const token = readStoredToken()
   const routeKey = sectionTitleToRouteKey("Departments")
   const isHighlighted = requestedRouteKey === routeKey
@@ -807,20 +889,6 @@ function DepartmentAssignmentsSection({
         ),
     [items]
   )
-
-  const renderAssignmentField = (label: string, value: string) => {
-    if (!value || value === "-") {
-      return null
-    }
-    return (
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {label}
-        </p>
-        <p className="break-words text-foreground">{value}</p>
-      </div>
-    )
-  }
 
   const submitMutation = React.useCallback(async () => {
     if (!employeeId || !token) {
@@ -972,110 +1040,96 @@ function DepartmentAssignmentsSection({
             "ring-2 ring-amber-400 ring-offset-2 ring-offset-background bg-amber-50/80 shadow-sm"
         )}
       >
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-base font-semibold">Departments</span>
-            <span className="text-xs font-semibold tabular-nums text-muted-foreground">
-              {items.length}
-            </span>
-            {items.length === 0 ? (
-              <span className="text-xs font-medium text-rose-700 dark:text-rose-300">
-                Not provided
-              </span>
-            ) : null}
-            {isHighlighted ? (
-              <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-900">
-                Needs attention
-              </span>
-            ) : null}
-          </div>
-          {employeeId ? (
-            <button
-              type="button"
-              className="inline-flex h-9 items-center gap-1.5 border border-border bg-card px-3 text-sm font-medium text-foreground transition hover:bg-muted"
-              onClick={() => setAddingRecord(true)}
-            >
-              <PlusIcon className="size-4" /> Add
-            </button>
-          ) : null}
-        </div>
+        <ProfileSectionHeader
+          title="Departments"
+          count={items.length}
+          view={recordView}
+          onViewChange={setRecordView}
+          highlighted={isHighlighted || items.length === 0}
+          actions={canManage && employeeId ? <ProfileAddButton onClick={() => setAddingRecord(true)} /> : null}
+        />
 
         {items.length === 0 ? (
-          <p className="py-2 text-sm text-muted-foreground">No department assignments available.</p>
+          <ProfileRecordEmpty
+            title="Departments"
+            message={canManage && employeeId ? "Assign this employee to a department." : undefined}
+            actionLabel={canManage && employeeId ? "Add department" : undefined}
+            onAction={canManage && employeeId ? () => setAddingRecord(true) : undefined}
+          />
         ) : (
-          <div className="space-y-3">
-            {items.map((item, index) => {
-              const departmentName = departmentAssignmentPreview(item)
-              const assignedAt = formatDateTime(item.created_at)
+          <ProfileRecordCollection
+            title="Departments"
+            view={recordView}
+            records={items.map((item, index) => {
               const branchName = readNestedString(item.department, ["branch_name", "branchName"])
-              return (
-                <div
-                  key={`departments-${index}`}
-                  className="border-b border-border pb-3 last:border-b-0 last:pb-0"
-                >
-                  <div className="mb-2 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="break-words text-sm font-semibold text-foreground">
-                        {departmentName}
-                      </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                        {isPrimaryDepartmentAssignment(item) ? (
-                          <span className="text-xs text-muted-foreground">Primary</span>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        aria-label={`Edit department assignment ${index + 1}`}
-                        className="p-1 text-muted-foreground hover:text-foreground"
-                        onClick={() => setEditingRecord(item)}
-                      >
-                        <PencilIcon className="size-4" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Delete department assignment ${index + 1}`}
-                        className="p-1 text-muted-foreground hover:text-foreground"
-                        onClick={() => setDeletingRecord(item)}
-                      >
-                        <Trash2Icon className="size-4" />
-                      </button>
-                    </div>
+              const assignedAt = formatDateTime(item.created_at)
+              return {
+                key: `departments-${index}`,
+                heading: departmentAssignmentPreview(item),
+                badges: <RecordBadges isPrimary={isPrimaryDepartmentAssignment(item)} inline />,
+                fields: [
+                  { label: "Branch", value: branchName },
+                  { label: "Assigned at", value: assignedAt },
+                ].filter((entry) => entry.value && entry.value !== "-"),
+                actions: canManage && (
+                  <div className="flex flex-wrap items-center justify-end gap-0.5">
+                    <RecordActionButton
+                      label="Edit"
+                      ariaLabel={`Edit department assignment ${index + 1}`}
+                      icon={<PencilIcon className="size-4" />}
+                      onClick={() => setEditingRecord(item)}
+                    />
+                    <RecordActionButton
+                      label="Delete"
+                      ariaLabel={`Delete department assignment ${index + 1}`}
+                      icon={<Trash2Icon className="size-4" />}
+                      tone="danger"
+                      iconOnly
+                      onClick={() => setDeletingRecord(item)}
+                    />
                   </div>
-                  <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
-                    {renderAssignmentField("Assigned At", assignedAt)}
-                    {renderAssignmentField("Branch", branchName)}
-                  </div>
-                </div>
-              )
+                ),
+              }
             })}
-          </div>
+          />
         )}
       </div>
 
-      <AlertDialog
+      <ProfileSidePanel
         open={addingRecord || Boolean(editingRecord)}
         onOpenChange={(open) => {
           if (!open) {
             closeDialogs()
           }
         }}
-      >
-        <AlertDialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {editingRecord ? "Edit Department Assignment" : "Add Department Assignment"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {editingRecord
+        title={<>{editingRecord ? "Edit Department Assignment" : "Add Department Assignment"}</>}
+        description={<>{editingRecord
                 ? "Update the selected employee department assignment."
-                : "Create a new department assignment for this employee."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
+                : "Create a new department assignment for this employee."}</>}
+        footer={<>
+            <button
+              type="button"
+              disabled={submitting}
+              className="rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
+              onClick={() => {
+                closeDialogs()
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={submitting}
+              className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:opacity-50"
+              onClick={() => void submitMutation()}
+            >
+              {submitting ? "Saving..." : editingRecord ? "Save" : "Add"}
+            </button>
+          </>}
+      >
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1 sm:col-span-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-xs font-medium text-foreground">
                 Department
               </span>
               <FluentSelect
@@ -1104,7 +1158,7 @@ function DepartmentAssignmentsSection({
             </label>
 
             <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-xs font-medium text-foreground">
                 Primary Assignment
               </span>
               <FluentSelect
@@ -1122,7 +1176,7 @@ function DepartmentAssignmentsSection({
             </label>
 
             <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-xs font-medium text-foreground">
                 Effective Date
               </span>
               <DatePickerPresets
@@ -1134,7 +1188,7 @@ function DepartmentAssignmentsSection({
             </label>
 
             <label className="grid gap-1 sm:col-span-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-xs font-medium text-foreground">
                 Reason
               </span>
               <Textarea
@@ -1142,24 +1196,12 @@ function DepartmentAssignmentsSection({
                 onChange={(event) =>
                   setForm((current) => ({ ...current, reason: event.target.value }))
                 }
-                className="min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                className="min-h-24 w-full rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-3 py-2 text-sm"
               />
             </label>
           </div>
           {mutationError ? <p className="text-sm text-rose-600">{mutationError}</p> : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
-            <button
-              type="button"
-              disabled={submitting}
-              className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:opacity-50"
-              onClick={() => void submitMutation()}
-            >
-              {submitting ? "Saving..." : editingRecord ? "Save" : "Add"}
-            </button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      </ProfileSidePanel>
 
       <AlertDialog
         open={Boolean(deletingRecord)}
@@ -1169,20 +1211,25 @@ function DepartmentAssignmentsSection({
           }
         }}
       >
-        <AlertDialogContent className="max-w-xl">
-          <AlertDialogHeader>
+        <AlertDialogContent className="!w-[min(30rem,calc(100vw-2rem))]">
+          <AlertDialogHeader className="flex-row items-start gap-3">
+            <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300">
+              <TriangleAlertIcon className="size-5" aria-hidden="true" />
+            </span>
+            <div className="flex min-w-0 flex-col gap-1.5">
             <AlertDialogTitle>Delete Department Assignment</AlertDialogTitle>
             <AlertDialogDescription>
               Remove this employee department assignment and keep the remaining assignment history aligned.
             </AlertDialogDescription>
+            </div>
           </AlertDialogHeader>
-          {mutationError ? <p className="text-sm text-rose-600">{mutationError}</p> : null}
+          {mutationError ? <p role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{mutationError}</p> : null}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={submitting} className="!h-9 !min-w-0 !rounded-md !px-3 !text-sm !font-medium">Cancel</AlertDialogCancel>
             <button
               type="button"
               disabled={submitting}
-              className="rounded-md bg-rose-600 px-3 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+              className="inline-flex h-9 items-center rounded-md bg-rose-600 px-3 text-sm font-medium !text-white hover:bg-rose-700 disabled:opacity-50"
               onClick={() => void deleteMutation()}
             >
               {submitting ? "Deleting..." : "Delete"}
@@ -1206,6 +1253,10 @@ function PositionAssignmentsSection({
   requestedRouteKey?: string | null
 }) {
   const sectionRef = React.useRef<HTMLDivElement | null>(null)
+  const [recordView, setRecordView] = useProfileRecordView()
+  const assignmentActor = useDashboardActor()
+  // Assignment changes need employees:update on the server.
+  const canManage = assignmentActor.ready && canPerformPermission(assignmentActor.permissionLabels, "employees:update")
   const token = readStoredToken()
   const routeKey = sectionTitleToRouteKey("Positions")
   const isHighlighted = requestedRouteKey === routeKey
@@ -1359,20 +1410,6 @@ function PositionAssignmentsSection({
     }
   }, [closeDialogs, deletingRecord, onMutated, token])
 
-  const renderAssignmentField = (label: string, value: string, className?: string) => {
-    if (!value || value === "-") {
-      return null
-    }
-    return (
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {label}
-        </p>
-        <p className={cn("break-words text-foreground", className)}>{value}</p>
-      </div>
-    )
-  }
-
   return (
     <>
       <div
@@ -1385,40 +1422,29 @@ function PositionAssignmentsSection({
           isHighlighted && "ring-2 ring-amber-400 ring-offset-2 ring-offset-background bg-amber-50/80 shadow-sm"
         )}
       >
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-base font-semibold">Positions</span>
-            <span className="text-xs font-semibold tabular-nums text-muted-foreground">
-              {items.length}
-            </span>
-            {items.length === 0 ? (
-              <span className="text-xs font-medium text-rose-700 dark:text-rose-300">Not provided</span>
-            ) : null}
-            {isHighlighted ? (
-              <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-900">
-                Needs attention
-              </span>
-            ) : null}
-          </div>
-          {employeeId ? (
-            <button
-              type="button"
-              className="inline-flex h-9 items-center gap-1.5 border border-border bg-card px-3 text-sm font-medium text-foreground transition hover:bg-muted"
-              onClick={() => setAddingRecord(true)}
-            >
-              <PlusIcon className="size-4" /> Add
-            </button>
-          ) : null}
-        </div>
+        <ProfileSectionHeader
+          title="Positions"
+          count={items.length}
+          view={recordView}
+          onViewChange={setRecordView}
+          highlighted={isHighlighted || items.length === 0}
+          actions={canManage && employeeId ? <ProfileAddButton onClick={() => setAddingRecord(true)} /> : null}
+        />
 
         {items.length === 0 ? (
-          <p className="py-2 text-sm text-muted-foreground">No position assignments available.</p>
+          <ProfileRecordEmpty
+            title="Positions"
+            message={canManage && employeeId ? "Assign this employee to a position." : undefined}
+            actionLabel={canManage && employeeId ? "Add position" : undefined}
+            onAction={canManage && employeeId ? () => setAddingRecord(true) : undefined}
+          />
         ) : (
-          <div className="space-y-3">
-            {items.map((item, index) => {
+          <ProfileRecordCollection
+            title="Positions"
+            view={recordView}
+            records={items.map((item, index) => {
               const status = readString(item, ["status"])
               const assignmentType = readString(item, ["assignment_type", "assignmentType"])
-              const positionName = positionAssignmentPreview(item)
               const departmentName = readNestedString(
                 item.department ?? item.departmentDetail ?? item.primary_department,
                 ["name", "department_name", "departmentName"]
@@ -1430,83 +1456,100 @@ function PositionAssignmentsSection({
                 readString(item, ["end_date", "endDate", "effective_to", "effectiveTo"])
               )
               const notes = readString(item, ["notes"])
-
-              return (
-                <div key={`positions-${index}`} className="border-b border-border pb-3 last:border-b-0 last:pb-0">
-                  <div className="mb-2 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="break-words text-sm font-semibold text-foreground">{positionName}</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
-                        {assignmentType !== "-" ? (
-                          <span className={cn("font-medium", assignmentTypeTone(assignmentType))}>
-                            {formatLabelValue(assignmentType)}
-                          </span>
-                        ) : null}
-                        {status !== "-" ? (
-                          <span className={cn("font-medium", statusTone(status))}>
-                            {formatLabelValue(status)}
-                          </span>
-                        ) : null}
-                        {isPrimaryEmployeePosition(item) &&
-                        assignmentType.trim().toLowerCase() !== "primary" ? (
-                          <span className="font-medium text-primary">Primary</span>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        aria-label={`Edit position assignment ${index + 1}`}
-                        className="p-1 text-muted-foreground hover:text-foreground"
-                        onClick={() => setEditingRecord(item)}
+              const normalizedStatus = status.trim().toLowerCase()
+              return {
+                key: `positions-${index}`,
+                heading: positionAssignmentPreview(item),
+                badges: (
+                  <RecordBadges
+                    isPrimary={isPrimaryEmployeePosition(item) && assignmentType.trim().toLowerCase() !== "primary"}
+                    inline
+                  >
+                    {assignmentType !== "-" ? (
+                      <RecordTag tone={assignmentType.trim().toLowerCase() === "primary" ? "primary" : "neutral"}>
+                        {formatLabelValue(assignmentType)}
+                      </RecordTag>
+                    ) : null}
+                    {status !== "-" ? (
+                      <RecordTag
+                        tone={
+                          normalizedStatus === "active"
+                            ? "success"
+                            : normalizedStatus === "ended" || normalizedStatus === "inactive"
+                              ? "neutral"
+                              : "warning"
+                        }
                       >
-                        <PencilIcon className="size-4" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Delete position assignment ${index + 1}`}
-                        className="p-1 text-muted-foreground hover:text-foreground"
-                        onClick={() => setDeletingRecord(item)}
-                      >
-                        <Trash2Icon className="size-4" />
-                      </button>
-                    </div>
+                        {formatLabelValue(status)}
+                      </RecordTag>
+                    ) : null}
+                  </RecordBadges>
+                ),
+                fields: [
+                  { label: "Department", value: departmentName },
+                  { label: "Start date", value: startDate },
+                  { label: "End date", value: endDate },
+                  { label: "Notes", value: notes },
+                ].filter((entry) => entry.value && entry.value !== "-"),
+                actions: canManage && (
+                  <div className="flex flex-wrap items-center justify-end gap-0.5">
+                    <RecordActionButton
+                      label="Edit"
+                      ariaLabel={`Edit position assignment ${index + 1}`}
+                      icon={<PencilIcon className="size-4" />}
+                      onClick={() => setEditingRecord(item)}
+                    />
+                    <RecordActionButton
+                      label="Delete"
+                      ariaLabel={`Delete position assignment ${index + 1}`}
+                      icon={<Trash2Icon className="size-4" />}
+                      tone="danger"
+                      iconOnly
+                      onClick={() => setDeletingRecord(item)}
+                    />
                   </div>
-                  <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
-                    {renderAssignmentField("Department", departmentName)}
-                    {renderAssignmentField("Start Date", startDate)}
-                    {renderAssignmentField("End Date", endDate)}
-                    {renderAssignmentField("Notes", notes)}
-                  </div>
-                </div>
-              )
+                ),
+              }
             })}
-          </div>
+          />
         )}
       </div>
 
-      <AlertDialog
+      <ProfileSidePanel
         open={addingRecord || Boolean(editingRecord)}
         onOpenChange={(open) => {
           if (!open) {
             closeDialogs()
           }
         }}
-      >
-        <AlertDialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {editingRecord ? "Edit Position Assignment" : "Add Position Assignment"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {editingRecord
+        title={<>{editingRecord ? "Edit Position Assignment" : "Add Position Assignment"}</>}
+        description={<>{editingRecord
                 ? "Update the selected employee position assignment."
-                : "Create a new position assignment for this employee."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
+                : "Create a new position assignment for this employee."}</>}
+        footer={<>
+            <button
+              type="button"
+              disabled={submitting}
+              className="rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
+              onClick={() => {
+                closeDialogs()
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={submitting}
+              className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:opacity-50"
+              onClick={() => void submitMutation()}
+            >
+              {submitting ? "Saving..." : editingRecord ? "Save" : "Add"}
+            </button>
+          </>}
+      >
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1 sm:col-span-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-xs font-medium text-foreground">
                 Position
               </span>
               <FluentSelect
@@ -1533,7 +1576,7 @@ function PositionAssignmentsSection({
             </label>
 
             <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-xs font-medium text-foreground">
                 Assignment Type
               </span>
               <FluentSelect
@@ -1551,7 +1594,7 @@ function PositionAssignmentsSection({
             </label>
 
             <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-xs font-medium text-foreground">
                 Status
               </span>
               <FluentSelect
@@ -1567,7 +1610,7 @@ function PositionAssignmentsSection({
             </label>
 
             <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-xs font-medium text-foreground">
                 Start Date
               </span>
               <DatePickerPresets
@@ -1577,7 +1620,7 @@ function PositionAssignmentsSection({
             </label>
 
             <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-xs font-medium text-foreground">
                 End Date
               </span>
               <DatePickerPresets
@@ -1587,7 +1630,7 @@ function PositionAssignmentsSection({
             </label>
 
             <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-xs font-medium text-foreground">
                 Primary Assignment
               </span>
               <FluentSelect
@@ -1605,30 +1648,18 @@ function PositionAssignmentsSection({
             </label>
 
             <label className="grid gap-1 sm:col-span-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-xs font-medium text-foreground">
                 Notes
               </span>
               <Textarea
                 value={form.notes}
                 onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
-                className="min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                className="min-h-24 w-full rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-3 py-2 text-sm"
               />
             </label>
           </div>
           {mutationError ? <p className="text-sm text-rose-600">{mutationError}</p> : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
-            <button
-              type="button"
-              disabled={submitting}
-              className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:opacity-50"
-              onClick={() => void submitMutation()}
-            >
-              {submitting ? "Saving..." : editingRecord ? "Save" : "Add"}
-            </button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      </ProfileSidePanel>
 
       <AlertDialog
         open={Boolean(deletingRecord)}
@@ -1638,20 +1669,25 @@ function PositionAssignmentsSection({
           }
         }}
       >
-        <AlertDialogContent className="max-w-xl">
-          <AlertDialogHeader>
+        <AlertDialogContent className="!w-[min(30rem,calc(100vw-2rem))]">
+          <AlertDialogHeader className="flex-row items-start gap-3">
+            <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300">
+              <TriangleAlertIcon className="size-5" aria-hidden="true" />
+            </span>
+            <div className="flex min-w-0 flex-col gap-1.5">
             <AlertDialogTitle>Delete Position Assignment</AlertDialogTitle>
             <AlertDialogDescription>
               Remove this employee position assignment. This action cannot be undone.
             </AlertDialogDescription>
+            </div>
           </AlertDialogHeader>
-          {mutationError ? <p className="text-sm text-rose-600">{mutationError}</p> : null}
+          {mutationError ? <p role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{mutationError}</p> : null}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={submitting} className="!h-9 !min-w-0 !rounded-md !px-3 !text-sm !font-medium">Cancel</AlertDialogCancel>
             <button
               type="button"
               disabled={submitting}
-              className="rounded-md bg-rose-600 px-3 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+              className="inline-flex h-9 items-center rounded-md bg-rose-600 px-3 text-sm font-medium !text-white hover:bg-rose-700 disabled:opacity-50"
               onClick={() => void deleteMutation()}
             >
               {submitting ? "Deleting..." : "Delete"}
@@ -1675,6 +1711,11 @@ function EmployeeMovementsSection({
   requestedRouteKey?: string | null
 }) {
   const sectionRef = React.useRef<HTMLDivElement | null>(null)
+  const [recordView, setRecordView] = useProfileRecordView()
+  const movementActor = useDashboardActor()
+  // Adding a movement needs employee_movements:create on the server.
+  const canCreateMovement =
+    movementActor.ready && canPerformPermission(movementActor.permissionLabels, "employee_movements:create")
   const token = readStoredToken()
   const routeKey = sectionTitleToRouteKey("Movements")
   const isHighlighted = requestedRouteKey === routeKey
@@ -2227,20 +2268,6 @@ function EmployeeMovementsSection({
     [onMutated, token]
   )
 
-  const renderMovementField = (label: string, value: string, className?: string) => {
-    if (!value || value === "-") {
-      return null
-    }
-    return (
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {label}
-        </p>
-        <p className={cn("break-words text-foreground", className)}>{value}</p>
-      </div>
-    )
-  }
-
   return (
     <>
       <div
@@ -2253,155 +2280,155 @@ function EmployeeMovementsSection({
           isHighlighted && "ring-2 ring-amber-400 ring-offset-2 ring-offset-background bg-amber-50/80 shadow-sm"
         )}
       >
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-base font-semibold">Movements</span>
-            <span className="text-xs font-semibold tabular-nums text-muted-foreground">
-              {sortedItems.length}
-            </span>
-            {sortedItems.length === 0 ? (
-              <span className="text-xs font-medium text-rose-700 dark:text-rose-300">Not provided</span>
-            ) : null}
-            {isHighlighted ? (
-              <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-900">
-                Needs attention
-              </span>
-            ) : null}
-          </div>
-          {employeeId !== null ? (
-            <button
-              type="button"
-              className="inline-flex h-9 items-center gap-1.5 border border-border bg-card px-3 text-sm font-medium text-foreground transition hover:bg-muted"
-              onClick={() => setAddingRecord(true)}
-            >
-              <PlusIcon className="size-4" /> Add
-            </button>
-          ) : null}
-        </div>
+        <ProfileSectionHeader
+          title="Movements"
+          count={sortedItems.length}
+          view={recordView}
+          onViewChange={setRecordView}
+          highlighted={isHighlighted}
+          actions={canCreateMovement && employeeId !== null ? <ProfileAddButton onClick={() => setAddingRecord(true)} /> : null}
+        />
 
-        {mutationError ? <p className="mb-2 text-sm text-rose-600">{mutationError}</p> : null}
+        {mutationError ? (
+          <p role="alert" className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            {mutationError}
+          </p>
+        ) : null}
 
         {sortedItems.length === 0 ? (
-          <p className="py-2 text-sm text-muted-foreground">No employee movements available.</p>
+          <ProfileRecordEmpty
+            title="Movements"
+            message={canCreateMovement && employeeId !== null ? "Transfers, promotions and other changes will appear here." : undefined}
+            actionLabel={canCreateMovement && employeeId !== null ? "Add movement" : undefined}
+            onAction={canCreateMovement && employeeId !== null ? () => setAddingRecord(true) : undefined}
+          />
         ) : (
-          <div className="space-y-3">
-            {sortedItems.map((item, index) => {
+          <ProfileRecordCollection
+            title="Movements"
+            view={recordView}
+            records={sortedItems.map((item, index) => {
               const movementId = readNumber(item.id)
               const movementNo = readString(item, ["movementNo", "movement_no"])
               const movementType = readString(item, ["movementType", "movement_type"])
               const status = readString(item, ["status"])
+              const normalizedStatus = status.trim().toLowerCase()
               const effectiveDate = formatProfileDate(readString(item, ["effectiveDate", "effective_date"]))
               const createdAt = formatDateTime(readString(item, ["createdAt", "created_at"]))
               const applicationError = readString(item, ["applicationError", "application_error"])
               const changes = asRecordArray(item.changes)
-
-              return (
-                <div key={`movements-${movementId ?? index}`} className="border-b border-border pb-3 last:border-b-0 last:pb-0">
-                  <div className="mb-2 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="break-words text-sm font-semibold text-foreground">
-                        {readString(item, ["title"])}
-                      </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                        {movementNo !== "-" ? (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                            {movementNo}
-                          </span>
-                        ) : null}
-                        {movementType !== "-" ? (
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary">
-                            {formatLabelValue(movementType)}
-                          </span>
-                        ) : null}
-                        {status !== "-" ? (
-                          <span className={cn("font-medium", statusTone(status))}>
-                            {formatLabelValue(status)}
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-end gap-1">
-                      <button
-                        type="button"
-                        aria-label={`View movement ${index + 1}`}
-                        className="p-1 text-muted-foreground hover:text-foreground"
-                        onClick={() => setViewingRecord(item)}
+              return {
+                key: `movements-${movementId ?? index}`,
+                heading: readString(item, ["title"]),
+                badges: (
+                  <RecordBadges inline>
+                    {movementNo !== "-" ? <RecordTag>{movementNo}</RecordTag> : null}
+                    {movementType !== "-" ? <RecordTag tone="primary">{formatLabelValue(movementType)}</RecordTag> : null}
+                    {status !== "-" ? (
+                      <RecordTag
+                        tone={
+                          ["applied", "approved", "completed"].includes(normalizedStatus)
+                            ? "success"
+                            : ["rejected", "failed", "cancelled"].includes(normalizedStatus)
+                              ? "danger"
+                              : "warning"
+                        }
                       >
-                        <EyeIcon className="size-4" />
-                      </button>
-                      {status !== "-" && movementSupportsSubmit(status) ? (
-                        <button
-                          type="button"
-                          disabled={actioningId === movementId}
-                          className="rounded-md border border-primary/30 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/5 disabled:opacity-50"
-                          onClick={() => {
-                            void triggerMovementAction(item, "submit")
-                          }}
-                        >
-                          {actioningId === movementId ? "Submitting..." : "Submit"}
-                        </button>
-                      ) : null}
-                      {status !== "-" && movementSupportsCancel(status) ? (
-                        <button
-                          type="button"
-                          disabled={actioningId === movementId}
-                          className="rounded-md border border-rose-200 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
-                          onClick={() => {
-                            void triggerMovementAction(item, "cancel")
-                          }}
-                        >
-                          {actioningId === movementId ? "Working..." : "Cancel"}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
-                    {renderMovementField("Effective Date", effectiveDate)}
-                    {renderMovementField("Created", createdAt)}
-                    {renderMovementField("Reason", readString(item, ["reason"]))}
-                    {renderMovementField(
-                      "Application Error",
-                      applicationError,
-                      "text-rose-600 dark:text-rose-400"
-                    )}
-                  </div>
-                  {changes.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-2">
+                        {formatLabelValue(status)}
+                      </RecordTag>
+                    ) : null}
+                  </RecordBadges>
+                ),
+                fields: [
+                  { label: "Effective date", value: effectiveDate },
+                  { label: "Reason", value: readString(item, ["reason"]) },
+                  { label: "Application error", value: applicationError },
+                ].filter((entry) => entry.value && entry.value !== "-"),
+                meta: createdAt && createdAt !== "-" ? `Created ${createdAt}` : null,
+                extra:
+                  changes.length > 0 ? (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
                       {changes.map((change, changeIndex) => (
-                        <span
-                          key={`movement-change-${movementId ?? index}-${changeIndex}`}
-                          className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                        >
+                        <RecordTag key={`movement-change-${movementId ?? index}-${changeIndex}`}>
                           {formatLabelValue(readString(change, ["field"]))}
-                        </span>
+                        </RecordTag>
                       ))}
                     </div>
-                  ) : null}
-                </div>
-              )
+                  ) : null,
+                actions: (
+                  <div className="flex flex-wrap items-center justify-end gap-0.5">
+                    <RecordActionButton
+                      label="View"
+                      ariaLabel={`View movement ${index + 1}`}
+                      icon={<EyeIcon className="size-4" />}
+                      onClick={() => setViewingRecord(item)}
+                    />
+                    {status !== "-" && movementSupportsSubmit(status) ? (
+                      <button
+                        type="button"
+                        disabled={actioningId === movementId}
+                        className="h-8 rounded-md border border-primary/30 px-2 text-xs font-medium text-primary hover:bg-primary/5 disabled:opacity-50"
+                        onClick={() => {
+                          void triggerMovementAction(item, "submit")
+                        }}
+                      >
+                        {actioningId === movementId ? "Submitting..." : "Submit"}
+                      </button>
+                    ) : null}
+                    {status !== "-" && movementSupportsCancel(status) ? (
+                      <button
+                        type="button"
+                        disabled={actioningId === movementId}
+                        className="h-8 rounded-md border border-rose-200 px-2 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                        onClick={() => {
+                          void triggerMovementAction(item, "cancel")
+                        }}
+                      >
+                        {actioningId === movementId ? "Working..." : "Cancel"}
+                      </button>
+                    ) : null}
+                  </div>
+                ),
+              }
             })}
-          </div>
+          />
         )}
       </div>
 
-      <AlertDialog
+      <ProfileSidePanel
         open={addingRecord}
         onOpenChange={(open) => {
           if (!open) {
             closeAddDialog()
           }
         }}
+        title={<>Add Employee Movement</>}
+        description={<>Create a movement draft for this employee, then submit it from the movements list.</>}
+        footer={<>
+            <button
+              type="button"
+              disabled={submitting}
+              className="rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
+              onClick={() => {
+                closeAddDialog()
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={submitting || optionsLoading}
+              className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:opacity-50"
+              onClick={() => {
+                void submitCreate()
+              }}
+            >
+              {submitting ? "Adding..." : "Add Draft"}
+            </button>
+          </>}
       >
-        <AlertDialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Add Employee Movement</AlertDialogTitle>
-            <AlertDialogDescription>
-              Create a movement draft for this employee, then submit it from the movements list.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-xs font-medium text-foreground">
                 Movement Type
               </span>
               <FluentSelect
@@ -2430,7 +2457,7 @@ function EmployeeMovementsSection({
             </label>
 
             <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-xs font-medium text-foreground">
                 Effective Date
               </span>
               <DatePickerPresets
@@ -2440,32 +2467,32 @@ function EmployeeMovementsSection({
             </label>
 
             <label className="grid gap-1 sm:col-span-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-xs font-medium text-foreground">
                 Title
               </span>
-              <input
+              <Input
                 value={form.title}
                 onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
-                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                className="w-full"
                 placeholder="Movement title"
               />
             </label>
 
             <label className="grid gap-1 sm:col-span-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-xs font-medium text-foreground">
                 Reason
               </span>
               <Textarea
                 value={form.reason}
                 onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}
-                className="min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                className="min-h-24 w-full rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-3 py-2 text-sm"
                 placeholder="Why this movement is needed"
               />
             </label>
 
             {showBranchField ? (
               <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <span className="text-xs font-medium text-foreground">
                   Target Branch
                 </span>
                 <FluentSelect
@@ -2500,7 +2527,7 @@ function EmployeeMovementsSection({
 
             {showDepartmentField ? (
               <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <span className="text-xs font-medium text-foreground">
                   Target Department
                 </span>
                 <FluentSelect
@@ -2537,7 +2564,7 @@ function EmployeeMovementsSection({
 
             {showPositionField ? (
               <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <span className="text-xs font-medium text-foreground">
                   Target Position
                 </span>
                 <FluentSelect
@@ -2577,7 +2604,7 @@ function EmployeeMovementsSection({
 
             {showManagerField ? (
               <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <span className="text-xs font-medium text-foreground">
                   Target Manager
                 </span>
                 <FluentSelect
@@ -2619,7 +2646,7 @@ function EmployeeMovementsSection({
 
             {showGradeField ? (
               <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <span className="text-xs font-medium text-foreground">
                   Target Grade
                 </span>
                 <FluentSelect
@@ -2645,7 +2672,7 @@ function EmployeeMovementsSection({
 
             {showCostCenterField ? (
               <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <span className="text-xs font-medium text-foreground">
                   Target Cost Center
                 </span>
                 <FluentSelect
@@ -2686,7 +2713,7 @@ function EmployeeMovementsSection({
 
             {showEmploymentTypeField ? (
               <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <span className="text-xs font-medium text-foreground">
                   Target Employment Type
                 </span>
                 <FluentSelect
@@ -2709,23 +2736,9 @@ function EmployeeMovementsSection({
             ) : null}
           </div>
           {mutationError ? <p className="text-sm text-rose-600">{mutationError}</p> : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
-            <button
-              type="button"
-              disabled={submitting || optionsLoading}
-              className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:opacity-50"
-              onClick={() => {
-                void submitCreate()
-              }}
-            >
-              {submitting ? "Adding..." : "Add Draft"}
-            </button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      </ProfileSidePanel>
 
-      <AlertDialog
+      <ProfileSidePanel
         open={Boolean(viewingRecord)}
         onOpenChange={(open) => {
           if (!open) {
@@ -2734,101 +2747,123 @@ function EmployeeMovementsSection({
             setDetailError(null)
           }
         }}
+        title={<>Movement Details</>}
+        description={<>Review movement changes, lifecycle status, and downstream operations.</>}
+        footer={<>
+            <button
+              type="button"
+              className="rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
+              onClick={() => {
+                setViewingRecord(null)
+                setMovementOperations([])
+                setDetailError(null)
+              }}
+            >
+              Close
+            </button>
+          </>}
       >
-        <AlertDialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Movement Details</AlertDialogTitle>
-            <AlertDialogDescription>
-              Review movement changes, lifecycle status, and downstream operations.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
           {viewingRecord ? (
-            <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                {renderMovementField("Movement No", readString(viewingRecord, ["movementNo", "movement_no"]))}
-                {renderMovementField("Type", formatLabelValue(readString(viewingRecord, ["movementType", "movement_type"])))}
-                {renderMovementField("Status", formatLabelValue(readString(viewingRecord, ["status"])), statusTone(readString(viewingRecord, ["status"])))}
-                {renderMovementField("Effective Date", formatProfileDate(readString(viewingRecord, ["effectiveDate", "effective_date"])))}
-                {renderMovementField("Created", formatDateTime(readString(viewingRecord, ["createdAt", "created_at"])))}
-                {renderMovementField("Updated", formatDateTime(readString(viewingRecord, ["updatedAt", "updated_at"])))}
-                {renderMovementField("Submitted", formatDateTime(readString(viewingRecord, ["submittedAt", "submitted_at"])))}
-                {renderMovementField("Approved", formatDateTime(readString(viewingRecord, ["approvedAt", "approved_at"])))}
-              </div>
-
-              <div className="grid gap-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Title
-                </p>
-                <p className="text-sm text-foreground">{readString(viewingRecord, ["title"])}</p>
-              </div>
-
-              <div className="grid gap-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Reason
-                </p>
-                <p className="text-sm text-foreground">{readString(viewingRecord, ["reason"])}</p>
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Changes
-                </p>
-                {asRecordArray(viewingRecord.changes).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No change breakdown was returned for this movement.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {asRecordArray(viewingRecord.changes).map((change, index) => (
-                      <div key={`movement-detail-change-${index}`} className="rounded-lg border border-border p-3">
-                        <p className="text-sm font-semibold text-foreground">
-                          {formatLabelValue(readString(change, ["field"]))}
-                        </p>
-                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          {renderMovementField("From", movementChangeValueSummary(change.oldValue))}
-                          {renderMovementField("To", movementChangeValueSummary(change.newValue))}
-                        </div>
-                      </div>
-                    ))}
+            (() => {
+              const status = readString(viewingRecord, ["status"])
+              const normalizedStatus = status.trim().toLowerCase()
+              const movementNo = readString(viewingRecord, ["movementNo", "movement_no"])
+              const movementType = readString(viewingRecord, ["movementType", "movement_type"])
+              const keep = (entry: { label: string; value: string }) => Boolean(entry.value) && entry.value !== "-"
+              const details = [
+                { label: "Effective date", value: formatProfileDate(readString(viewingRecord, ["effectiveDate", "effective_date"])) },
+                { label: "Reason", value: readString(viewingRecord, ["reason"]) },
+                { label: "Created", value: formatDateTime(readString(viewingRecord, ["createdAt", "created_at"])) },
+                { label: "Updated", value: formatDateTime(readString(viewingRecord, ["updatedAt", "updated_at"])) },
+                { label: "Submitted", value: formatDateTime(readString(viewingRecord, ["submittedAt", "submitted_at"])) },
+                { label: "Approved", value: formatDateTime(readString(viewingRecord, ["approvedAt", "approved_at"])) },
+              ].filter(keep)
+              const changes = asRecordArray(viewingRecord.changes)
+              const statusTagTone = (value: string) =>
+                ["applied", "approved", "completed", "succeeded", "success"].includes(value)
+                  ? "success"
+                  : ["rejected", "failed", "cancelled", "error"].includes(value)
+                    ? "danger"
+                    : "warning"
+              return (
+                <div className="flex flex-col gap-5">
+                  <div className="flex items-center gap-2.5">
+                    <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <SectionGlyph title="Movements" className="size-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="break-words text-sm font-semibold text-foreground">{readString(viewingRecord, ["title"])}</p>
+                      <RecordBadges>
+                        {movementNo !== "-" ? <RecordTag>{movementNo}</RecordTag> : null}
+                        {movementType !== "-" ? <RecordTag tone="primary">{formatLabelValue(movementType)}</RecordTag> : null}
+                        {status !== "-" ? <RecordTag tone={statusTagTone(normalizedStatus)}>{formatLabelValue(status)}</RecordTag> : null}
+                      </RecordBadges>
+                    </div>
                   </div>
-                )}
-              </div>
 
-              <div className="space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Operations
-                </p>
-                {operationsLoading ? (
-                  <p className="text-sm text-muted-foreground">Loading movement operations...</p>
-                ) : detailError ? (
-                  <p className="text-sm text-rose-600">{detailError}</p>
-                ) : movementOperations.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No downstream operations were returned.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {movementOperations.map((operation, index) => (
-                      <div key={`movement-operation-${readNumber(operation.id) ?? index}`} className="rounded-lg border border-border p-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-semibold text-foreground">
-                            {formatLabelValue(readString(operation, ["operationType", "operation_type"]))}
-                          </span>
-                          <span className={cn("text-xs font-medium", statusTone(readString(operation, ["status"])))}>{formatLabelValue(readString(operation, ["status"]))}</span>
-                        </div>
-                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          {renderMovementField("Resource Key", readString(operation, ["resourceKey", "resource_key"]))}
-                          {renderMovementField("Updated", formatDateTime(readString(operation, ["updatedAt", "updated_at"])))}
-                          {renderMovementField("Error", readString(operation, ["errorMessage", "error_message"]), "text-rose-600 dark:text-rose-400")}
-                        </div>
-                      </div>
-                    ))}
+                  <div className="rounded-lg border border-border bg-background p-4">
+                    {details.length ? <RecordFieldGrid fields={details} /> : <p className="text-sm text-muted-foreground">No details recorded.</p>}
                   </div>
-                )}
-              </div>
-            </div>
+
+                  <section className="flex flex-col gap-2">
+                    <h4 className="text-xs font-medium text-muted-foreground">Changes</h4>
+                    {changes.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No change breakdown was returned for this movement.</p>
+                    ) : (
+                      changes.map((change, index) => (
+                        <div key={`movement-detail-change-${index}`} className="rounded-lg border border-border bg-background p-4">
+                          <p className="mb-3 text-sm font-semibold text-foreground">{formatLabelValue(readString(change, ["field"]))}</p>
+                          <RecordFieldGrid
+                            fields={[
+                              { label: "From", value: movementChangeValueSummary(change.oldValue) },
+                              { label: "To", value: movementChangeValueSummary(change.newValue) },
+                            ].filter(keep)}
+                          />
+                        </div>
+                      ))
+                    )}
+                  </section>
+
+                  <section className="flex flex-col gap-2">
+                    <h4 className="text-xs font-medium text-muted-foreground">Operations</h4>
+                    {operationsLoading ? (
+                      <p className="text-sm text-muted-foreground">Loading movement operations...</p>
+                    ) : detailError ? (
+                      <p role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                        {detailError}
+                      </p>
+                    ) : movementOperations.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No downstream operations were returned.</p>
+                    ) : (
+                      movementOperations.map((operation, index) => {
+                        const operationStatus = readString(operation, ["status"])
+                        return (
+                          <div key={`movement-operation-${readNumber(operation.id) ?? index}`} className="rounded-lg border border-border bg-background p-4">
+                            <div className="mb-3 flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-semibold text-foreground">
+                                {formatLabelValue(readString(operation, ["operationType", "operation_type"]))}
+                              </span>
+                              {operationStatus !== "-" ? (
+                                <RecordTag tone={statusTagTone(operationStatus.trim().toLowerCase())}>{formatLabelValue(operationStatus)}</RecordTag>
+                              ) : null}
+                            </div>
+                            <RecordFieldGrid
+                              fields={[
+                                { label: "Resource key", value: readString(operation, ["resourceKey", "resource_key"]) },
+                                { label: "Updated", value: formatDateTime(readString(operation, ["updatedAt", "updated_at"])) },
+                                { label: "Error", value: readString(operation, ["errorMessage", "error_message"]) },
+                              ].filter(keep)}
+                            />
+                          </div>
+                        )
+                      })
+                    )}
+                  </section>
+                </div>
+              )
+            })()
           ) : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel>Close</AlertDialogCancel>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      </ProfileSidePanel>
     </>
   )
 }
@@ -2840,6 +2875,10 @@ export function EmployeeProfilePage({
   employeeNo: string
   requestedMissingItem?: string | null
 }) {
+  const pageActor = useDashboardActor()
+  // Hide header actions the server would refuse for this viewer.
+  const canUpdateProfile = pageActor.ready && canPerformPermission(pageActor.permissionLabels, "employees:update")
+  const canChangeStatus = pageActor.ready && canPerformPermission(pageActor.permissionLabels, "employees:change-status")
   const router = useRouter()
   const [employee, setEmployee] = React.useState<AdminRecord | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -3030,16 +3069,42 @@ export function EmployeeProfilePage({
   }
 
   if (error || !employee) {
+    const isNotFound = error === "Employee not found." || !error
     return (
-      <div className="rounded-xl border border-slate-200 bg-white/80 p-6 dark:border-slate-700 dark:bg-slate-900/60">
-        <p className="text-sm text-rose-600">{error ?? "Employee not found."}</p>
-        <button
-          type="button"
-          className="mt-4 rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:text-slate-200"
-          onClick={() => router.push("/dashboard/employees/all")}
-        >
-          Back to All Employees
-        </button>
+      <div className={cn("border border-border bg-card px-4 py-12 sm:px-6", pageBleedClass)}>
+        <div className="mx-auto flex max-w-md flex-col items-center gap-3 text-center">
+          <span className="inline-flex size-12 items-center justify-center rounded-full bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300">
+            <TriangleAlertIcon className="size-6" aria-hidden="true" />
+          </span>
+          <div className="space-y-1">
+            <h2 className="text-base font-semibold text-foreground">
+              {isNotFound ? "Employee not found" : "Could not load this profile"}
+            </h2>
+            <p role="alert" className="text-sm text-muted-foreground">
+              {isNotFound
+                ? "This employee number does not match any employee you can view."
+                : error}
+            </p>
+          </div>
+          <div className="mt-1 flex flex-wrap justify-center gap-2">
+            {!isNotFound ? (
+              <button
+                type="button"
+                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium !text-white hover:bg-primary/90"
+                onClick={() => void fetchEmployee()}
+              >
+                <RefreshCwIcon className="size-4" aria-hidden="true" /> Retry
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="inline-flex h-9 items-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-muted"
+              onClick={() => router.push("/dashboard/employees/all")}
+            >
+              Back to all employees
+            </button>
+          </div>
+        </div>
       </div>
     )
   }
@@ -3048,8 +3113,8 @@ export function EmployeeProfilePage({
     <div className={cn("pb-4", pageBleedClass)}>
       <EmployeeProfileHero
         employee={employee}
-        onUpdateProfile={() => setIdentityDialogOpen(true)}
-        onUpdateStatus={() => setStatusDialogOpen(true)}
+        onUpdateProfile={canUpdateProfile ? () => setIdentityDialogOpen(true) : undefined}
+        onUpdateStatus={canChangeStatus ? () => setStatusDialogOpen(true) : undefined}
         searchSlot={
             <Popover open={profileSearchOpen} onOpenChange={setProfileSearchOpen}>
               <PopoverTrigger
@@ -3066,7 +3131,7 @@ export function EmployeeProfilePage({
                     <p className="text-sm font-semibold text-foreground">Find Another Employee</p>
                     <p className="text-xs text-muted-foreground">Search by name, employee number, email, or phone.</p>
                   </div>
-                  <div className="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950">
+                  <div className="flex items-center gap-2 rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-3 dark:border-slate-700 dark:bg-slate-950">
                     <SearchIcon className="size-4 shrink-0 text-slate-400" />
                     <input
                       type="text"

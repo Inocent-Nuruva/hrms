@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { CalendarDaysIcon } from "lucide-react"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 import {
@@ -140,10 +141,23 @@ export function EmployeeLeaveBalanceCard({
   })
   const action = <RecalculateLeaveBalanceButton token={token} employeeId={employeeId} employeeName={employeeName} />
   return (
-    <section aria-label="Leave balance" className="min-w-0 space-y-2">
-      {items.length > 0 ? <LeaveBalanceShowcase items={items} fiscalYear={rows?.[0]?.fiscal_year ?? String(new Date().getFullYear())} title="Leave balance" description={employeeName ? `Entitlement, usage and availability for ${employeeName}.` : "Employee leave entitlement, usage and availability."} ariaLabel="Employee leave balances" actions={action} /> : <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-lg font-semibold">Leave balance</h3>{action}</div>}
-      {error ? <p className="text-sm text-destructive" role="alert">{error}</p> : null}
-      {rows?.length === 0 ? <p className="text-sm text-muted-foreground">No leave balances for this leave year yet.</p> : !rows && !error ? <p className="text-sm text-muted-foreground" role="status">Loading…</p> : null}
+    <section aria-label="Leave balance" className="min-w-0 space-y-3">
+      {items.length > 0 ? <LeaveBalanceShowcase items={items} fiscalYear={rows?.[0]?.fiscal_year ?? String(new Date().getFullYear())} title="Leave balance" description={employeeName ? `Entitlement, usage and availability for ${employeeName}.` : "Employee leave entitlement, usage and availability."} ariaLabel="Employee leave balances" actions={action} headingIcon={<CalendarDaysIcon className="size-5" aria-hidden="true" />} /> : (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <CalendarDaysIcon className="size-5" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-foreground">Leave balance</h3>
+              <p className="text-xs text-muted-foreground">Entitlement, usage and availability.</p>
+            </div>
+          </div>
+          {action}
+        </div>
+      )}
+      {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">{error}</p> : null}
+      {rows?.length === 0 ? <p className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">No leave balances for this leave year yet.</p> : !rows && !error ? <p className="text-sm text-muted-foreground" role="status">Loading…</p> : null}
     </section>
   )
 }

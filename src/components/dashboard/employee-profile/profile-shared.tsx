@@ -8,6 +8,7 @@ import { CountryFlag } from "@/components/country-flag"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
   isEmployeeStatusValue,
@@ -997,7 +998,7 @@ export function CountrySelectInput({
         render={
           <button
             type="button"
-            className="flex h-10 w-full items-center justify-between rounded-md border border-slate-300 bg-white px-3 text-sm"
+            className="flex h-[var(--hrms-control-height)] w-full items-center justify-between rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-3 text-sm"
           />
         }
       >
@@ -1014,7 +1015,7 @@ export function CountrySelectInput({
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search country..."
-          className="mb-2 h-9 w-full rounded-md border border-slate-300 px-2 text-sm"
+          className="mb-2 h-9 w-full rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-2 text-sm"
         />
         <div className="max-h-56 overflow-auto">
           {filtered.map((option) => {
@@ -1151,7 +1152,7 @@ export function DocumentFileInput({
         <Textarea
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="min-h-20 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          className="min-h-20 w-full rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-3 py-2 text-sm"
           placeholder="JSON metadata"
         />
       ) : null}
@@ -1212,7 +1213,7 @@ export function PhoneWithCountryCodeInput({
           render={
             <button
               type="button"
-              className="flex h-10 w-36 items-center justify-between rounded-md border border-slate-300 bg-white px-2 text-sm"
+              className="flex h-[var(--hrms-control-height)] w-36 items-center justify-between rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-2 text-sm"
             />
           }
         >
@@ -1229,7 +1230,7 @@ export function PhoneWithCountryCodeInput({
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search code or country..."
-            className="mb-2 h-9 w-full rounded-md border border-slate-300 px-2 text-sm"
+            className="mb-2 h-9 w-full rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-2 text-sm"
           />
           <div className="max-h-56 overflow-auto">
             {filtered.map((option) => {
@@ -1252,13 +1253,13 @@ export function PhoneWithCountryCodeInput({
           </div>
         </PopoverContent>
       </Popover>
-      <input
+      <Input
         value={parsed.number}
         onChange={(event) => {
           const digits = event.target.value
           onChange(`${parsed.dialCode}${digits}`)
         }}
-        className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+        className="w-full"
         placeholder="Phone number"
       />
     </div>
@@ -1380,7 +1381,7 @@ export function renderEntryInput({
       <Textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="min-h-20 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        className="min-h-20 w-full rounded-[var(--hrms-control-radius)] border border-input bg-background text-foreground px-3 py-2 text-sm"
       />
     )
   }
@@ -1392,10 +1393,10 @@ export function renderEntryInput({
   }
 
   return (
-    <input
+    <Input
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+      className="w-full"
     />
   )
 }
@@ -1499,6 +1500,73 @@ export function sectionSchema(sectionTitle: string): SectionEntry[] {
     ]
   }
   return []
+}
+
+/** Fields that must be filled before a record in this section can be saved. */
+const REQUIRED_RECORD_FIELDS: Record<string, string[]> = {
+  contacts: ["contact_type"],
+  addresses: ["address_type", "address_line_1", "city", "country"],
+  relatives: ["full_name", "relationship"],
+  identifications: ["identification_type", "identification_number"],
+  "bank accounts": ["account_name", "account_number"],
+  "academic qualifications": ["institution_name", "degree_or_certificate"],
+  "professional qualifications": ["programme_name", "issuing_organization"],
+  "experience details": ["company_name", "job_title", "start_date"],
+  documents: ["type", "title"],
+}
+
+export function isRequiredRecordField(sectionTitle: string, key: string) {
+  return (REQUIRED_RECORD_FIELDS[sectionTitle.toLowerCase()] ?? []).includes(key)
+}
+
+/**
+ * Checks an Add/Edit record form. Returns messages keyed by field; empty
+ * when the record can be saved. `formError` holds rules that span fields.
+ */
+export function validateRecordForm(
+  sectionTitle: string,
+  entries: Array<{ key: string; label: string; kind?: string }>,
+  values: Record<string, string>
+): Record<string, string> {
+  const name = sectionTitle.toLowerCase()
+  const errors: Record<string, string> = {}
+  const value = (key: string) => (values[key] ?? "").trim()
+  const present = new Set(entries.map((entry) => entry.key))
+
+  for (const entry of entries) {
+    if (entry.kind === "boolean") continue
+    if (isRequiredRecordField(sectionTitle, entry.key) && !value(entry.key)) {
+      errors[entry.key] = `${entry.label} is required.`
+    }
+  }
+
+  for (const key of ["email"]) {
+    if (present.has(key) && value(key) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value(key))) {
+      errors[key] = "Enter a valid email address."
+    }
+  }
+
+  if (name === "contacts" && !value("email") && !value("phone_number")) {
+    errors.phone_number = "Enter a phone number or an email address."
+    errors.email = "Enter a phone number or an email address."
+  }
+
+  if (name === "bank accounts" && !value("bank_name") && !value("mobile_money_provider")) {
+    errors.bank_name = "Enter the bank name (or a mobile money provider)."
+  }
+
+  // Date ranges: end/expiry cannot be before start/issue.
+  const ranges: Array<[string, string, string]> = [
+    ["start_date", "end_date", "End date cannot be before the start date."],
+    ["issue_date", "expiry_date", "Expiry date cannot be before the issue date."],
+  ]
+  for (const [fromKey, toKey, message] of ranges) {
+    if (present.has(fromKey) && present.has(toKey) && value(fromKey) && value(toKey) && value(toKey) < value(fromKey)) {
+      errors[toKey] = message
+    }
+  }
+
+  return errors
 }
 
 export function editableEntries(record: AdminRecord, sectionTitle: string) {

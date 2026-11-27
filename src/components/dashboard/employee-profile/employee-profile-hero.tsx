@@ -116,8 +116,10 @@ export function EmployeeProfileHero({
 }: {
   employee: AdminRecord
   searchSlot?: React.ReactNode
-  onUpdateProfile: () => void
-  onUpdateStatus: () => void
+  /** Omitted when the viewer lacks employees:update; the button is hidden. */
+  onUpdateProfile?: () => void
+  /** Omitted when the viewer lacks employees:change-status. */
+  onUpdateStatus?: () => void
 }) {
   const router = useRouter()
   const name = employeeDisplayNameFromLinkedUser(employee)
@@ -238,14 +240,20 @@ export function EmployeeProfileHero({
             </div>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <FluentButton appearance="secondary" onClick={onUpdateStatus}>
-            Update status
-          </FluentButton>
-          <FluentButton appearance="primary" onClick={onUpdateProfile}>
-            Update profile
-          </FluentButton>
-        </div>
+        {onUpdateStatus || onUpdateProfile ? (
+          <div className="flex shrink-0 items-center gap-2">
+            {onUpdateStatus ? (
+              <FluentButton appearance="secondary" onClick={onUpdateStatus}>
+                Update status
+              </FluentButton>
+            ) : null}
+            {onUpdateProfile ? (
+              <FluentButton appearance="primary" onClick={onUpdateProfile}>
+                Update profile
+              </FluentButton>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <dl className="grid grid-cols-1 divide-y divide-border border-t border-border sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">

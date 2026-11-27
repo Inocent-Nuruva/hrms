@@ -74,7 +74,7 @@ function BalanceCard({ item }: { item: LeaveBalanceItem }) {
   </article>;
 }
 
-export function LeaveBalanceShowcase({ items, fiscalYear, title = "My leave balance", description = "Your leave entitlement, usage and availability.", ariaLabel = "My leave balances", actions }: { items: LeaveBalanceItem[]; fiscalYear: string; title?: string; description?: string; ariaLabel?: string; actions?: React.ReactNode }) {
+export function LeaveBalanceShowcase({ items, fiscalYear, title = "My leave balance", description = "Your leave entitlement, usage and availability.", ariaLabel = "My leave balances", actions, headingIcon }: { items: LeaveBalanceItem[]; fiscalYear: string; title?: string; description?: string; ariaLabel?: string; actions?: React.ReactNode; /** Compact profile-style heading (icon tile, small title), used on the employee profile. */ headingIcon?: React.ReactNode }) {
   const [view, setView] = React.useState<"summary" | "cards">("summary");
   const featured = items.find((item) => /annual|vacation/i.test(item.name)) ?? items[0];
   const others = items.filter((item) => item.key !== featured.key);
@@ -82,7 +82,15 @@ export function LeaveBalanceShowcase({ items, fiscalYear, title = "My leave bala
 
   return <section className={styles.showcase} aria-label={ariaLabel}>
     <div className={styles.heading}>
-      <div><h2>{title}</h2><p>{description}</p></div>
+      {headingIcon ? (
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">{headingIcon}</span>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+            <p className="!text-xs text-muted-foreground">{description}</p>
+          </div>
+        </div>
+      ) : <div><h2>{title}</h2><p>{description}</p></div>}
       <div className={styles.headingControls}>
         <span className={styles.year}>FY {fiscalYear}</span>
         <TabList size="small" aria-label="Leave balance view" selectedValue={view} onTabSelect={(_, data) => setView(data.value as "summary" | "cards")}>

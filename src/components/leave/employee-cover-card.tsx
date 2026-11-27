@@ -1,5 +1,6 @@
 "use client"
 
+import { UserRoundCheckIcon } from "lucide-react"
 import * as React from "react"
 import Link from "next/link"
 import {
@@ -77,7 +78,17 @@ export function EmployeeCoverCard({ token, employeeId }: { token: string | null;
   if (!data.current_leave && !data.acting_for.length && !covered.length) return null
 
   return (
-    <section aria-label="Availability and leave cover" className="mt-4 space-y-3 rounded-lg border border-border bg-muted/30 p-3">
+    <section aria-label="Availability and leave cover" className="space-y-3">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <UserRoundCheckIcon className="size-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-foreground">Availability and leave cover</h3>
+          <p className="text-xs text-muted-foreground">Current leave, who covers this employee, and who they act for.</p>
+        </div>
+      </div>
+      <div className="space-y-4 rounded-lg border border-border bg-background p-4">
       {data.current_leave ? (
         <div className="space-y-2">
           <p className="text-sm">
@@ -96,16 +107,17 @@ export function EmployeeCoverCard({ token, employeeId }: { token: string | null;
       ) : null}
       {covered.length ? (
         <div className="space-y-1.5">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Upcoming leave cover</h3>
+          <h4 className="text-xs font-medium text-muted-foreground">Upcoming leave cover</h4>
           <ul className="space-y-1.5">{covered.map((a) => <Assignment key={a.id} a={a} role="covered" />)}</ul>
         </div>
       ) : null}
       {data.acting_for.length ? (
         <div className="space-y-1.5">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Acting assignments</h3>
+          <h4 className="text-xs font-medium text-muted-foreground">Acting assignments</h4>
           <ul className="space-y-1.5">{data.acting_for.map((a) => <Assignment key={a.id} a={a} role="acting" />)}</ul>
         </div>
       ) : null}
+      </div>
     </section>
   )
 }
