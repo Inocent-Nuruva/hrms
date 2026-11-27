@@ -318,6 +318,7 @@ jobs:
     name: Deploy HRMS frontend
     needs: [validate-and-package, onboarding-ui]
     if: >-
+      !cancelled() &&
       needs.validate-and-package.result == 'success' &&
       needs.onboarding-ui.result == 'success' &&
       ((github.event_name == 'push' && github.ref == 'refs/heads/uat') ||
