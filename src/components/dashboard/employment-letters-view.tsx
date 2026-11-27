@@ -1,274 +1,341 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import { PageShell, PageShellBody, PageShellHeader } from "@/components/dashboard/page-shell";
-import { toast } from "@/components/ui/fluent-toast-store";
+import * as React from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { FileTextIcon, LayoutTemplateIcon, MailIcon, PencilIcon, PlusIcon } from "lucide-react"
+
+import { PageShell, PageShellBody, PageShellHeader, PageShellTabs } from "@/components/dashboard/page-shell"
 import {
-  downloadEmploymentLetter,
-  generateEmploymentLetter,
-  listEmploymentLetterTemplates,
-  saveEmploymentLetterTemplate,
-  type AdminRecord,
-} from "@/lib/admin-api";
-import { readStoredSessionTokens } from "@/lib/session-client";
-import { Textarea } from "@/components/ui/textarea";
-import { FormField } from "@/components/ui/form-field";
-import { Input } from "@/components/ui/input";
-import { FluentSelect } from "@/components/ui/fluent-select";
+  ProfileRecordCollection,
+  ProfileRecordEmpty,
+  ProfileRecordViewToggle,
+  RecordActionButton,
+  RecordBadges,
+  RecordTag,
+  useProfileRecordView,
+} from "@/components/dashboard/employee-profile/profile-record-views"
+import { LetterDetailPanel } from "@/components/dashboard/letters/letter-detail-panel"
+import { LetterTemplateEditor } from "@/components/dashboard/letters/letter-template-editor"
+import { LetterWizard } from "@/components/dashboard/letters/letter-wizard"
+import { LettersCollection } from "@/components/dashboard/letters/letters-list"
+import {
+  errorText,
+  formatLetterDate,
+  useLetterCatalogue,
+  useLetterPermissions,
+  useLettersToken,
+} from "@/components/dashboard/letters/letter-shared"
+import { Button } from "@/components/ui/button"
+import { FluentSelect } from "@/components/ui/fluent-select"
+import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
+import {
+  LETTER_STATUSES,
+  LETTER_STATUS_META,
+  isLetterType,
+  letterTypeLabel,
+  listLetterTemplates,
+  listLetters,
+  type Letter,
+  type LetterCatalogue,
+  type LetterListMeta,
+  type LetterStatus,
+  type LetterTemplate,
+  type LetterType,
+} from "@/lib/letters-api"
 
-type LetterKind = "OFFER" | "APPOINTMENT";
-type TemplateForm = {
-  title: string;
-  body: string;
-  signatory_name: string;
-  signatory_title: string;
-};
-const EMPTY: TemplateForm = {
-  title: "",
-  body: "",
-  signatory_name: "",
-  signatory_title: "",
-};
-const FIELDS =
-  "{{company_name}}, {{employee_name}}, {{employee_number}}, {{position}}, {{department}}, {{hire_date}}, {{salary}}, {{currency}}, {{pay_frequency}}, {{issue_date}}";
+type LettersTab = "letters" | "templates"
+const PAGE_SIZE = 24
 
-export function EmploymentLettersView() {
-  const [templates, setTemplates] = React.useState<AdminRecord[]>([]);
-  const [kind, setKind] = React.useState<LetterKind>("OFFER");
-  const [form, setForm] = React.useState<TemplateForm>(EMPTY);
-  const [recordId, setRecordId] = React.useState("");
-  const [generatedId, setGeneratedId] = React.useState<number | null>(null);
-  const [busy, setBusy] = React.useState(false);
+function typeOptions(catalogue: LetterCatalogue | null, allLabel: string) {
+  return [{ value: "", label: allLabel }, ...(catalogue?.letter_types ?? []).map((row) => ({ value: row.type, label: row.label }))]
+}
 
-  const token = () => readStoredSessionTokens().accessToken.trim();
-  const load = React.useCallback(async () => {
-    const access = token();
-    if (!access) return;
-    const rows = await listEmploymentLetterTemplates(access);
-    setTemplates(rows);
-  }, []);
+function LettersTabView({
+  token,
+  catalogue,
+  initialType,
+  refreshKey,
+  onView,
+}: {
+  token: string
+  catalogue: LetterCatalogue | null
+  initialType: LetterType | ""
+  refreshKey: number
+  onView: (letter: Letter) => void
+}) {
+  const [view, setView] = useProfileRecordView()
+  const [search, setSearch] = React.useState("")
+  const [debounced, setDebounced] = React.useState("")
+  const [status, setStatus] = React.useState<LetterStatus | "">("")
+  const [type, setType] = React.useState<LetterType | "">(initialType)
+  const [page, setPage] = React.useState(1)
+  const [rows, setRows] = React.useState<Letter[] | null>(null)
+  const [meta, setMeta] = React.useState<LetterListMeta | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
-    void load().catch((error) =>
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Could not load letter templates.",
-      ),
-    );
-  }, [load]);
+    const timer = window.setTimeout(() => setDebounced(search.trim()), 300)
+    return () => window.clearTimeout(timer)
+  }, [search])
+
+  React.useEffect(() => setPage(1), [debounced, status, type])
+
   React.useEffect(() => {
-    const row = templates.find(
-      (item) =>
-        String(item.letter_type ?? item.letterType).toUpperCase() === kind,
-    );
-    setForm(
-      row
-        ? {
-            title: String(row.title ?? ""),
-            body: String(row.body ?? ""),
-            signatory_name: String(
-              row.signatory_name ?? row.signatoryName ?? "",
-            ),
-            signatory_title: String(
-              row.signatory_title ?? row.signatoryTitle ?? "",
-            ),
-          }
-        : EMPTY,
-    );
-  }, [kind, templates]);
-
-  async function save() {
-    const access = token();
-    if (!access) return;
-    setBusy(true);
-    try {
-      await saveEmploymentLetterTemplate(access, {
-        letter_type: kind,
-        ...form,
-      });
-      await load();
-      toast.success("Letter template saved.");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not save the template.",
-      );
-    } finally {
-      setBusy(false);
+    if (!token) return
+    let active = true
+    listLetters(token, { search: debounced, status, letter_type: type, page, limit: PAGE_SIZE })
+      .then((result) => {
+        if (!active) return
+        setRows(result.data ?? [])
+        setMeta(result.meta ?? null)
+        setError(null)
+      })
+      .catch((cause) => active && setError(errorText(cause, "Could not load letters")))
+    return () => {
+      active = false
     }
-  }
+  }, [token, debounced, status, type, page, refreshKey])
 
-  async function generate() {
-    const access = token();
-    const id = Number(recordId);
-    if (!access || !Number.isInteger(id) || id < 1) return;
-    setBusy(true);
-    try {
-      const result = await generateEmploymentLetter(
-        access,
-        kind === "OFFER" ? "offer" : "appointment",
-        id,
-      );
-      if (!result)
-        throw new Error(
-          "The letter was generated but no document record was returned.",
-        );
-      setGeneratedId(Number(result.id));
-      toast.success("Letter generated.");
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Could not generate the letter.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function download() {
-    const access = token();
-    if (!access || !generatedId) return;
-    try {
-      const blob = await downloadEmploymentLetter(access, generatedId);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${kind.toLowerCase()}-letter.pdf`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Could not download the letter.",
-      );
-    }
-  }
+  const total = meta?.total ?? rows?.length ?? 0
+  const pages = Math.max(1, meta?.totalPages ?? Math.ceil(total / PAGE_SIZE))
 
   return (
-    <section className="grid gap-4 xl:grid-cols-2">
-      <div className="space-y-4 rounded-xl border border-border bg-card p-4">
-        <div>
-          <h2 className="text-base font-semibold">
-            Employment letter templates
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Available fields: {FIELDS}
-          </p>
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_12rem_16rem_auto] lg:items-center">
+        <Input
+          type="search"
+          placeholder="Search reference or recipient"
+          aria-label="Search letters"
+          value={search}
+          onChange={(_event, data) => setSearch(data.value)}
+        />
+        <FluentSelect
+          ariaLabel="Status"
+          value={status}
+          onChange={(value) => setStatus(value as LetterStatus | "")}
+          options={[{ value: "", label: "All statuses" }, ...LETTER_STATUSES.map((value) => ({ value, label: LETTER_STATUS_META[value].label }))]}
+        />
+        <FluentSelect ariaLabel="Letter type" value={type} onChange={(value) => setType(value as LetterType | "")} options={typeOptions(catalogue, "All letter types")} />
+        <div className="flex justify-end">
+          <ProfileRecordViewToggle view={view} onChange={setView} label="Letters" />
         </div>
-        <FormField label="Letter type" htmlFor="letter-kind">
-          <FluentSelect
-            id="letter-kind"
-            ariaLabel="Letter type"
-            value={kind}
-            onChange={(value) => setKind(value as LetterKind)}
-            options={[
-              { value: "OFFER", label: "Offer" },
-              { value: "APPOINTMENT", label: "Appointment" },
-            ]}
-          />
-        </FormField>
-        <FormField label="Title" htmlFor="letter-title">
-          <Input
-            id="letter-title"
-            value={form.title}
-            onChange={(event) =>
-              setForm({ ...form, title: event.target.value })
-            }
-          />
-        </FormField>
-        <FormField label="Letter body" htmlFor="letter-body">
-          <Textarea
-            id="letter-body"
-            className="min-h-44"
-            value={form.body}
-            onChange={(event) => setForm({ ...form, body: event.target.value })}
-          />
-        </FormField>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <FormField label="Signatory name" htmlFor="letter-signatory-name">
-            <Input
-              id="letter-signatory-name"
-              value={form.signatory_name}
-              onChange={(event) =>
-                setForm({ ...form, signatory_name: event.target.value })
-              }
-            />
-          </FormField>
-          <FormField label="Signatory title" htmlFor="letter-signatory-title">
-            <Input
-              id="letter-signatory-title"
-              value={form.signatory_title}
-              onChange={(event) =>
-                setForm({ ...form, signatory_title: event.target.value })
-              }
-            />
-          </FormField>
-        </div>
-        <button
-          type="button"
-          disabled={busy}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
-          onClick={() => void save()}
-        >
-          {busy ? "Saving…" : "Save template"}
-        </button>
       </div>
-      <div className="space-y-4 rounded-xl border border-border bg-card p-4">
-        <div>
-          <h2 className="text-base font-semibold">Generate a letter</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Offer letters use a recruitment candidate ID. Appointment letters
-            use an employee ID.
-          </p>
-        </div>
-        <FormField
-          label={kind === "OFFER" ? "Recruitment candidate ID" : "Employee ID"}
-          htmlFor="letter-record-id"
-        >
-          <Input
-            id="letter-record-id"
-            inputMode="numeric"
-            value={recordId}
-            onChange={(event) => setRecordId(event.target.value)}
-          />
-        </FormField>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={busy || !recordId}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
-            onClick={() => void generate()}
-          >
-            {busy ? "Working…" : `Generate ${kind.toLowerCase()} letter`}
-          </button>
-          {generatedId ? (
-            <button
-              type="button"
-              className="rounded-md border border-border px-4 py-2 text-sm font-medium"
-              onClick={() => void download()}
-            >
-              Download PDF
-            </button>
+      {error ? <p role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
+      {rows === null ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : rows.length === 0 ? (
+        <ProfileRecordEmpty title="Letters" message={debounced || status || type ? "No letters match these filters." : "Letters you create will be listed here."} />
+      ) : (
+        <LettersCollection token={token} letters={rows} view={view} onView={onView} />
+      )}
+      {pages > 1 ? (
+        <nav aria-label="Letters pages" className="flex items-center justify-end gap-2 text-sm">
+          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
+          <span className="text-muted-foreground">Page {page} of {pages}</span>
+          <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</Button>
+        </nav>
+      ) : null}
+    </div>
+  )
+}
+
+function TemplatesTabView({
+  token,
+  catalogue,
+  initialType,
+  canManage,
+}: {
+  token: string
+  catalogue: LetterCatalogue | null
+  initialType: LetterType | ""
+  canManage: boolean
+}) {
+  const [view, setView] = useProfileRecordView()
+  const [type, setType] = React.useState<LetterType | "">(initialType)
+  const [includeInactive, setIncludeInactive] = React.useState(false)
+  const [rows, setRows] = React.useState<LetterTemplate[] | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+  const [editor, setEditor] = React.useState<{ open: boolean; template: LetterTemplate | null }>({ open: false, template: null })
+
+  const load = React.useCallback(() => {
+    if (!token) return
+    listLetterTemplates(token, { letter_type: type, include_inactive: includeInactive })
+      .then((result) => {
+        setRows(result)
+        setError(null)
+      })
+      .catch((cause) => setError(errorText(cause, "Could not load templates")))
+  }, [token, type, includeInactive])
+
+  React.useEffect(() => load(), [load])
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <FluentSelect
+          ariaLabel="Letter type"
+          className="sm:max-w-xs"
+          value={type}
+          onChange={(value) => setType(value as LetterType | "")}
+          options={typeOptions(catalogue, "All letter types")}
+        />
+        <Switch label="Show inactive" checked={includeInactive} onCheckedChange={setIncludeInactive} />
+        <div className="flex flex-1 items-center justify-end gap-2">
+          <ProfileRecordViewToggle view={view} onChange={setView} label="Templates" />
+          {canManage ? (
+            <Button onClick={() => setEditor({ open: true, template: null })}>
+              <PlusIcon className="size-4" aria-hidden="true" /> New template
+            </Button>
           ) : null}
         </div>
       </div>
-    </section>
-  );
+      {error ? <p role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
+      {rows === null ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : rows.length === 0 ? (
+        <ProfileRecordEmpty title="Letter templates" message="No templates for this filter." />
+      ) : (
+        <ProfileRecordCollection
+          title="Letter templates"
+          view={view}
+          records={rows.map((row) => ({
+            key: String(row.id),
+            heading: row.name,
+            badges: (
+              <RecordBadges inline>
+                {row.is_default ? <RecordTag tone="primary">Default</RecordTag> : null}
+                {row.is_active ? <RecordTag tone="success">Active</RecordTag> : <RecordTag>Inactive</RecordTag>}
+                {row.requires_approval ? <RecordTag tone="warning">Requires approval</RecordTag> : null}
+              </RecordBadges>
+            ),
+            fields: [
+              { label: "Type", value: letterTypeLabel(row.letter_type) },
+              { label: "Version", value: String(row.current_version) },
+              { label: "Subject", value: row.subject },
+              { label: "Signatory", value: row.signatory_name ?? "" },
+            ].filter((entry) => entry.value),
+            meta: `Updated ${formatLetterDate(row.updated_at)}${row.updated_by_name ? ` by ${row.updated_by_name}` : ""}`,
+            actions: (
+              <RecordActionButton
+                label={canManage ? "Edit" : "View"}
+                icon={<PencilIcon className="size-4" aria-hidden="true" />}
+                onClick={() => setEditor({ open: true, template: row })}
+              />
+            ),
+          }))}
+        />
+      )}
+      <LetterTemplateEditor
+        open={editor.open}
+        onOpenChange={(open) => setEditor((value) => ({ ...value, open }))}
+        token={token}
+        catalogue={catalogue}
+        template={editor.template}
+        defaultType={type}
+        canManage={canManage}
+        onSaved={() => load()}
+      />
+    </div>
+  )
 }
 
-/** Employees → Letters: the single home of the employment letter templates. */
-export function EmploymentLettersPage() {
+function EmploymentLettersContent() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const params = useSearchParams()
+  const token = useLettersToken()
+  const permissions = useLetterPermissions()
+  const catalogue = useLetterCatalogue(token)
+  const tab: LettersTab = params?.get("tab") === "templates" ? "templates" : "letters"
+  const typeParam = params?.get("type")
+  const initialType: LetterType | "" = isLetterType(typeParam) ? typeParam : ""
+
+  const [refreshKey, setRefreshKey] = React.useState(0)
+  const [detailId, setDetailId] = React.useState<number | null>(null)
+  const [wizard, setWizard] = React.useState<{ open: boolean; letter: Letter | null }>({ open: false, letter: null })
+
+  const setTab = (next: LettersTab) => {
+    const search = new URLSearchParams(params?.toString() ?? "")
+    if (next === "letters") search.delete("tab")
+    else search.set("tab", next)
+    const text = search.toString()
+    router.replace(`${pathname}${text ? `?${text}` : ""}`, { scroll: false })
+  }
+
+  const canCreate = permissions.create
   return (
     <PageShell>
       <PageShellHeader
-        title="Employment letters"
-        description="Edit the offer and appointment letter templates used for new hires."
+        withTabs
+        title="Employee letters"
+        description="Create, approve and issue letters from templates. Issued letters carry a verification QR code."
+        actions={
+          canCreate ? (
+            <Button onClick={() => setWizard({ open: true, letter: null })}>
+              <PlusIcon className="size-4" aria-hidden="true" /> New letter
+            </Button>
+          ) : null
+        }
       />
-      <PageShellBody>
-        <EmploymentLettersView />
+      <PageShellTabs<LettersTab>
+        idPrefix="letters"
+        ariaLabel="Letters sections"
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { id: "letters", label: "Letters", icon: MailIcon },
+          { id: "templates", label: "Templates", icon: LayoutTemplateIcon },
+        ]}
+      />
+      <PageShellBody idPrefix="letters" tabId={tab}>
+        {!token ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <FileTextIcon className="size-4" aria-hidden="true" /> Loading…
+          </p>
+        ) : tab === "letters" ? (
+          <LettersTabView
+            token={token}
+            catalogue={catalogue}
+            initialType={initialType}
+            refreshKey={refreshKey}
+            onView={(letter) => setDetailId(letter.id)}
+          />
+        ) : (
+          <TemplatesTabView token={token} catalogue={catalogue} initialType={initialType} canManage={permissions.manageTemplates} />
+        )}
       </PageShellBody>
+      <LetterDetailPanel
+        open={detailId !== null}
+        onOpenChange={(open) => !open && setDetailId(null)}
+        token={token}
+        letterId={detailId}
+        onChanged={() => setRefreshKey((value) => value + 1)}
+        onOpenLetter={(id) => setDetailId(id)}
+        onEdit={(letter) => {
+          setDetailId(null)
+          setWizard({ open: true, letter })
+        }}
+      />
+      <LetterWizard
+        open={wizard.open}
+        onOpenChange={(open) => setWizard((value) => ({ ...value, open }))}
+        token={token}
+        letter={wizard.letter}
+        onSaved={(letter) => {
+          setRefreshKey((value) => value + 1)
+          setDetailId(letter.id)
+        }}
+      />
     </PageShell>
-  );
+  )
+}
+
+/** Employees → Letters: letters register and letter templates. */
+export function EmploymentLettersPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <EmploymentLettersContent />
+    </React.Suspense>
+  )
 }

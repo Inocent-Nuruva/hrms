@@ -821,8 +821,15 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/employees/inactive": EMPLOYEE_DIRECTORY_ROUTE_PERMISSION,
   "/dashboard/employees/registration": EMPLOYEE_REGISTRATION_PERMISSION,
   "/dashboard/employees/invite": "employees:create",
-  // Employment letter templates moved here from the Recruitment tabs; same access as before.
-  "/dashboard/employees/letters": EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS,
+  // Employee Letters module; the old employee-admin access stays as an alternative.
+  "/dashboard/employees/letters": {
+    permissions: [
+      "employee_letters:read",
+      "letter_templates:manage",
+      ...(EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS as { permissions: string[] }).permissions,
+    ],
+    mode: "any",
+  },
   "/dashboard/employees/contracts": EMPLOYMENT_CONTRACT_READ_PERMISSION,
   "/dashboard/employees/salary-approvals": {
     permissions: ["payroll:salary-approve", "payroll:profiles-read"],

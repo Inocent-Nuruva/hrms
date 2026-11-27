@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 // Verification links carry a bearer token: keep them out of search engines
 // and out of Referer headers sent to other sites.
 export const metadata: Metadata = {
-  title: "Leave verification",
+  title: "Document verification",
   robots: { index: false, follow: false },
   referrer: "no-referrer",
 };

@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation"
 import {
   RefreshCwIcon,
   TriangleAlertIcon,
-  DownloadIcon,
   EyeIcon,
   PencilIcon,
   Trash2Icon,
@@ -44,8 +43,6 @@ import {
   createEmployeePosition,
   cancelEmployeeMovement,
   deleteEmployeePosition,
-  downloadEmploymentLetter,
-  downloadEmployeeLetterPreview,
   getEmployeeById,
   listBranches,
   listCostCenters,
@@ -57,8 +54,6 @@ import {
   listEmployeePositions,
   listAllEmployees,
   listEmployees,
-  generateEmployeeTemplateLetter,
-  listEmployeeLetterHistory,
   listPositions,
   patchEmployeeAssignment,
   patchEmployeePosition,
@@ -127,6 +122,7 @@ import {
 import { Section } from "@/components/dashboard/employee-profile/profile-record-section"
 import { PAGE_SHELL_WIDTH, PageShell } from "@/components/dashboard/page-shell"
 import { ProfileSidePanel } from "@/components/dashboard/employee-profile/profile-side-panel"
+import { EmployeeLettersSection } from "@/components/dashboard/letters/employee-letters-section"
 import {
   ProfileAddButton,
   ProfileRecordCollection,
@@ -420,7 +416,13 @@ function ProfileSectionsTabs({
           </div>
         )
       case "Letters":
-        return <EmployeeLettersSection employeeId={employeeId} />
+        return (
+          <EmployeeLettersSection
+            employeeId={employeeId}
+            employeeName={fullName}
+            employeeNo={employee.employee_no ? String(employee.employee_no) : null}
+          />
+        )
       default:
         return (
           <Section
@@ -626,147 +628,6 @@ function ProfileSectionsTabs({
         </AnimatePresence>
       </div>
     </div>
-  )
-}
-
-function EmployeeLettersSection({ employeeId }: { employeeId: number | null }) {
-  const [history, setHistory] = React.useState<AdminRecord[]>([])
-  const [letterType, setLetterType] = React.useState<"JOINING_FORM" | "OTHER">("JOINING_FORM")
-  const [recordView, setRecordView] = useProfileRecordView()
-  const [busy, setBusy] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
-
-  const refresh = React.useCallback(async () => {
-    const token = readStoredToken()
-    if (!token || employeeId === null) return
-    try {
-      setError(null)
-      setHistory(await listEmployeeLetterHistory(token, employeeId))
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not load generated letters.")
-    }
-  }, [employeeId])
-
-  React.useEffect(() => { void refresh() }, [refresh])
-
-  async function preview() {
-    const token = readStoredToken()
-    if (!token || employeeId === null) return
-    setBusy(true)
-    try {
-      const blob = await downloadEmployeeLetterPreview(token, employeeId, letterType)
-      const url = URL.createObjectURL(blob)
-      window.open(url, "_blank", "noopener,noreferrer")
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not preview the letter.")
-    } finally { setBusy(false) }
-  }
-
-  async function generate() {
-    const token = readStoredToken()
-    if (!token || employeeId === null) return
-    setBusy(true)
-    try {
-      await generateEmployeeTemplateLetter(token, employeeId, letterType)
-      await refresh()
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not generate the letter.")
-    } finally { setBusy(false) }
-  }
-
-  async function download(id: number) {
-    const token = readStoredToken()
-    if (!token) return
-    try {
-      const blob = await downloadEmploymentLetter(token, id)
-      const url = URL.createObjectURL(blob)
-      const anchor = document.createElement("a")
-      anchor.href = url
-      anchor.download = "employee-letter.pdf"
-      anchor.click()
-      URL.revokeObjectURL(url)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not download the letter.")
-    }
-  }
-
-  return (
-    <section aria-label="Letters">
-      <ProfileSectionHeader
-        title="Letters"
-        count={history.length}
-        description={history.length ? undefined : "Generate letters from templates and keep a copy here."}
-        view={recordView}
-        onViewChange={setRecordView}
-      />
-      <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border bg-background p-4 sm:flex-row sm:items-end">
-        <FormField label="Template type" className="min-w-0 flex-1 sm:max-w-xs">
-          <FluentSelect
-            ariaLabel="Template type"
-            className="w-full"
-            value={letterType}
-            onChange={(value) => setLetterType(value as typeof letterType)}
-            options={[
-              { value: "JOINING_FORM", label: "Joining form" },
-              { value: "OTHER", label: "Other letter" },
-            ]}
-          />
-        </FormField>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={busy || employeeId === null}
-            onClick={() => void preview()}
-            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
-          >
-            <EyeIcon className="size-4" /> Preview
-          </button>
-          <button
-            type="button"
-            disabled={busy || employeeId === null}
-            onClick={() => void generate()}
-            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium !text-white hover:bg-primary/90 disabled:opacity-50"
-          >
-            Generate and save
-          </button>
-        </div>
-      </div>
-      {error ? (
-        <p role="alert" className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-          {error}
-        </p>
-      ) : null}
-      {history.length === 0 ? (
-        <ProfileRecordEmpty title="Letters" message="Generated letters will be listed here." />
-      ) : (
-        <ProfileRecordCollection
-          title="Letters"
-          view={recordView}
-          records={history.map((row) => {
-            const documentType = String(row.document_type ?? "")
-            return {
-              key: String(row.id),
-              heading: String(row.title ?? "Generated letter"),
-              badges: documentType ? (
-                <RecordBadges inline>
-                  <RecordTag tone="primary">{formatLabelValue(documentType)}</RecordTag>
-                </RecordBadges>
-              ) : null,
-              fields: [],
-              meta: row.created_at ? `Generated ${formatDateTime(row.created_at)}` : null,
-              actions: (
-                <RecordActionButton
-                  label="Download PDF"
-                  icon={<DownloadIcon className="size-4" />}
-                  onClick={() => void download(Number(row.id))}
-                />
-              ),
-            }
-          })}
-        />
-      )}
-    </section>
   )
 }
 
