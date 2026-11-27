@@ -381,12 +381,29 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: hrms-frontend-release-${{ github.sha }}
-          path: ${{ runner.temp }}
+          path: ${{ runner.temp }}/hrms-frontend-artifact-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Check downloaded artifact files
+        id: artifact-download-check
+        shell: bash
+        run: |
+          artifact_dir="$RUNNER_TEMP/hrms-frontend-artifact-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          if [[ -s "$artifact_dir/hrms-frontend-release.tar.gz" && -s "$artifact_dir/hrms-frontend-release.tar.gz.sha256" ]]; then
+            echo 'complete=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'complete=false' >> "$GITHUB_OUTPUT"
+            echo 'Artifact download is incomplete; retrying once.'
+          fi
+      - name: Retry incomplete artifact download
+        if: steps.artifact-download-check.outputs.complete != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: hrms-frontend-release-${{ github.sha }}
+          path: ${{ runner.temp }}/hrms-frontend-artifact-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Verify artifact runtime and build configuration
         shell: bash
         run: |
           set -Eeuo pipefail
-          cd "$RUNNER_TEMP"
+          cd "$RUNNER_TEMP/hrms-frontend-artifact-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           sha256sum --check hrms-frontend-release.tar.gz.sha256
           tar -xOzf hrms-frontend-release.tar.gz ./BUILD_MANIFEST.json > hrms-frontend-build-manifest.json
           node "$GITHUB_WORKSPACE/scripts/ci-release-manifest.mjs" verify hrms-frontend-build-manifest.json
@@ -409,12 +426,12 @@ jobs:
           fi
           [[ "$(id -u)" -ne 0 && -w "$BASE_DIR/releases" && -w "$BASE_DIR/shared" && -w "$BASE_DIR/tmp" ]]
           echo "HEALTH_URL=http://127.0.0.1:${APP_PORT}${HEALTH_PATH}" >> "$GITHUB_ENV"
-          cd "$RUNNER_TEMP"; sha256sum --check hrms-frontend-release.tar.gz.sha256
+          cd "$RUNNER_TEMP/hrms-frontend-artifact-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"; sha256sum --check hrms-frontend-release.tar.gz.sha256
       - name: Deploy release locally
         shell: bash
         run: |
           set -Eeuo pipefail
-          archive="$RUNNER_TEMP/hrms-frontend-release.tar.gz"
+          archive="$RUNNER_TEMP/hrms-frontend-artifact-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT/hrms-frontend-release.tar.gz"
           stage="$RUNNER_TEMP/stage-hrms-frontend-$GITHUB_SHA.sh"
           install -m 0750 deploy/hrms-frontend/stage-release.sh "$stage"
           bash "$stage" "$GITHUB_SHA" "$archive"
