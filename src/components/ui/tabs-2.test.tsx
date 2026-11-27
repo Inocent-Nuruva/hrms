@@ -36,12 +36,14 @@ describe("employee workspace navigation", () => {
     await act(async () => root.render(<Tabs2 groups={employeeSectionTabGroups} currentPath="/dashboard/employees/invite" showGroupNavigation />))
     expect(joining.getAttribute("aria-selected")).toBe("true")
     const tabs = [...container.querySelectorAll('[role="tablist"][aria-label="Section pages"] [role="tab"]')]
-    expect(tabs).toHaveLength(6)
-    for (const [index, label] of ["Invite", "Registration", "Onboarding", "Contracts", "Salary approvals", "Recruitment"].entries()) {
+    expect(tabs).toHaveLength(7)
+    for (const [index, label] of ["Invite", "Registration", "Onboarding", "Contracts", "Letters", "Salary approvals", "Recruitment"].entries()) {
       expect(tabs[index].textContent).toContain(label)
     }
     await act(async () => (tabs[3] as HTMLButtonElement).click())
     expect(push).toHaveBeenCalledWith("/dashboard/employees/contracts")
+    await act(async () => (tabs[4] as HTMLButtonElement).click())
+    expect(push).toHaveBeenCalledWith("/dashboard/employees/letters")
   })
 })
 
