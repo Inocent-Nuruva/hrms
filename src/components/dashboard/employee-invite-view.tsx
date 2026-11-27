@@ -3,7 +3,8 @@
 import { PageHeader } from "@/components/ui/page-header"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import { InfoIcon, MailIcon, RotateCcwIcon, UserPlus2Icon } from "lucide-react";
+import { BriefcaseBusinessIcon, Building2Icon, MailIcon, RotateCcwIcon, UserPlus2Icon, UserRoundIcon } from "lucide-react";
+import { cn } from "@/lib/utils"
 import { toast } from "@/components/ui/fluent-toast-store"
 import {
 } from "@fluentui/react-components"
@@ -34,16 +35,10 @@ import {
   invitationChannels,
   invitationDeliveryOutcome,
 } from "@/lib/employee-invitation-channels"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { FormField } from "@/components/ui/form-field"
-import { PhoneInput, isValidPhone } from "@/components/ui/phone-input"
+import { PhoneInput, formatPhoneForDisplay, isValidPhone } from "@/components/ui/phone-input"
 import { Checkbox } from "@/components/ui/checkbox"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
@@ -352,12 +347,14 @@ function FieldShell({
   required,
   children,
   className,
+  hint,
 }: {
   label: string
   htmlFor?: string
   required?: boolean
   children: React.ReactNode
   className?: string
+  hint?: React.ReactNode
 }) {
   return (
     <FormField
@@ -365,17 +362,10 @@ function FieldShell({
       htmlFor={htmlFor}
       required={required}
       className={className}
+      hint={hint}
     >
       {children}
     </FormField>
-  )
-}
-
-function SectionHeader({ title }: { title: string }) {
-  return (
-    <h3 className="text-sm font-semibold tracking-tight text-foreground">
-      {title}
-    </h3>
   )
 }
 
@@ -1000,349 +990,493 @@ export function EmployeeInviteView() {
     departmentId === null || loading || departmentPositionsLoading
   const reportsToDisabled = departmentId === null || loading || employeesLoading
 
+  const fullName = [firstName, lastName].map((part) => part.trim()).filter(Boolean).join(" ")
+  const summaryRows: Array<{ label: string; value: string }> = [
+    { label: "Email", value: email.trim() },
+    { label: "Phone", value: phone ? formatPhoneForDisplay(phone) : "" },
+    { label: "Branch", value: getSelectedLabel(branchOptions, branchId, "") },
+    { label: "Department", value: getSelectedLabel(departmentOptions, departmentId, "") },
+    { label: "Position", value: getSelectedLabel(positionOptions, positionId, "") },
+    { label: "Employment", value: EMPLOYMENT_TYPES.find((type) => type.value === employmentType)?.label ?? "" },
+    { label: "Hire date", value: hireDate },
+  ]
+  const sendDisabled = submitting || loading || Boolean(positionCapacity?.enforced && capacityWarning)
+  const sendLabel = submitting
+    ? "Sending…"
+    : sendSmsReminder
+      ? "Send email and SMS"
+      : "Send invitation"
+
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-0 pb-28 sm:gap-6 lg:pb-10">
       <PageHeader
         className="border-b border-border pb-3"
         title="Invite employee"
-        description="Send a new hire an invitation to complete their own registration details."
+        description="Send a new hire a secure link to complete their own registration."
+        actions={
+          canPerformPermission(actor.permissionLabels, "employees:create") ? (
+            <Button
+              as="a"
+              href="/dashboard/employees/onboarding?tab=invitations"
+              appearance="outline"
+              className="!no-underline hover:!no-underline focus:!no-underline"
+            >
+              View invitations
+            </Button>
+          ) : null
+        }
       />
+
       {savedInviteDraft ? (
-        <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Continue where you left off?</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                You have an unfinished invitation
-                {savedInviteDraft.firstName || savedInviteDraft.lastName
-                  ? ` for ${[savedInviteDraft.firstName, savedInviteDraft.lastName].filter(Boolean).join(" ")}`
-                  : ""}.
-                {savedInviteDraft.savedAt ? ` Saved ${new Date(savedInviteDraft.savedAt).toLocaleString()}.` : ""}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="button" appearance="outline" size="small" onClick={discardInviteDraft}>
-                Start fresh
-              </Button>
-              <Button type="button" appearance="primary" size="small" onClick={resumeInviteDraft}>
-                Continue
-              </Button>
-            </div>
+        <div className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">Continue where you left off?</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              You have an unfinished invitation
+              {savedInviteDraft.firstName || savedInviteDraft.lastName
+                ? ` for ${[savedInviteDraft.firstName, savedInviteDraft.lastName].filter(Boolean).join(" ")}`
+                : ""}
+              .{savedInviteDraft.savedAt ? ` Saved ${new Date(savedInviteDraft.savedAt).toLocaleString()}.` : ""}
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button type="button" appearance="outline" size="small" onClick={discardInviteDraft} className="flex-1 sm:flex-none">
+              Start fresh
+            </Button>
+            <Button type="button" appearance="primary" size="small" onClick={resumeInviteDraft} className="flex-1 sm:flex-none">
+              Continue
+            </Button>
           </div>
         </div>
       ) : null}
+
       {error ? (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       ) : null}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-8">
-        <section className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <SectionHeader title="Personal details" />
-            {canPerformPermission(actor.permissionLabels, "employees:create") ? (
-              <Button
-                as="a"
-                href="/dashboard/employees/onboarding?tab=invitations"
-                className="!no-underline hover:!no-underline focus:!no-underline"
-              >
-                View invitations
-              </Button>
-            ) : null}
-          </div>
-          {loading ? (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <Skeleton key={index} className="h-16 w-full" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <FieldShell label="First name" htmlFor="first_name" required>
-                <FluentInput
-                  id="first_name"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  placeholder="First name"
-                  autoComplete="given-name"
-                  className="w-full"
-                  required
-                />
-              </FieldShell>
-              <FieldShell label="Last name" htmlFor="last_name" required>
-                <FluentInput
-                  id="last_name"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  placeholder="Last name"
-                  autoComplete="family-name"
-                  className="w-full"
-                  required
-                />
-              </FieldShell>
-              <FieldShell label="Work email" htmlFor="email" required>
-                <FluentInput
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@company.com"
-                  autoComplete="email"
-                  contentBefore={<MailIcon className="size-4 text-muted-foreground" />}
-                  className="w-full"
-                  required
-                />
-              </FieldShell>
-              <FieldShell label="Phone number" htmlFor="phone" required>
-                <PhoneInput
-                  id="phone"
-                  value={phone}
-                  onChange={(value) => setPhone(value)}
-                  placeholder="712 345 678"
-                  className="w-full"
-                />
-              </FieldShell>
-              <FieldShell label="Gender" htmlFor="gender" required>
+      <form
+        onSubmit={handleSubmit}
+        className="grid grid-cols-1 items-start gap-5 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]"
+      >
+        <div className="flex min-w-0 flex-col gap-5 sm:gap-6">
+          <InviteSection
+            step={1}
+            icon={<UserRoundIcon className="size-5" />}
+            title="Personal details"
+            description="Who you are inviting and how to reach them."
+          >
+            {loading ? (
+              <div className="grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <Skeleton key={index} className="h-16 w-full" />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2">
+                <FieldShell label="First name" htmlFor="first_name" required>
+                  <FluentInput
+                    id="first_name"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="Amina"
+                    autoComplete="given-name"
+                    className="w-full"
+                    required
+                  />
+                </FieldShell>
+                <FieldShell label="Last name" htmlFor="last_name" required>
+                  <FluentInput
+                    id="last_name"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    placeholder="Juma"
+                    autoComplete="family-name"
+                    className="w-full"
+                    required
+                  />
+                </FieldShell>
+                <FieldShell label="Work email" htmlFor="email" required hint="The registration link is sent here.">
+                  <FluentInput
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@company.com"
+                    autoComplete="email"
+                    contentBefore={<MailIcon className="size-4 text-muted-foreground" />}
+                    className="w-full"
+                    required
+                  />
+                </FieldShell>
+                <FieldShell label="Phone number" htmlFor="phone" required>
+                  <PhoneInput
+                    id="phone"
+                    value={phone}
+                    onChange={(value) => setPhone(value)}
+                    placeholder="712 345 678"
+                    className="w-full"
+                  />
+                </FieldShell>
+                <FieldShell label="Gender" htmlFor="gender" required>
+                  <Dropdown
+                    id="gender"
+                    aria-labelledby="gender-label"
+                    value={GENDER_OPTIONS.find((option) => option.value === gender)?.label ?? ""}
+                    selectedOptions={gender ? [gender] : []}
+                    onOptionSelect={(_event, data) => setGender(data.optionValue ?? "")}
+                    placeholder="Select gender"
+                    className="w-full"
+                  >
+                    {GENDER_OPTIONS.map((option) => (
+                      <Option key={option.value} value={option.value} text={option.label}>
+                        {option.label}
+                      </Option>
+                    ))}
+                  </Dropdown>
+                </FieldShell>
+              </div>
+            )}
+          </InviteSection>
+
+          <InviteSection
+            step={2}
+            icon={<Building2Icon className="size-5" />}
+            title="Work assignment"
+            description="Where they will work. Each choice narrows the next."
+          >
+            <div className="grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2">
+              <FieldShell label="Branch" htmlFor="branch" required>
                 <Dropdown
-                  id="gender"
-                  aria-labelledby="gender-label"
-                  value={GENDER_OPTIONS.find((option) => option.value === gender)?.label ?? ""}
-                  selectedOptions={gender ? [gender] : []}
-                  onOptionSelect={(_event, data) => setGender(data.optionValue ?? "")}
-                  placeholder="Select gender"
+                  id="branch"
+                  aria-labelledby="branch-label"
+                  value={getSelectedLabel(branchOptions, branchId, "")}
+                  selectedOptions={branchId != null ? [String(branchId)] : []}
+                  onOptionSelect={(_event, data) => handleBranchChange(data.optionValue ?? null)}
+                  placeholder="Select branch"
+                  disabled={loading}
                   className="w-full"
                 >
-                  {GENDER_OPTIONS.map((option) => (
-                    <Option key={option.value} value={option.value} text={option.label}>
+                  {branchOptions.length === 0 ? <Option disabled>No branches found</Option> : null}
+                  {branchOptions.map((option) => (
+                    <Option key={option.id} value={String(option.id)} text={option.label}>
+                      {option.label}
+                    </Option>
+                  ))}
+                </Dropdown>
+              </FieldShell>
+
+              <FieldShell label="Department" htmlFor="department" required>
+                <Dropdown
+                  id="department"
+                  aria-labelledby="department-label"
+                  value={getSelectedLabel(departmentOptions, departmentId, "")}
+                  selectedOptions={departmentId != null ? [String(departmentId)] : []}
+                  onOptionSelect={(_event, data) => handleDepartmentChange(data.optionValue ?? null)}
+                  placeholder={branchId === null ? "Select branch first" : "Select department"}
+                  disabled={departmentDisabled}
+                  className="w-full"
+                >
+                  {departmentOptions.length === 0 ? (
+                    <Option disabled>
+                      {branchId === null ? "Select a branch first" : "No departments for this branch"}
+                    </Option>
+                  ) : null}
+                  {departmentOptions.map((option) => (
+                    <Option key={option.id} value={String(option.id)} text={option.label}>
+                      {option.label}
+                    </Option>
+                  ))}
+                </Dropdown>
+              </FieldShell>
+
+              <FieldShell label="Position" htmlFor="position" required>
+                <Dropdown
+                  id="position"
+                  aria-labelledby="position-label"
+                  value={getSelectedLabel(positionOptions, positionId, "")}
+                  selectedOptions={positionId != null ? [String(positionId)] : []}
+                  onOptionSelect={(_event, data) => handlePositionChange(data.optionValue ?? null)}
+                  placeholder={
+                    departmentId === null
+                      ? "Select department first"
+                      : departmentPositionsLoading
+                        ? "Loading positions..."
+                        : "Select position"
+                  }
+                  disabled={positionDisabled}
+                  className="w-full"
+                >
+                  {positionOptions.length === 0 ? (
+                    <Option disabled>
+                      {departmentId === null
+                        ? "Select a department first"
+                        : departmentPositionsLoading
+                          ? "Loading positions..."
+                          : "No positions for this department"}
+                    </Option>
+                  ) : null}
+                  {positionOptions.map((option) => (
+                    <Option key={option.id} value={String(option.id)} text={option.label}>
+                      {option.label}
+                    </Option>
+                  ))}
+                </Dropdown>
+                {capacityWarning ? (
+                  <p
+                    role="status"
+                    className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300"
+                  >
+                    {capacityWarning}
+                  </p>
+                ) : null}
+              </FieldShell>
+
+              <FieldShell label="Reports to" htmlFor="reports_to" hint="Optional">
+                <Dropdown
+                  id="reports_to"
+                  aria-labelledby="reports_to-label"
+                  value={getSelectedLabel(employeeOptions, reportsToId, "")}
+                  selectedOptions={reportsToId != null ? [String(reportsToId)] : []}
+                  onOptionSelect={(_event, data) => setReportsToId(data.optionValue ? Number(data.optionValue) : null)}
+                  placeholder={
+                    departmentId === null
+                      ? "Select department first"
+                      : employeesLoading
+                        ? "Loading managers..."
+                        : "Select manager"
+                  }
+                  disabled={reportsToDisabled}
+                  clearable
+                  className="w-full"
+                >
+                  {employeeOptions.length === 0 ? (
+                    <Option disabled>
+                      {departmentId === null
+                        ? "Select a department first"
+                        : employeesLoading
+                          ? "Loading managers..."
+                          : "No managers found in this department"}
+                    </Option>
+                  ) : null}
+                  {employeeOptions.map((option) => (
+                    <Option key={option.id} value={String(option.id)} text={option.label}>
                       {option.label}
                     </Option>
                   ))}
                 </Dropdown>
               </FieldShell>
             </div>
-          )}
-        </section>
+          </InviteSection>
 
-        <section className="flex flex-col gap-4">
-          <SectionHeader title="Work assignment" />
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <FieldShell label="Branch" htmlFor="branch" required>
-              <Dropdown
-                id="branch"
-                aria-labelledby="branch-label"
-                value={getSelectedLabel(branchOptions, branchId, "")}
-                selectedOptions={branchId != null ? [String(branchId)] : []}
-                onOptionSelect={(_event, data) => handleBranchChange(data.optionValue ?? null)}
-                placeholder="Select branch"
-                disabled={loading}
-                className="w-full"
-              >
-                {branchOptions.length === 0 ? (
-                  <Option disabled>No branches found</Option>
-                ) : null}
-                {branchOptions.map((option) => (
-                  <Option key={option.id} value={String(option.id)} text={option.label}>
-                    {option.label}
-                  </Option>
-                ))}
-              </Dropdown>
-            </FieldShell>
-
-            <FieldShell label="Department" htmlFor="department" required>
-              <Dropdown
-                id="department"
-                aria-labelledby="department-label"
-                value={getSelectedLabel(departmentOptions, departmentId, "")}
-                selectedOptions={departmentId != null ? [String(departmentId)] : []}
-                onOptionSelect={(_event, data) => handleDepartmentChange(data.optionValue ?? null)}
-                placeholder={branchId === null ? "Select branch first" : "Select department"}
-                disabled={departmentDisabled}
-                className="w-full"
-              >
-                {departmentOptions.length === 0 ? (
-                  <Option disabled>
-                    {branchId === null ? "Select a branch first" : "No departments for this branch"}
-                  </Option>
-                ) : null}
-                {departmentOptions.map((option) => (
-                  <Option key={option.id} value={String(option.id)} text={option.label}>
-                    {option.label}
-                  </Option>
-                ))}
-              </Dropdown>
-            </FieldShell>
-
-            <FieldShell label="Position" htmlFor="position" required>
-              <Dropdown
-                id="position"
-                aria-labelledby="position-label"
-                value={getSelectedLabel(positionOptions, positionId, "")}
-                selectedOptions={positionId != null ? [String(positionId)] : []}
-                onOptionSelect={(_event, data) => handlePositionChange(data.optionValue ?? null)}
-                placeholder={departmentId === null ? "Select department first" : departmentPositionsLoading ? "Loading positions..." : "Select position"}
-                disabled={positionDisabled}
-                className="w-full"
-              >
-                {positionOptions.length === 0 ? (
-                  <Option disabled>
-                    {departmentId === null ? "Select a department first" : departmentPositionsLoading ? "Loading positions..." : "No positions for this department"}
-                  </Option>
-                ) : null}
-                {positionOptions.map((option) => (
-                  <Option key={option.id} value={String(option.id)} text={option.label}>
-                    {option.label}
-                  </Option>
-                ))}
-              </Dropdown>
-              {capacityWarning ? (
-                <p
-                  role="status"
-                  className="mt-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300"
+          <InviteSection
+            step={3}
+            icon={<BriefcaseBusinessIcon className="size-5" />}
+            title="Employment and onboarding"
+            description="Contract type, start date and the onboarding checklist."
+          >
+            <div className="grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2">
+              <FieldShell label="Employment type" htmlFor="employment_type" required>
+                <Dropdown
+                  id="employment_type"
+                  aria-labelledby="employment_type-label"
+                  value={EMPLOYMENT_TYPES.find((type) => type.value === employmentType)?.label ?? "Employment type"}
+                  selectedOptions={employmentType ? [employmentType] : []}
+                  onOptionSelect={(_event, data) => setEmploymentType(data.optionValue || "full_time")}
+                  disabled={loading}
+                  className="w-full"
                 >
-                  {capacityWarning}
-                </p>
-              ) : null}
-            </FieldShell>
+                  {EMPLOYMENT_TYPES.map((type) => (
+                    <Option key={type.value} value={type.value} text={type.label}>
+                      {type.label}
+                    </Option>
+                  ))}
+                </Dropdown>
+              </FieldShell>
 
-            <FieldShell label="Reports to" htmlFor="reports_to">
-              <Dropdown
-                id="reports_to"
-                aria-labelledby="reports_to-label"
-                value={getSelectedLabel(employeeOptions, reportsToId, "")}
-                selectedOptions={reportsToId != null ? [String(reportsToId)] : []}
-                onOptionSelect={(_event, data) => setReportsToId(data.optionValue ? Number(data.optionValue) : null)}
-                placeholder={departmentId === null ? "Select department first" : employeesLoading ? "Loading managers..." : "Select manager (optional)"}
-                disabled={reportsToDisabled}
-                clearable
-                className="w-full"
+              <FieldShell label="Hire date" hint="Optional">
+                <DatePickerPresets value={hireDate} onChange={setHireDate} placeholder="Select hire date" />
+              </FieldShell>
+
+              <FieldShell
+                label="Onboarding workflow"
+                htmlFor="onboarding_workflow"
+                required={canReadOnboardingWorkflows}
+                className="sm:col-span-2"
+                hint={canReadOnboardingWorkflows ? undefined : "Assigned automatically for your role."}
               >
-                {employeeOptions.length === 0 ? (
-                  <Option disabled>
-                    {departmentId === null ? "Select a department first" : employeesLoading ? "Loading managers..." : "No managers found in this department"}
-                  </Option>
-                ) : null}
-                {employeeOptions.map((option) => (
-                  <Option key={option.id} value={String(option.id)} text={option.label}>
-                    {option.label}
-                  </Option>
-                ))}
-              </Dropdown>
-            </FieldShell>
-          </div>
-        </section>
+                <Dropdown
+                  id="onboarding_workflow"
+                  aria-labelledby="onboarding_workflow-label"
+                  value={canReadOnboardingWorkflows ? getSelectedLabel(workflowOptions, workflowId, "") : "Workflow assigned automatically"}
+                  selectedOptions={workflowId != null ? [String(workflowId)] : []}
+                  onOptionSelect={(_event, data) => setWorkflowId(data.optionValue ? Number(data.optionValue) : null)}
+                  placeholder={canReadOnboardingWorkflows ? "Select workflow" : "Workflow assigned automatically"}
+                  disabled={loading || !canReadOnboardingWorkflows}
+                  className="w-full"
+                >
+                  {workflowOptions.length === 0 ? (
+                    <Option disabled>
+                      {canReadOnboardingWorkflows ? "No workflows found" : "Your role cannot view workflow templates."}
+                    </Option>
+                  ) : null}
+                  {workflowOptions.map((option) => (
+                    <Option key={option.id} value={String(option.id)} text={option.label}>
+                      {option.label}
+                    </Option>
+                  ))}
+                </Dropdown>
+              </FieldShell>
+            </div>
+          </InviteSection>
+        </div>
 
-        <section className="flex flex-col gap-4">
-          <SectionHeader title="Employment & onboarding" />
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <FieldShell label="Employment type" htmlFor="employment_type" required>
-              <Dropdown
-                id="employment_type"
-                aria-labelledby="employment_type-label"
-                value={EMPLOYMENT_TYPES.find((type) => type.value === employmentType)?.label ?? "Employment type"}
-                selectedOptions={employmentType ? [employmentType] : []}
-                onOptionSelect={(_event, data) => setEmploymentType(data.optionValue || "full_time")}
-                disabled={loading}
-                className="w-full"
-              >
-                {EMPLOYMENT_TYPES.map((type) => (
-                  <Option key={type.value} value={type.value} text={type.label}>
-                    {type.label}
-                  </Option>
-                ))}
-              </Dropdown>
-            </FieldShell>
+        {/* Summary + send: a sticky side panel on large screens, a card on tablets and phones. */}
+        <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20">
+          <section className="rounded-lg border border-border bg-card p-4 sm:p-5">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                {fullName
+                  ? fullName
+                      .split(" ")
+                      .slice(0, 2)
+                      .map((part) => part[0]?.toUpperCase())
+                      .join("")
+                  : <UserRoundIcon className="size-5" aria-hidden="true" />}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-foreground">{fullName || "New employee"}</p>
+                <p className="truncate text-xs text-muted-foreground">Invitation summary</p>
+              </div>
+            </div>
+            <dl className="mt-4 grid grid-cols-1 gap-2.5 border-t border-border pt-4 text-sm sm:grid-cols-2 lg:grid-cols-1">
+              {summaryRows.map((row) => (
+                <div key={row.label} className="flex min-w-0 items-baseline justify-between gap-3">
+                  <dt className="shrink-0 text-xs text-muted-foreground">{row.label}</dt>
+                  <dd className={cn("min-w-0 truncate text-right", row.value ? "text-foreground" : "text-muted-foreground")}>
+                    {row.value || "Not set"}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </section>
 
-            <FieldShell
-              label="Onboarding workflow"
-              htmlFor="onboarding_workflow"
-              required={canReadOnboardingWorkflows}
-            >
-              <Dropdown
-                id="onboarding_workflow"
-                aria-labelledby="onboarding_workflow-label"
-                value={canReadOnboardingWorkflows ? getSelectedLabel(workflowOptions, workflowId, "") : "Workflow assigned automatically"}
-                selectedOptions={workflowId != null ? [String(workflowId)] : []}
-                onOptionSelect={(_event, data) => setWorkflowId(data.optionValue ? Number(data.optionValue) : null)}
-                placeholder={canReadOnboardingWorkflows ? "Select workflow" : "Workflow assigned automatically"}
-                disabled={loading || !canReadOnboardingWorkflows}
-                className="w-full"
-              >
-                {workflowOptions.length === 0 ? (
-                  <Option disabled>
-                    {canReadOnboardingWorkflows ? "No workflows found" : "Your role cannot view workflow templates."}
-                  </Option>
-                ) : null}
-                {workflowOptions.map((option) => (
-                  <Option key={option.id} value={String(option.id)} text={option.label}>
-                    {option.label}
-                  </Option>
-                ))}
-              </Dropdown>
-            </FieldShell>
-
-            <FieldShell label="Hire date">
-              <DatePickerPresets
-                value={hireDate}
-                onChange={setHireDate}
-                placeholder="Select hire date"
+          <section className="rounded-lg border border-border bg-card p-4 sm:p-5">
+            <p className="text-sm font-semibold text-foreground">What happens next</p>
+            <ol className="mt-3 flex flex-col gap-3">
+              {[
+                "They get one secure registration link by email.",
+                "They fill in their own details and documents.",
+                "HR reviews them through the onboarding workflow.",
+              ].map((text, index) => (
+                <li key={text} className="flex gap-3 text-sm text-muted-foreground">
+                  <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+                    {index + 1}
+                  </span>
+                  <span>{text}</span>
+                </li>
+              ))}
+            </ol>
+            <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-md border border-border bg-muted/30 p-3 text-sm">
+              <Checkbox
+                checked={sendSmsReminder}
+                onCheckedChange={(checked) => setSendSmsReminder(Boolean(checked))}
+                disabled={submitting}
+                className="mt-0.5"
               />
-            </FieldShell>
-          </div>
-        </section>
+              <span className="min-w-0">
+                <span className="font-medium text-foreground">Also send an SMS reminder</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  A reminder to check email. It never contains the link.
+                </span>
+              </span>
+            </label>
+            <div className="mt-4 hidden flex-col gap-2 lg:flex">
+              <Button
+                type="submit"
+                appearance="primary"
+                size="large"
+                className="w-full"
+                disabled={sendDisabled}
+                icon={submitting ? <FluentLoadingIndicator className="animate-spin" /> : <UserPlus2Icon />}
+              >
+                {sendLabel}
+              </Button>
+              <Button
+                type="button"
+                appearance="outline"
+                className="w-full"
+                onClick={resetForm}
+                disabled={submitting}
+                icon={<RotateCcwIcon />}
+              >
+                Reset form
+              </Button>
+            </div>
+          </section>
+        </aside>
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <label className="mr-auto inline-flex cursor-pointer items-center gap-2 text-sm">
-            <Checkbox
-              checked={sendSmsReminder}
-              onCheckedChange={(checked) => setSendSmsReminder(Boolean(checked))}
+        {/* Phones and tablets: actions stay reachable at the bottom of the screen. */}
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden">
+          <div className="mx-auto flex max-w-6xl items-center gap-2 pb-[env(safe-area-inset-bottom)]">
+            <Button
+              type="button"
+              appearance="outline"
+              onClick={resetForm}
               disabled={submitting}
-            />
-            Also send an SMS reminder
-          </label>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    type="button"
-                    appearance="subtle"
-                    size="small"
-                    icon={<InfoIcon />}
-                    aria-label="About this action"
-                  />
-                }
-              />
-              <TooltipContent side="top" className="max-w-xs text-left">
-                Emails one secure registration link. The optional SMS is a
-                reminder to check email and never contains the link.
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <Button
-            type="button"
-            appearance="outline"
-            onClick={resetForm}
-            disabled={submitting}
-            icon={<RotateCcwIcon />}
-          >
-            Reset
-          </Button>
-          <Button
-            type="submit"
-            appearance="primary"
-            size="large"
-            disabled={submitting || loading || Boolean(positionCapacity?.enforced && capacityWarning)}
-            icon={submitting ? <FluentLoadingIndicator className="animate-spin" /> : <UserPlus2Icon />}
-          >
-            {submitting
-              ? "Sending…"
-              : sendSmsReminder
-                ? "Send email & SMS invitation"
-                : "Send email invitation"}
-          </Button>
+              icon={<RotateCcwIcon />}
+              aria-label="Reset form"
+              className="shrink-0"
+            >
+              <span className="hidden sm:inline">Reset</span>
+            </Button>
+            <Button
+              type="submit"
+              appearance="primary"
+              size="large"
+              className="min-w-0 flex-1"
+              disabled={sendDisabled}
+              icon={submitting ? <FluentLoadingIndicator className="animate-spin" /> : <UserPlus2Icon />}
+            >
+              {sendLabel}
+            </Button>
+          </div>
         </div>
       </form>
     </div>
+  )
+}
+
+/** One numbered form section card: icon, title, short description, fields. */
+function InviteSection({
+  step,
+  icon,
+  title,
+  description,
+  children,
+}: {
+  step: number
+  icon: React.ReactNode
+  title: string
+  description: string
+  children: React.ReactNode
+}) {
+  return (
+    <section aria-labelledby={`invite-section-${step}`} className="rounded-lg border border-border bg-card">
+      <header className="flex items-start gap-3 border-b border-border px-4 py-4 sm:px-6">
+        <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary" aria-hidden="true">
+          {icon}
+        </span>
+        <div className="min-w-0">
+          <h2 id={`invite-section-${step}`} className="text-sm font-semibold text-foreground">
+            <span className="mr-1.5 text-muted-foreground">{step}.</span>
+            {title}
+          </h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+        </div>
+      </header>
+      <div className="px-4 py-5 sm:px-6 sm:py-6">{children}</div>
+    </section>
   )
 }
